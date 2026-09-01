@@ -17,6 +17,10 @@ export const metadata: Metadata = {
   title: 'Liftline — 12-Week Strength Plan',
   description:
     'A mobile-friendly 12-week, 3-day workout tracker for logging sets, reps, RIR, notes, volume, and weekly progress.',
+  icons: {
+    icon: [{ url: '/favicon.svg', type: 'image/svg+xml' }],
+    shortcut: '/favicon.svg',
+  },
   openGraph: {
     title: 'Liftline — 12-Week Strength Plan',
     description: 'Log every set, follow your 3-day routine, and see 12 weeks of progress.',
