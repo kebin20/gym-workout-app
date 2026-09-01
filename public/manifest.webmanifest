@@ -1,0 +1,24 @@
+{
+  "name": "Liftline",
+  "short_name": "Liftline",
+  "description": "A mobile-friendly 12-week strength workout tracker.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#F4F7FF",
+  "theme_color": "#356CF6",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
