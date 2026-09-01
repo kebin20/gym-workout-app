@@ -8,7 +8,7 @@ Made with ChatGPT COdex
 
 ## Live app
 
-The production URL is [liftline-strength-plan.ktanzyl.chatgpt.site](https://liftline-strength-plan.ktanzyl.chatgpt.site). The home page is a public, read-only preview using sample data. The real tracker lives at `/workout` and is restricted to the configured owner account.
+The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgpt.site](https://liftline-strength-plan.ktanzyl.chatgpt.site). Access is restricted to the site owner.
 
 ## Features
 
@@ -19,8 +19,6 @@ The production URL is [liftline-strength-plan.ktanzyl.chatgpt.site](https://lift
 - Weekly session progress, workout history, and progress charts
 - Routine guide with targets, rest periods, muscle groups, and alternatives
 - Persistent workout data backed by Cloudflare D1
-- Public read-only preview with isolated sample data
-- ChatGPT sign-in plus server-side owner checks for the private tracker and API
 - Responsive Material-inspired interface using Geist typography
 
 ## Technology
@@ -69,7 +67,5 @@ public/                   Liftline icons and sharing artwork
 ## Data behavior
 
 Workout entries are keyed by week, day, and exercise. Saving an exercise creates or updates that entry, so a session can be resumed without duplicating records. The dashboard derives completion, session totals, training volume, and progression suggestions from the saved entries.
-
-All `/api/workouts` reads and writes require the authenticated Sites user ID to match the `LIFTLINE_OWNER_USER_ID` production environment value. The public preview never requests the workout API and cannot read or modify the D1 records.
 
 The initial Week 1 example entries mirror the source spreadsheet so the progress experience is visible immediately. New and updated entries are stored persistently in D1.

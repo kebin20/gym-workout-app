@@ -10,18 +10,6 @@ type WorkoutPayload = {
   rir: number | null; notes: string; completed: boolean;
 };
 
-function requireOwner(request: Request) {
-  const authenticatedUserId = request.headers.get('oai-authenticated-user-id');
-  const ownerUserId = env.LIFTLINE_OWNER_USER_ID;
-  if (!authenticatedUserId) {
-    return Response.json({ error: 'Sign in is required.' }, { status: 401 });
-  }
-  if (!ownerUserId || authenticatedUserId !== ownerUserId) {
-    return Response.json({ error: 'This workout space is private.' }, { status: 403 });
-  }
-  return null;
-}
-
 const seedRows = [
   [1, 'A', 1, 75, 9, 86, 9, 97, 7, 1, '2026-08-26'], [1, 'A', 2, 29, 10, 36, 10, 43, 8, 1, '2026-08-26'],
   [1, 'A', 3, 32, 10, 39, 7, 32, 10, 1, '2026-08-26'], [1, 'A', 4, 29, 10, 28, 13, null, null, 1, '2026-08-26'],
@@ -73,9 +61,7 @@ const selectColumns = `id, week, day, exercise_order AS exerciseOrder, exercise,
   set2_reps AS set2Reps, set3_weight AS set3Weight, set3_reps AS set3Reps,
   rir, notes, completed, completed_at AS completedAt, updated_at AS updatedAt`;
 
-export async function GET(request: Request) {
-  const denied = requireOwner(request);
-  if (denied) return denied;
+export async function GET() {
   try {
     const db = await ensureDatabase();
     const results = await db.prepare(`SELECT ${selectColumns} FROM workout_entries ORDER BY week, day, exercise_order`).all();
@@ -86,8 +72,6 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const denied = requireOwner(request);
-  if (denied) return denied;
   try {
     const body = (await request.json()) as Partial<WorkoutPayload>;
     const week = Number(body.week); const exerciseOrder = Number(body.exerciseOrder); const day = body.day;
