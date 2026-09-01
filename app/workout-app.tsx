@@ -7,7 +7,7 @@ import {
 import {
   AlertCircle, BarChart3, BookOpen, CalendarDays, Check,
   CheckCircle2, ChevronLeft, ChevronRight, Clock3, Dumbbell,
-  Home, Loader2, Minus, NotebookPen, Plus, RotateCcw, Sparkles,
+  CirclePlay, Home, Loader2, Minus, NotebookPen, Plus, RotateCcw, Sparkles,
   Target, TrendingUp,
 } from 'lucide-react';
 
@@ -101,6 +101,11 @@ function progressionAdvice(exercise: RoutineExercise, draft: Draft, activeSets: 
     return exercise.name === 'Plank' ? 'Increase difficulty next time' : 'Increase load next time';
   }
   return exercise.name === 'Plank' ? 'Keep building' : 'Keep this load';
+}
+
+function exerciseVideoUrl(exercise: RoutineExercise) {
+  const primaryExercise = exercise.name.split(' or ')[0].replace(/\s*\([^)]*\)\s*$/, '');
+  return `https://www.youtube.com/results?search_query=${encodeURIComponent(`${primaryExercise} short exercise demonstration`)}`;
 }
 
 function NavButton({ view, active, icon: Icon, label, onChange, compact = false }: {
@@ -314,7 +319,13 @@ export function WorkoutApp() {
                     <Badge variant="outline" className="font-sans"><Clock3 /> Rest {exercise.rest}</Badge>
                     {existingEntry?.completed && <Badge className="bg-success-soft font-sans text-success"><Check /> Logged</Badge>}
                   </div>
-                  <CardDescription className="mt-2 font-sans">{exercise.muscles} · Alternative: {exercise.alternative}</CardDescription>
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                    <CardDescription className="font-sans">{exercise.muscles} · Alternative: {exercise.alternative}</CardDescription>
+                    <a href={exerciseVideoUrl(exercise)} target="_blank" rel="noreferrer" aria-label={`Find a short video demonstration for ${exercise.name}`}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-primary/20 bg-background px-2.5 font-sans text-xs font-semibold text-primary transition-colors hover:bg-accent">
+                      <CirclePlay className="size-4" /> Watch demo
+                    </a>
+                  </div>
                 </CardHeader>
                 <CardContent className="pt-1">
                   <div className="grid grid-cols-[42px_1fr_1fr] items-center gap-2 border-b py-2 font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:grid-cols-[42px_1fr_1fr_64px]">
