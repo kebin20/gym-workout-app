@@ -13,8 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://liftline-strength-plan.ktanzyl.chatgpt.site'),
-  title: 'Liftline — 12-Week Strength Plan',
+  title: 'Liftline Demo — 12-Week Strength Plan',
   description:
     'A mobile-friendly 12-week, 3-day workout tracker for logging sets, reps, RIR, notes, volume, and weekly progress.',
   icons: {
@@ -22,15 +21,15 @@ export const metadata: Metadata = {
     shortcut: '/favicon.svg',
   },
   openGraph: {
-    title: 'Liftline — 12-Week Strength Plan',
-    description: 'Log every set, follow your 3-day routine, and see 12 weeks of progress.',
+    title: 'Liftline Demo — 12-Week Strength Plan',
+    description: 'Explore a sample 3-day strength routine and 12 weeks of progress.',
     type: 'website',
     images: [{ url: '/og.png', width: 1734, height: 909, alt: 'Liftline 12-week strength plan' }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Liftline — 12-Week Strength Plan',
-    description: 'Log every set, follow your 3-day routine, and see 12 weeks of progress.',
+    title: 'Liftline Demo — 12-Week Strength Plan',
+    description: 'Explore a sample 3-day strength routine and 12 weeks of progress.',
     images: ['/og.png'],
   },
 };

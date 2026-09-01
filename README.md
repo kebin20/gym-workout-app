@@ -1,14 +1,14 @@
-# Liftline
+# Liftline Demo
 
-Liftline is a mobile-friendly workout tracker for a 12-week, three-day strength program. It turns the original spreadsheet routine into a clean, touch-first web app for logging weight, reps, RIR, notes, volume, and weekly progress.
+This branch contains the public, sample-only version of Liftline: a mobile-friendly interface for exploring a 12-week, three-day strength program without exposing or changing the owner’s workout history.
 
 Made with ChatGPT COdex
 
 ![Liftline workout tracker](public/og.png)
 
-## Live app
+## Demo behavior
 
-The production URL is [liftline-strength-plan.ktanzyl.chatgpt.site](https://liftline-strength-plan.ktanzyl.chatgpt.site). The home page is a public, read-only preview using sample data. The real tracker lives at `/workout` and is restricted to the configured owner account.
+The demo is a fully static site. It ships with fictional Week 1 sample entries, makes no API requests, has no database binding, and does not persist values entered by visitors. The private tracker is maintained and deployed separately from the `main` branch.
 
 ## Features
 
@@ -18,9 +18,8 @@ The production URL is [liftline-strength-plan.ktanzyl.chatgpt.site](https://lift
 - Automatic volume totals and next-session progression guidance
 - Weekly session progress, workout history, and progress charts
 - Routine guide with targets, rest periods, muscle groups, and alternatives
-- Persistent workout data backed by Cloudflare D1
-- Public read-only preview with isolated sample data
-- ChatGPT sign-in plus server-side owner checks for the private tracker and API
+- Isolated sample workout data for two completed sessions
+- Preview-only input controls with no persistence
 - Responsive Material-inspired interface using Geist typography
 
 ## Technology
@@ -29,8 +28,7 @@ The production URL is [liftline-strength-plan.ktanzyl.chatgpt.site](https://lift
 - vinext and Vite
 - Tailwind CSS and shadcn components
 - Recharts for progress visualizations
-- Drizzle ORM with Cloudflare D1/SQLite
-- OpenAI Sites hosting on Cloudflare Workers
+- Static export hosted with OpenAI Sites
 
 ## Run locally
 
@@ -41,35 +39,26 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The local development environment uses the configured `DB` D1 binding and initializes the `workout_entries` table automatically on first use.
+Open [http://localhost:3000](http://localhost:3000). No database or account configuration is required.
 
 ## Useful commands
 
 ```bash
 npm run dev          # Start the development server
-npm run build        # Create a production build
-npm run start        # Run the built Worker locally with Wrangler
+npm run build        # Create the static production build
 npm run lint         # Run oxlint
 npm run format       # Format the project with oxfmt
-npm run db:generate  # Generate a Drizzle migration after schema changes
 ```
 
 ## Project structure
 
 ```text
 app/
-  api/workouts/route.ts  Workout history API and D1 initialization
-  workout-app.tsx        Main responsive application interface
-db/schema.ts             Drizzle schema
-drizzle/                 Generated SQLite migrations
+  workout-app.tsx        Responsive sample application interface
 lib/routine.ts           12-week routine and exercise definitions
 public/                   Liftline icons and sharing artwork
 ```
 
-## Data behavior
+## Data isolation
 
-Workout entries are keyed by week, day, and exercise. Saving an exercise creates or updates that entry, so a session can be resumed without duplicating records. The dashboard derives completion, session totals, training volume, and progression suggestions from the saved entries.
-
-All `/api/workouts` reads and writes require the authenticated Sites user ID to match the `LIFTLINE_OWNER_USER_ID` production environment value. The public preview never requests the workout API and cannot read or modify the D1 records.
-
-The initial Week 1 example entries mirror the source spreadsheet so the progress experience is visible immediately. New and updated entries are stored persistently in D1.
+The sample entries are bundled in the browser code solely to demonstrate the progress experience. The demo has no route that can access the private tracker, and the preview button only explains that changes are not saved.

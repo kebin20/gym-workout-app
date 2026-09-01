@@ -7,8 +7,8 @@ import {
 import {
   AlertCircle, BarChart3, BookOpen, CalendarDays, Check,
   CheckCircle2, ChevronLeft, ChevronRight, Clock3, Dumbbell,
-  Eye, Home, Loader2, LockKeyhole, LogOut, Minus, NotebookPen,
-  Plus, RotateCcw, Sparkles, Target, TrendingUp,
+  Eye, Home, LockKeyhole, Minus, NotebookPen,
+  Plus, Sparkles, Target, TrendingUp,
 } from 'lucide-react';
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -21,12 +21,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { days, routine, targetLabel, workingSetsForWeek, type RoutineExercise, type TrainingDay } from '@/lib/routine';
 
 type View = 'today' | 'plan' | 'progress' | 'guide';
-
-type WorkoutAppProps = {
-  mode?: 'demo' | 'owner';
-  userLabel?: string;
-  signOutHref?: string;
-};
 
 type WorkoutEntry = {
   id?: number;
@@ -155,16 +149,13 @@ function NavButton({ view, active, icon: Icon, label, onChange, compact = false 
   );
 }
 
-export function WorkoutApp({ mode = 'owner', userLabel, signOutHref = '/' }: WorkoutAppProps) {
-  const isDemo = mode === 'demo';
+export function WorkoutApp() {
   const [view, setView] = useState<View>('today');
   const [activeWeek, setActiveWeek] = useState(1);
   const [activeDay, setActiveDay] = useState<TrainingDay>('C');
   const [activeIndex, setActiveIndex] = useState(0);
-  const [entries, setEntries] = useState<WorkoutEntry[]>(isDemo ? demoEntries : []);
+  const [entries] = useState<WorkoutEntry[]>(demoEntries);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
-  const [loading, setLoading] = useState(!isDemo);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [showNotes, setShowNotes] = useState(false);
@@ -173,23 +164,6 @@ export function WorkoutApp({ mode = 'owner', userLabel, signOutHref = '/' }: Wor
   const exercise = dayExercises[activeIndex] ?? dayExercises[0];
   const existingEntry = entries.find((entry) => entry.week === activeWeek && entry.day === activeDay && entry.exerciseOrder === exercise.order);
   const activeSets = workingSetsForWeek(exercise, activeWeek);
-
-  useEffect(() => {
-    if (isDemo) return;
-    let cancelled = false;
-    fetch('/api/workouts')
-      .then(async (response) => {
-        const data = await response.json() as { entries?: WorkoutEntry[]; error?: string };
-        if (!response.ok) throw new Error(data.error ?? 'Unable to load workouts.');
-        if (!cancelled) {
-          setEntries((data.entries ?? []).map((entry) => ({ ...entry, completed: Boolean(entry.completed) })));
-          setError('');
-        }
-      })
-      .catch((loadError: Error) => { if (!cancelled) setError(loadError.message); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [isDemo]);
 
   useEffect(() => {
     const current = entries.find((entry) => entry.week === activeWeek && entry.day === activeDay && entry.exerciseOrder === exercise.order);
@@ -226,8 +200,6 @@ export function WorkoutApp({ mode = 'owner', userLabel, signOutHref = '/' }: Wor
   const totalRows = weeklySummaries.reduce((sum, week) => sum + week.rows, 0);
   const totalSessions = weeklySummaries.reduce((sum, week) => sum + week.sessions, 0);
   const advice = progressionAdvice(exercise, draft, activeSets);
-  const readyToSave = draft.sets.slice(0, activeSets).every((set) => numberOrNull(set.reps) != null);
-
   function chooseDay(day: TrainingDay) {
     setActiveDay(day); setActiveIndex(0); setView('today');
   }
@@ -242,44 +214,19 @@ export function WorkoutApp({ mode = 'owner', userLabel, signOutHref = '/' }: Wor
     updateSet(index, key, String(next));
   }
 
-  async function saveExercise() {
-    if (isDemo) {
-      setError('');
-      setNotice('This public preview uses sample data. Only the owner can save workout entries.');
-      return;
-    }
-    if (!readyToSave) { setError(`Enter reps for the first ${activeSets} working sets.`); return; }
-    setSaving(true); setError(''); setNotice('');
-    const payload = {
-      week: activeWeek, day: activeDay, exerciseOrder: exercise.order,
-      set1Weight: numberOrNull(draft.sets[0].weight), set1Reps: numberOrNull(draft.sets[0].reps),
-      set2Weight: numberOrNull(draft.sets[1].weight), set2Reps: numberOrNull(draft.sets[1].reps),
-      set3Weight: numberOrNull(draft.sets[2].weight), set3Reps: numberOrNull(draft.sets[2].reps),
-      rir: numberOrNull(draft.rir), notes: draft.notes, completed: true,
-    };
-    try {
-      const response = await fetch('/api/workouts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      const data = await response.json() as { entry?: WorkoutEntry; error?: string };
-      if (!response.ok || !data.entry) throw new Error(data.error ?? 'Unable to save exercise.');
-      const saved = { ...data.entry, completed: Boolean(data.entry.completed) };
-      setEntries((current) => [...current.filter((entry) => !(entry.week === saved.week && entry.day === saved.day && entry.exerciseOrder === saved.exerciseOrder)), saved]);
-      setNotice(`${exercise.name} saved`);
-      if (activeIndex < dayExercises.length - 1) setActiveIndex((index) => index + 1);
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Unable to save exercise.');
-    } finally { setSaving(false); }
+  function saveExercise() {
+    setError('');
+    setNotice('This public demo uses sample data. Changes are not saved.');
   }
 
   return (
     <main className="min-h-screen bg-background pb-24 font-sans text-foreground md:pb-10">
-      {isDemo && (
-        <div className="border-b border-primary/15 bg-accent/70 px-4 py-2.5 text-primary">
-          <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 text-xs font-semibold sm:text-sm">
-            <span className="flex items-center gap-2"><Eye className="size-4 shrink-0" /> Public preview · Sample workout data only</span>
-            <a href="/workout" target="_top" className="shrink-0 underline underline-offset-4">Owner sign in</a>
-          </div>
+      <div className="border-b border-primary/15 bg-accent/70 px-4 py-2.5 text-primary">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 text-xs font-semibold sm:text-sm">
+          <span className="flex items-center gap-2"><Eye className="size-4 shrink-0" /> Public demo · Sample workout data only</span>
+          <span className="shrink-0 text-primary/80">Changes aren’t saved</span>
         </div>
-      )}
+      </div>
       <header className="sticky top-0 z-30 border-b border-border/80 bg-card/95 backdrop-blur">
         <div className="mx-auto flex h-18 max-w-6xl items-center justify-between px-4 sm:px-6">
           <button type="button" onClick={() => setView('today')} className="flex items-center gap-3 text-left">
@@ -292,15 +239,6 @@ export function WorkoutApp({ mode = 'owner', userLabel, signOutHref = '/' }: Wor
             <NavButton view="progress" active={view === 'progress'} icon={BarChart3} label="Progress" onChange={setView} />
           </div>
           <div className="flex items-center gap-2">
-            {isDemo ? (
-              <a href="/workout" target="_top" className="hidden h-10 items-center gap-2 rounded-xl border border-border bg-card px-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted sm:inline-flex"><LockKeyhole className="size-4" /> Owner sign in</a>
-            ) : (
-              <>
-                <span className="hidden max-w-44 truncate text-xs font-medium text-muted-foreground lg:block">Private · {userLabel}</span>
-                <a href={signOutHref} target="_top" className="hidden h-10 items-center gap-2 rounded-xl border border-border bg-card px-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted sm:inline-flex"><LogOut className="size-4" /> Sign out</a>
-                <a href={signOutHref} target="_top" aria-label="Sign out" className="grid size-10 place-items-center rounded-xl border border-border bg-card text-foreground sm:hidden"><LogOut className="size-4" /></a>
-              </>
-            )}
             <Button variant={view === 'guide' ? 'secondary' : 'outline'} size="icon-lg" aria-label="Open guide" onClick={() => setView('guide')}><BookOpen /></Button>
           </div>
         </div>
@@ -310,7 +248,7 @@ export function WorkoutApp({ mode = 'owner', userLabel, signOutHref = '/' }: Wor
         {(error || notice) && (
           <Alert className={`mb-5 ${error ? 'border-destructive/30 bg-destructive/5 text-destructive' : 'border-success/25 bg-success-soft text-success'}`}>
             {error ? <AlertCircle /> : <CheckCircle2 />}
-            <AlertTitle>{error ? 'Something needs attention' : isDemo ? 'Read-only preview' : 'Saved'}</AlertTitle>
+            <AlertTitle>{error ? 'Something needs attention' : 'Sample preview'}</AlertTitle>
             <AlertDescription className={error ? 'text-destructive/85' : 'text-success/85'}>{error || notice}</AlertDescription>
           </Alert>
         )}
@@ -411,10 +349,9 @@ export function WorkoutApp({ mode = 'owner', userLabel, signOutHref = '/' }: Wor
                     <Button type="button" variant="ghost" className="mt-3 font-sans text-muted-foreground" onClick={() => setShowNotes(true)}><NotebookPen /> Add notes</Button>
                   )}
 
-                  <Button size="lg" className="mt-4 h-12 w-full rounded-xl font-sans text-base shadow-md shadow-primary/20" disabled={saving || loading} onClick={saveExercise}>
-                    {saving ? <Loader2 className="animate-spin" /> : isDemo ? <LockKeyhole /> : existingEntry?.completed ? <RotateCcw /> : <CheckCircle2 />}
-                    {saving ? 'Saving…' : isDemo ? 'Preview only' : existingEntry?.completed ? 'Update & continue' : 'Save & next'}
-                    {!saving && <ChevronRight data-icon="inline-end" />}
+                  <Button size="lg" className="mt-4 h-12 w-full rounded-xl font-sans text-base shadow-md shadow-primary/20" onClick={saveExercise}>
+                    <LockKeyhole /> Preview only
+                    <ChevronRight data-icon="inline-end" />
                   </Button>
                 </CardContent>
               </Card>
