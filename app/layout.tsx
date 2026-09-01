@@ -13,6 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://liftline-strength-plan.ktanzyl.chatgpt.site'),
   title: 'Liftline — 12-Week Strength Plan',
   description:
     'A mobile-friendly 12-week, 3-day workout tracker for logging sets, reps, RIR, notes, volume, and weekly progress.',
