@@ -8,6 +8,8 @@ Made with ChatGPT COdex
 
 ## Demo behavior
 
+The live demo is available at [liftline-workout-demo.ktanzyl.chatgpt.site](https://liftline-workout-demo.ktanzyl.chatgpt.site).
+
 The demo is a fully static site. It ships with fictional Week 1 sample entries, makes no API requests, has no database binding, and does not persist values entered by visitors. The private tracker is maintained and deployed separately from the `main` branch.
 
 ## Features
