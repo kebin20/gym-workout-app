@@ -2,6 +2,8 @@
 
 Liftline is a mobile-friendly workout tracker for a 12-week, three-day strength program. It turns the original spreadsheet routine into a clean, touch-first web app for logging weight, reps, RIR, notes, volume, and weekly progress.
 
+Made with ChatGPT COdex
+
 ![Liftline workout tracker](public/og.png)
 
 ## Live app
