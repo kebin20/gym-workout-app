@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import {
   Bar, BarChart, CartesianGrid, XAxis, YAxis,
 } from 'recharts';
@@ -276,7 +277,7 @@ export function WorkoutApp({ mode = 'owner', userLabel, signOutHref = '/' }: Wor
         <div className="border-b border-primary/15 bg-accent/70 px-4 py-2.5 text-primary">
           <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 text-xs font-semibold sm:text-sm">
             <span className="flex items-center gap-2"><Eye className="size-4 shrink-0" /> Public preview · Sample workout data only</span>
-            <a href="/workout" target="_top" className="shrink-0 underline underline-offset-4">Owner sign in</a>
+            <Link href="/workout" className="shrink-0 underline underline-offset-4">Owner sign in</Link>
           </div>
         </div>
       )}
@@ -293,7 +294,7 @@ export function WorkoutApp({ mode = 'owner', userLabel, signOutHref = '/' }: Wor
           </div>
           <div className="flex items-center gap-2">
             {isDemo ? (
-              <a href="/workout" target="_top" className="hidden h-10 items-center gap-2 rounded-xl border border-border bg-card px-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted sm:inline-flex"><LockKeyhole className="size-4" /> Owner sign in</a>
+              <Link href="/workout" className="hidden h-10 items-center gap-2 rounded-xl border border-border bg-card px-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted sm:inline-flex"><LockKeyhole className="size-4" /> Owner sign in</Link>
             ) : (
               <>
                 <span className="hidden max-w-44 truncate text-xs font-medium text-muted-foreground lg:block">Private · {userLabel}</span>
