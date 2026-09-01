@@ -1,14 +1,15 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import {
   Bar, BarChart, CartesianGrid, XAxis, YAxis,
 } from 'recharts';
 import {
   AlertCircle, BarChart3, BookOpen, CalendarDays, Check,
   CheckCircle2, ChevronLeft, ChevronRight, Clock3, Dumbbell,
-  Home, Loader2, Minus, NotebookPen, Plus, RotateCcw, Sparkles,
-  Target, TrendingUp,
+  Eye, Home, Loader2, LockKeyhole, LogOut, Minus, NotebookPen,
+  Plus, RotateCcw, Sparkles, Target, TrendingUp,
 } from 'lucide-react';
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -21,6 +22,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { days, routine, targetLabel, workingSetsForWeek, type RoutineExercise, type TrainingDay } from '@/lib/routine';
 
 type View = 'today' | 'plan' | 'progress' | 'guide';
+
+type WorkoutAppProps = {
+  mode?: 'demo' | 'owner';
+  userLabel?: string;
+  signOutHref?: string;
+};
 
 type WorkoutEntry = {
   id?: number;
@@ -62,6 +69,33 @@ const weekDates = [
   'Aug 26–Sep 1', 'Sep 2–8', 'Sep 9–15', 'Sep 16–22', 'Sep 23–29', 'Sep 30–Oct 6',
   'Oct 7–13', 'Oct 14–20', 'Oct 21–27', 'Oct 28–Nov 3', 'Nov 4–10', 'Nov 11–17',
 ];
+
+const demoLoads: Record<string, number> = {
+  A1: 70, A2: 30, A3: 32.5, A4: 25, A5: 10, A6: 40,
+  B1: 20, B2: 27.5, B3: 24, B4: 80, B5: 30, B6: 8,
+};
+
+const demoEntries: WorkoutEntry[] = routine
+  .filter((exercise) => exercise.day !== 'C')
+  .map((exercise, index) => ({
+    id: index + 1,
+    week: 1,
+    day: exercise.day,
+    exerciseOrder: exercise.order,
+    exercise: exercise.name,
+    target: targetLabel(exercise),
+    set1Weight: demoLoads[`${exercise.day}${exercise.order}`],
+    set1Reps: 10,
+    set2Weight: demoLoads[`${exercise.day}${exercise.order}`],
+    set2Reps: 10,
+    set3Weight: null,
+    set3Reps: null,
+    rir: 2,
+    notes: '',
+    completed: true,
+    completedAt: exercise.day === 'A' ? '2026-08-26' : '2026-08-31',
+    updatedAt: exercise.day === 'A' ? '2026-08-26' : '2026-08-31',
+  }));
 
 function numberOrNull(value: string) {
   if (value.trim() === '') return null;
@@ -122,14 +156,15 @@ function NavButton({ view, active, icon: Icon, label, onChange, compact = false 
   );
 }
 
-export function WorkoutApp() {
+export function WorkoutApp({ mode = 'owner', userLabel, signOutHref = '/' }: WorkoutAppProps) {
+  const isDemo = mode === 'demo';
   const [view, setView] = useState<View>('today');
   const [activeWeek, setActiveWeek] = useState(1);
   const [activeDay, setActiveDay] = useState<TrainingDay>('C');
   const [activeIndex, setActiveIndex] = useState(0);
-  const [entries, setEntries] = useState<WorkoutEntry[]>([]);
+  const [entries, setEntries] = useState<WorkoutEntry[]>(isDemo ? demoEntries : []);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!isDemo);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -141,6 +176,7 @@ export function WorkoutApp() {
   const activeSets = workingSetsForWeek(exercise, activeWeek);
 
   useEffect(() => {
+    if (isDemo) return;
     let cancelled = false;
     fetch('/api/workouts')
       .then(async (response) => {
@@ -154,7 +190,7 @@ export function WorkoutApp() {
       .catch((loadError: Error) => { if (!cancelled) setError(loadError.message); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [isDemo]);
 
   useEffect(() => {
     const current = entries.find((entry) => entry.week === activeWeek && entry.day === activeDay && entry.exerciseOrder === exercise.order);
@@ -208,6 +244,11 @@ export function WorkoutApp() {
   }
 
   async function saveExercise() {
+    if (isDemo) {
+      setError('');
+      setNotice('This public preview uses sample data. Only the owner can save workout entries.');
+      return;
+    }
     if (!readyToSave) { setError(`Enter reps for the first ${activeSets} working sets.`); return; }
     setSaving(true); setError(''); setNotice('');
     const payload = {
@@ -232,6 +273,14 @@ export function WorkoutApp() {
 
   return (
     <main className="min-h-screen bg-background pb-24 font-sans text-foreground md:pb-10">
+      {isDemo && (
+        <div className="border-b border-primary/15 bg-accent/70 px-4 py-2.5 text-primary">
+          <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 text-xs font-semibold sm:text-sm">
+            <span className="flex items-center gap-2"><Eye className="size-4 shrink-0" /> Public preview · Sample workout data only</span>
+            <Link href="/workout" className="shrink-0 underline underline-offset-4">Owner sign in</Link>
+          </div>
+        </div>
+      )}
       <header className="sticky top-0 z-30 border-b border-border/80 bg-card/95 backdrop-blur">
         <div className="mx-auto flex h-18 max-w-6xl items-center justify-between px-4 sm:px-6">
           <button type="button" onClick={() => setView('today')} className="flex items-center gap-3 text-left">
@@ -243,7 +292,18 @@ export function WorkoutApp() {
             <NavButton view="plan" active={view === 'plan'} icon={CalendarDays} label="Plan" onChange={setView} />
             <NavButton view="progress" active={view === 'progress'} icon={BarChart3} label="Progress" onChange={setView} />
           </div>
-          <Button variant={view === 'guide' ? 'secondary' : 'outline'} size="icon-lg" aria-label="Open guide" onClick={() => setView('guide')}><BookOpen /></Button>
+          <div className="flex items-center gap-2">
+            {isDemo ? (
+              <Link href="/workout" className="hidden h-10 items-center gap-2 rounded-xl border border-border bg-card px-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted sm:inline-flex"><LockKeyhole className="size-4" /> Owner sign in</Link>
+            ) : (
+              <>
+                <span className="hidden max-w-44 truncate text-xs font-medium text-muted-foreground lg:block">Private · {userLabel}</span>
+                <a href={signOutHref} target="_top" className="hidden h-10 items-center gap-2 rounded-xl border border-border bg-card px-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted sm:inline-flex"><LogOut className="size-4" /> Sign out</a>
+                <a href={signOutHref} target="_top" aria-label="Sign out" className="grid size-10 place-items-center rounded-xl border border-border bg-card text-foreground sm:hidden"><LogOut className="size-4" /></a>
+              </>
+            )}
+            <Button variant={view === 'guide' ? 'secondary' : 'outline'} size="icon-lg" aria-label="Open guide" onClick={() => setView('guide')}><BookOpen /></Button>
+          </div>
         </div>
       </header>
 
@@ -251,7 +311,7 @@ export function WorkoutApp() {
         {(error || notice) && (
           <Alert className={`mb-5 ${error ? 'border-destructive/30 bg-destructive/5 text-destructive' : 'border-success/25 bg-success-soft text-success'}`}>
             {error ? <AlertCircle /> : <CheckCircle2 />}
-            <AlertTitle>{error ? 'Something needs attention' : 'Saved'}</AlertTitle>
+            <AlertTitle>{error ? 'Something needs attention' : isDemo ? 'Read-only preview' : 'Saved'}</AlertTitle>
             <AlertDescription className={error ? 'text-destructive/85' : 'text-success/85'}>{error || notice}</AlertDescription>
           </Alert>
         )}
@@ -353,8 +413,8 @@ export function WorkoutApp() {
                   )}
 
                   <Button size="lg" className="mt-4 h-12 w-full rounded-xl font-sans text-base shadow-md shadow-primary/20" disabled={saving || loading} onClick={saveExercise}>
-                    {saving ? <Loader2 className="animate-spin" /> : existingEntry?.completed ? <RotateCcw /> : <CheckCircle2 />}
-                    {saving ? 'Saving…' : existingEntry?.completed ? 'Update & continue' : 'Save & next'}
+                    {saving ? <Loader2 className="animate-spin" /> : isDemo ? <LockKeyhole /> : existingEntry?.completed ? <RotateCcw /> : <CheckCircle2 />}
+                    {saving ? 'Saving…' : isDemo ? 'Preview only' : existingEntry?.completed ? 'Update & continue' : 'Save & next'}
                     {!saving && <ChevronRight data-icon="inline-end" />}
                   </Button>
                 </CardContent>

@@ -1,5 +1,5 @@
 import { WorkoutApp } from './workout-app';
 
 export default function HomePage() {
-  return <WorkoutApp />;
+  return <WorkoutApp mode="demo" />;
 }
