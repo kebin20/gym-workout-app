@@ -22,9 +22,9 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       { url: '/favicon.svg', type: 'image/svg+xml' },
-      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icon-192.png?v=20260902', sizes: '192x192', type: 'image/png' },
     ],
-    apple: [{ url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
+    apple: [{ url: '/apple-touch-icon.png?v=20260902', sizes: '180x180', type: 'image/png' }],
     shortcut: '/favicon.svg',
   },
   appleWebApp: {

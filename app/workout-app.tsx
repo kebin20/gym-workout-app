@@ -1,9 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import {
-  Bar, BarChart, CartesianGrid, XAxis, YAxis,
-} from 'recharts';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle, BarChart3, BookOpen, CalendarDays, Check,
   CheckCircle2, ChevronLeft, ChevronRight, Clock3, Dumbbell,
@@ -15,7 +12,6 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { days, routine, targetLabel, workingSetsForWeek, type RoutineExercise, type TrainingDay } from '@/lib/routine';
@@ -54,9 +50,7 @@ const emptyDraft: Draft = {
   notes: '',
 };
 
-const chartConfig = {
-  volume: { label: 'Volume (kg)', color: 'var(--color-chart-1)' },
-} satisfies ChartConfig;
+const ProgressChart = lazy(() => import('./progress-chart'));
 
 const weekDates = [
   'Aug 26–Sep 1', 'Sep 2–8', 'Sep 9–15', 'Sep 16–22', 'Sep 23–29', 'Sep 30–Oct 6',
@@ -426,14 +420,9 @@ export function WorkoutApp() {
               <Card>
                 <CardHeader><CardTitle className="font-sans">Weekly training volume</CardTitle><CardDescription className="font-sans">Weight × reps across all logged sets</CardDescription></CardHeader>
                 <CardContent>
-                  <ChartContainer config={chartConfig} className="h-[300px] w-full aspect-auto">
-                    <BarChart data={weeklySummaries} margin={{ left: 0, right: 8 }}>
-                      <CartesianGrid vertical={false} /><XAxis dataKey="week" tickLine={false} axisLine={false} tickFormatter={(value) => `W${value}`} />
-                      <YAxis width={42} tickLine={false} axisLine={false} tickFormatter={(value) => value >= 1000 ? `${Math.round(value / 1000)}k` : String(value)} />
-                      <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
-                      <Bar dataKey="volume" fill="var(--color-volume)" radius={[6, 6, 0, 0]} />
-                    </BarChart>
-                  </ChartContainer>
+                  <Suspense fallback={<div className="grid h-[300px] place-items-center rounded-xl bg-muted/35 font-sans text-sm text-muted-foreground">Loading chart…</div>}>
+                    <ProgressChart data={weeklySummaries} />
+                  </Suspense>
                 </CardContent>
               </Card>
               <Card>
