@@ -2,9 +2,9 @@
 
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import {
-  AlertCircle, BarChart3, BookOpen, Bot, CalendarDays, Check,
+  AlertCircle, BarChart3, BookOpen, CalendarDays, Check,
   CheckCircle2, ChevronLeft, ChevronRight, Clock3, Dumbbell,
-  CirclePlay, Download, ExternalLink, FileSpreadsheet, Home, Loader2, Minus, NotebookPen, Plus, RotateCcw,
+  CirclePlay, Download, FileSpreadsheet, History, Home, Loader2, Minus, NotebookPen, Plus, RotateCcw,
   ShieldCheck, Sparkles, Target, TrendingUp,
 } from 'lucide-react';
 
@@ -136,33 +136,20 @@ function sheetEntrySummary(entry: WorkoutEntry) {
   }).join(' · ');
 }
 
-function dayReviewPrompt(dayEntries: WorkoutEntry[], week: number, day: TrainingDay) {
-  const volume = Math.round(dayEntries.reduce((sum, entry) => sum + entryVolume(entry), 0));
-  const details = dayEntries.map((entry) => {
-    const rir = entry.rir == null ? 'RIR not recorded' : `RIR ${entry.rir}`;
-    const notes = entry.notes ? `; notes: ${entry.notes}` : '';
-    return `- ${entry.exercise}: ${sheetEntrySummary(entry) || 'no set values'}; ${rir}${notes}`;
-  });
-  return [
-    'Act as a practical, supportive strength-training coach.',
-    `Review my Week ${week}, Day ${day} workout from Liftline.`,
-    `Completed exercises: ${dayEntries.length}. Total recorded volume: ${volume.toLocaleString()} kg.`,
-    ...details,
-    '',
-    'Give me a brief debrief with: what went well, the main thing to improve, and one specific target for the next session. Consider the rep ranges and RIR, avoid overstating conclusions from limited data, and keep the answer under 250 words. If any note suggests pain or injury, recommend appropriate professional advice rather than diagnosing it.',
-  ].join('\n');
+function formatWorkoutDate(value?: string | null) {
+  if (!value) return 'Date unavailable';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Date unavailable';
+  return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).format(date);
 }
 
-function progressReviewPrompt(summaries: { week: number; rows: number; sessions: number; volume: number }[]) {
-  const completed = summaries.filter((week) => week.rows > 0);
-  const breakdown = completed.map((week) => `- Week ${week.week}: ${week.sessions}/3 sessions, ${week.rows} exercises, ${Math.round(week.volume).toLocaleString()} kg volume`);
-  return [
-    'Act as a practical, supportive strength-training coach.',
-    'Review this Liftline training summary:',
-    ...(breakdown.length > 0 ? breakdown : ['- No completed sessions recorded yet.']),
-    '',
-    'Give me a concise progress check with: consistency, any useful trend visible in the data, the highest-priority improvement, and one realistic focus for the next week. Do not invent conclusions when the data is limited. Keep the answer under 250 words.',
-  ].join('\n');
+function loggedSets(entry: WorkoutEntry) {
+  return ([1, 2, 3] as const).flatMap((set) => {
+    const weight = entry[`set${set}Weight`];
+    const reps = entry[`set${set}Reps`];
+    if (reps == null) return [];
+    return [{ set, weight, reps }];
+  });
 }
 
 function NavButton({ view, active, icon: Icon, label, onChange, compact = false }: {
@@ -207,6 +194,9 @@ export function WorkoutApp() {
   const dayExercises = useMemo(() => routine.filter((exercise) => exercise.day === activeDay), [activeDay]);
   const exercise = dayExercises[activeIndex] ?? dayExercises[0];
   const existingEntry = entries.find((entry) => entry.week === activeWeek && entry.day === activeDay && entry.exerciseOrder === exercise.order);
+  const previousEntry = [...entries]
+    .filter((entry) => entry.completed && entry.week < activeWeek && entry.day === activeDay && entry.exerciseOrder === exercise.order)
+    .sort((a, b) => b.week - a.week)[0];
   const activeSets = workingSetsForWeek(exercise, activeWeek);
 
   useEffect(() => {
@@ -259,10 +249,6 @@ export function WorkoutApp() {
   const totalVolume = weeklySummaries.reduce((sum, week) => sum + week.volume, 0);
   const totalRows = weeklySummaries.reduce((sum, week) => sum + week.rows, 0);
   const totalSessions = weeklySummaries.reduce((sum, week) => sum + week.sessions, 0);
-  const activeDayEntries = entries.filter((entry) => entry.week === activeWeek && entry.day === activeDay && entry.completed);
-  const activeDayVolume = Math.round(activeDayEntries.reduce((sum, entry) => sum + entryVolume(entry), 0));
-  const activeDayRirs = activeDayEntries.flatMap((entry) => entry.rir == null ? [] : [entry.rir]);
-  const averageDayRir = activeDayRirs.length > 0 ? activeDayRirs.reduce((sum, rir) => sum + rir, 0) / activeDayRirs.length : null;
   const advice = progressionAdvice(exercise, draft, activeSets);
   const readyToSave = draft.sets.slice(0, activeSets).every((set) => numberOrNull(set.reps) != null);
 
@@ -358,19 +344,6 @@ export function WorkoutApp() {
     } finally { setImportingSheet(false); }
   }
 
-  function openChatGPTReview(prompt: string) {
-    if (!navigator.clipboard?.writeText) {
-      window.open('https://chatgpt.com/', '_blank', 'noopener,noreferrer');
-      setError('ChatGPT opened, but this browser could not copy the workout summary automatically.');
-      return;
-    }
-    const copyPrompt = navigator.clipboard.writeText(prompt);
-    window.open('https://chatgpt.com/', '_blank', 'noopener,noreferrer');
-    copyPrompt
-      .then(() => { setError(''); setNotice('Workout summary copied—paste it into ChatGPT for your review.'); })
-      .catch(() => setError('ChatGPT opened, but the workout summary could not be copied.'));
-  }
-
   return (
     <main className="min-h-screen bg-background pb-24 font-sans text-foreground md:pb-10">
       <header className="sticky top-0 z-30 border-b border-border/80 bg-card/95 backdrop-blur">
@@ -439,23 +412,6 @@ export function WorkoutApp() {
                 </CardContent>
               </Card>
 
-              <Card className="border-primary/15 bg-accent/35 ring-primary/10">
-                <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center">
-                  <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground"><Bot className="size-5" /></span>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-sans font-semibold">Review Day {activeDay} with ChatGPT</p>
-                    <p className="mt-1 font-sans text-sm text-muted-foreground">
-                      {activeDayEntries.length === 0
-                        ? 'Log at least one exercise, then ask for a quick debrief and next-session focus.'
-                        : `${activeDayEntries.length} exercise${activeDayEntries.length === 1 ? '' : 's'} logged · ${activeDayVolume.toLocaleString()} kg volume${averageDayRir == null ? '' : ` · average RIR ${averageDayRir.toFixed(1)}`}`}
-                    </p>
-                  </div>
-                  <Button className="h-10 w-full font-sans sm:w-auto" disabled={activeDayEntries.length === 0} onClick={() => openChatGPTReview(dayReviewPrompt(activeDayEntries, activeWeek, activeDay))}>
-                    <Sparkles /> Copy & open ChatGPT <ExternalLink data-icon="inline-end" />
-                  </Button>
-                </CardContent>
-              </Card>
-
               <div className="flex items-center justify-between gap-3">
                 <div><p className="font-sans text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Day {activeDay} · Exercise {activeIndex + 1} of {dayExercises.length}</p><h2 className="mt-1 font-sans text-xl font-bold">{exercise.name}</h2></div>
                 <div className="flex gap-2">
@@ -478,6 +434,29 @@ export function WorkoutApp() {
                       className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-primary/20 bg-background px-2.5 font-sans text-xs font-semibold text-primary transition-colors hover:bg-accent">
                       <CirclePlay className="size-4" /> Watch demo
                     </a>
+                  </div>
+                  <div className="mt-3 rounded-xl border border-primary/15 bg-background/90 p-3 shadow-sm shadow-slate-900/5">
+                    <div className="flex items-start gap-3">
+                      <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-accent text-primary"><History className="size-4" /></span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                          <p className="font-sans text-sm font-semibold">Previous session</p>
+                          {previousEntry && <p className="font-sans text-xs font-medium text-muted-foreground">{formatWorkoutDate(previousEntry.completedAt ?? previousEntry.updatedAt)} · Week {previousEntry.week}</p>}
+                        </div>
+                        {previousEntry ? (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {loggedSets(previousEntry).map((set) => (
+                              <span key={set.set} className="rounded-lg bg-secondary px-2.5 py-1.5 font-sans text-xs font-medium tabular-nums">
+                                Set {set.set}: {set.weight == null ? `${set.reps} ${exercise.name === 'Plank' ? 'sec' : 'reps'}` : `${set.weight} kg × ${set.reps}`}
+                              </span>
+                            ))}
+                            {previousEntry.rir != null && <span className="rounded-lg bg-success-soft px-2.5 py-1.5 font-sans text-xs font-medium text-success">RIR {previousEntry.rir}</span>}
+                          </div>
+                        ) : (
+                          <p className="mt-1 font-sans text-xs leading-relaxed text-muted-foreground">No earlier session for this exercise yet. Your last sets and date will appear here from Week 2 onward.</p>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent className="pt-1">
@@ -589,15 +568,6 @@ export function WorkoutApp() {
                 return <Card key={String(label)} size="sm"><CardContent className="flex items-center gap-3"><span className="grid size-10 place-items-center rounded-xl bg-accent text-primary"><KpiIcon className="size-5" /></span><div><p className="font-sans text-xs text-muted-foreground">{String(label)}</p><p className="font-sans text-xl font-bold">{String(value)}</p></div></CardContent></Card>;
               })}
             </div>
-            <Card className="mt-5 border-primary/15 bg-accent/35 ring-primary/10">
-              <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center">
-                <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground"><Bot className="size-5" /></span>
-                <div className="min-w-0 flex-1"><p className="font-sans font-semibold">Get a ChatGPT progress check</p><p className="mt-1 font-sans text-sm text-muted-foreground">Share weekly sessions and volume for a concise consistency review and next-week focus.</p></div>
-                <Button className="h-10 w-full font-sans sm:w-auto" disabled={totalRows === 0} onClick={() => openChatGPTReview(progressReviewPrompt(weeklySummaries))}>
-                  <Sparkles /> Copy & open ChatGPT <ExternalLink data-icon="inline-end" />
-                </Button>
-              </CardContent>
-            </Card>
             <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(330px,.65fr)]">
               <Card>
                 <CardHeader><CardTitle className="font-sans">Weekly training volume</CardTitle><CardDescription className="font-sans">Weight × reps across all logged sets</CardDescription></CardHeader>
