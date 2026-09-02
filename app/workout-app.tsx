@@ -2,9 +2,9 @@
 
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import {
-  AlertCircle, BarChart3, BookOpen, CalendarDays, Check,
+  AlertCircle, BarChart3, BookOpen, Bot, CalendarDays, Check,
   CheckCircle2, ChevronLeft, ChevronRight, Clock3, Dumbbell,
-  CirclePlay, Download, FileSpreadsheet, Home, Loader2, Minus, NotebookPen, Plus, RotateCcw,
+  CirclePlay, Download, ExternalLink, FileSpreadsheet, Home, Loader2, Minus, NotebookPen, Plus, RotateCcw,
   ShieldCheck, Sparkles, Target, TrendingUp,
 } from 'lucide-react';
 
@@ -136,6 +136,35 @@ function sheetEntrySummary(entry: WorkoutEntry) {
   }).join(' · ');
 }
 
+function dayReviewPrompt(dayEntries: WorkoutEntry[], week: number, day: TrainingDay) {
+  const volume = Math.round(dayEntries.reduce((sum, entry) => sum + entryVolume(entry), 0));
+  const details = dayEntries.map((entry) => {
+    const rir = entry.rir == null ? 'RIR not recorded' : `RIR ${entry.rir}`;
+    const notes = entry.notes ? `; notes: ${entry.notes}` : '';
+    return `- ${entry.exercise}: ${sheetEntrySummary(entry) || 'no set values'}; ${rir}${notes}`;
+  });
+  return [
+    'Act as a practical, supportive strength-training coach.',
+    `Review my Week ${week}, Day ${day} workout from Liftline.`,
+    `Completed exercises: ${dayEntries.length}. Total recorded volume: ${volume.toLocaleString()} kg.`,
+    ...details,
+    '',
+    'Give me a brief debrief with: what went well, the main thing to improve, and one specific target for the next session. Consider the rep ranges and RIR, avoid overstating conclusions from limited data, and keep the answer under 250 words. If any note suggests pain or injury, recommend appropriate professional advice rather than diagnosing it.',
+  ].join('\n');
+}
+
+function progressReviewPrompt(summaries: { week: number; rows: number; sessions: number; volume: number }[]) {
+  const completed = summaries.filter((week) => week.rows > 0);
+  const breakdown = completed.map((week) => `- Week ${week.week}: ${week.sessions}/3 sessions, ${week.rows} exercises, ${Math.round(week.volume).toLocaleString()} kg volume`);
+  return [
+    'Act as a practical, supportive strength-training coach.',
+    'Review this Liftline training summary:',
+    ...(breakdown.length > 0 ? breakdown : ['- No completed sessions recorded yet.']),
+    '',
+    'Give me a concise progress check with: consistency, any useful trend visible in the data, the highest-priority improvement, and one realistic focus for the next week. Do not invent conclusions when the data is limited. Keep the answer under 250 words.',
+  ].join('\n');
+}
+
 function NavButton({ view, active, icon: Icon, label, onChange, compact = false }: {
   view: View; active: boolean; icon: typeof Home; label: string; onChange: (view: View) => void; compact?: boolean;
 }) {
@@ -230,6 +259,10 @@ export function WorkoutApp() {
   const totalVolume = weeklySummaries.reduce((sum, week) => sum + week.volume, 0);
   const totalRows = weeklySummaries.reduce((sum, week) => sum + week.rows, 0);
   const totalSessions = weeklySummaries.reduce((sum, week) => sum + week.sessions, 0);
+  const activeDayEntries = entries.filter((entry) => entry.week === activeWeek && entry.day === activeDay && entry.completed);
+  const activeDayVolume = Math.round(activeDayEntries.reduce((sum, entry) => sum + entryVolume(entry), 0));
+  const activeDayRirs = activeDayEntries.flatMap((entry) => entry.rir == null ? [] : [entry.rir]);
+  const averageDayRir = activeDayRirs.length > 0 ? activeDayRirs.reduce((sum, rir) => sum + rir, 0) / activeDayRirs.length : null;
   const advice = progressionAdvice(exercise, draft, activeSets);
   const readyToSave = draft.sets.slice(0, activeSets).every((set) => numberOrNull(set.reps) != null);
 
@@ -325,6 +358,19 @@ export function WorkoutApp() {
     } finally { setImportingSheet(false); }
   }
 
+  function openChatGPTReview(prompt: string) {
+    if (!navigator.clipboard?.writeText) {
+      window.open('https://chatgpt.com/', '_blank', 'noopener,noreferrer');
+      setError('ChatGPT opened, but this browser could not copy the workout summary automatically.');
+      return;
+    }
+    const copyPrompt = navigator.clipboard.writeText(prompt);
+    window.open('https://chatgpt.com/', '_blank', 'noopener,noreferrer');
+    copyPrompt
+      .then(() => { setError(''); setNotice('Workout summary copied—paste it into ChatGPT for your review.'); })
+      .catch(() => setError('ChatGPT opened, but the workout summary could not be copied.'));
+  }
+
   return (
     <main className="min-h-screen bg-background pb-24 font-sans text-foreground md:pb-10">
       <header className="sticky top-0 z-30 border-b border-border/80 bg-card/95 backdrop-blur">
@@ -346,7 +392,7 @@ export function WorkoutApp() {
         {(error || notice) && (
           <Alert className={`mb-5 ${error ? 'border-destructive/30 bg-destructive/5 text-destructive' : 'border-success/25 bg-success-soft text-success'}`}>
             {error ? <AlertCircle /> : <CheckCircle2 />}
-            <AlertTitle>{error ? 'Something needs attention' : 'Saved'}</AlertTitle>
+            <AlertTitle>{error ? 'Something needs attention' : 'All set'}</AlertTitle>
             <AlertDescription className={error ? 'text-destructive/85' : 'text-success/85'}>{error || notice}</AlertDescription>
           </Alert>
         )}
@@ -390,6 +436,23 @@ export function WorkoutApp() {
                       return <button key={day} type="button" onClick={() => chooseDay(day)} className={`rounded-lg px-3 py-2 text-left font-sans transition-colors ${activeDay === day ? 'bg-white text-primary' : 'bg-black/15 text-white hover:bg-black/20'}`}>Day {day}<span className="float-right">{complete ? '✓' : activeDay === day ? '→' : '·'}</span></button>;
                     })}
                   </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-primary/15 bg-accent/35 ring-primary/10">
+                <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                  <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground"><Bot className="size-5" /></span>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-sans font-semibold">Review Day {activeDay} with ChatGPT</p>
+                    <p className="mt-1 font-sans text-sm text-muted-foreground">
+                      {activeDayEntries.length === 0
+                        ? 'Log at least one exercise, then ask for a quick debrief and next-session focus.'
+                        : `${activeDayEntries.length} exercise${activeDayEntries.length === 1 ? '' : 's'} logged · ${activeDayVolume.toLocaleString()} kg volume${averageDayRir == null ? '' : ` · average RIR ${averageDayRir.toFixed(1)}`}`}
+                    </p>
+                  </div>
+                  <Button className="h-10 w-full font-sans sm:w-auto" disabled={activeDayEntries.length === 0} onClick={() => openChatGPTReview(dayReviewPrompt(activeDayEntries, activeWeek, activeDay))}>
+                    <Sparkles /> Copy & open ChatGPT <ExternalLink data-icon="inline-end" />
+                  </Button>
                 </CardContent>
               </Card>
 
@@ -526,6 +589,15 @@ export function WorkoutApp() {
                 return <Card key={String(label)} size="sm"><CardContent className="flex items-center gap-3"><span className="grid size-10 place-items-center rounded-xl bg-accent text-primary"><KpiIcon className="size-5" /></span><div><p className="font-sans text-xs text-muted-foreground">{String(label)}</p><p className="font-sans text-xl font-bold">{String(value)}</p></div></CardContent></Card>;
               })}
             </div>
+            <Card className="mt-5 border-primary/15 bg-accent/35 ring-primary/10">
+              <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground"><Bot className="size-5" /></span>
+                <div className="min-w-0 flex-1"><p className="font-sans font-semibold">Get a ChatGPT progress check</p><p className="mt-1 font-sans text-sm text-muted-foreground">Share weekly sessions and volume for a concise consistency review and next-week focus.</p></div>
+                <Button className="h-10 w-full font-sans sm:w-auto" disabled={totalRows === 0} onClick={() => openChatGPTReview(progressReviewPrompt(weeklySummaries))}>
+                  <Sparkles /> Copy & open ChatGPT <ExternalLink data-icon="inline-end" />
+                </Button>
+              </CardContent>
+            </Card>
             <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(330px,.65fr)]">
               <Card>
                 <CardHeader><CardTitle className="font-sans">Weekly training volume</CardTitle><CardDescription className="font-sans">Weight × reps across all logged sets</CardDescription></CardHeader>
@@ -582,7 +654,7 @@ export function WorkoutApp() {
       </div>
 
       <Dialog open={importOpen} onOpenChange={(open) => { if (!importingSheet) setImportOpen(open); }}>
-        <DialogContent className="max-h-[88vh] overflow-hidden p-0 sm:max-w-2xl">
+        <DialogContent className="h-[calc(100dvh-1.5rem)] max-h-[760px] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden p-0 sm:max-w-2xl">
           <DialogHeader className="px-5 pt-5">
             <DialogTitle className="font-sans text-lg font-semibold">Preview Google Sheet import</DialogTitle>
             <DialogDescription className="font-sans">Nothing changes until you confirm. New entries are selected; existing Liftline records remain protected unless you select them.</DialogDescription>
@@ -623,7 +695,7 @@ export function WorkoutApp() {
             )}
           </div>
 
-          <DialogFooter className="m-0 px-5 py-4">
+          <DialogFooter className="m-0 px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
             <Button variant="outline" onClick={() => setImportOpen(false)} disabled={importingSheet}>Cancel</Button>
             <Button onClick={importSelectedSheetEntries} disabled={!importPreview || selectedImportKeys.length === 0 || importingSheet}>
               {importingSheet ? <Loader2 className="animate-spin" /> : <Download />}{importingSheet ? 'Importing…' : `Import selected${selectedImportKeys.length > 0 ? ` (${selectedImportKeys.length})` : ''}`}

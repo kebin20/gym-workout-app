@@ -20,6 +20,7 @@ The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgp
 - Routine guide with targets, rest periods, muscle groups, and alternatives
 - Persistent workout data backed by Cloudflare D1
 - Review-first import from and automatic mirroring to the original Google Sheet layout
+- Ready-made daily and weekly review prompts that open in ChatGPT
 - Responsive Material-inspired interface using Geist typography
 
 ## Technology
@@ -72,6 +73,10 @@ public/                   Liftline icons and sharing artwork
 Workout entries are keyed by week, day, and exercise. Saving an exercise creates or updates that entry, so a session can be resumed without duplicating records. The dashboard derives completion, session totals, training volume, and progression suggestions from the saved entries.
 
 The initial Week 1 example entries mirror the source spreadsheet so the progress experience is visible immediately. New and updated entries are stored persistently in D1.
+
+## ChatGPT workout reviews
+
+The Today and Progress views can prepare a concise workout summary for ChatGPT. Liftline copies the summary only after the owner taps the review button, then opens `chatgpt.com`; no workout data is sent to ChatGPT in the background. Paste the copied prompt into the new conversation to receive a short debrief and suggested focus.
 
 ## Google Sheet sync
 
