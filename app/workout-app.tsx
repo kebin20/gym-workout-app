@@ -4,7 +4,7 @@ import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle, BarChart3, BookOpen, CalendarDays, Check,
   CheckCircle2, ChevronLeft, ChevronRight, Clock3, Dumbbell,
-  CirclePlay, Home, Loader2, Minus, NotebookPen, Plus, RotateCcw, Sparkles,
+  CirclePlay, FileSpreadsheet, Home, Loader2, Minus, NotebookPen, Plus, RotateCcw, Sparkles,
   Target, TrendingUp,
 } from 'lucide-react';
 
@@ -42,6 +42,13 @@ type Draft = {
   sets: { weight: string; reps: string; done: boolean }[];
   rir: string;
   notes: string;
+};
+
+type SheetSyncResult = {
+  ok: boolean;
+  configured: boolean;
+  synced: number;
+  message?: string;
 };
 
 const emptyDraft: Draft = {
@@ -130,6 +137,7 @@ export function WorkoutApp() {
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [syncingSheet, setSyncingSheet] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [showNotes, setShowNotes] = useState(false);
@@ -218,15 +226,29 @@ export function WorkoutApp() {
     };
     try {
       const response = await fetch('/api/workouts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      const data = await response.json() as { entry?: WorkoutEntry; error?: string };
+      const data = await response.json() as { entry?: WorkoutEntry; sheetSync?: SheetSyncResult; error?: string };
       if (!response.ok || !data.entry) throw new Error(data.error ?? 'Unable to save exercise.');
       const saved = { ...data.entry, completed: Boolean(data.entry.completed) };
       setEntries((current) => [...current.filter((entry) => !(entry.week === saved.week && entry.day === saved.day && entry.exerciseOrder === saved.exerciseOrder)), saved]);
-      setNotice(`${exercise.name} saved`);
+      setNotice(data.sheetSync?.ok ? `${exercise.name} saved and synced to Google Sheet` : `${exercise.name} saved`);
       if (activeIndex < dayExercises.length - 1) setActiveIndex((index) => index + 1);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Unable to save exercise.');
     } finally { setSaving(false); }
+  }
+
+  async function syncGoogleSheet() {
+    setSyncingSheet(true); setError(''); setNotice('');
+    try {
+      const response = await fetch('/api/workouts/sync-sheet', { method: 'POST' });
+      const result = await response.json() as SheetSyncResult;
+      if (!response.ok || !result.ok) throw new Error(result.message ?? 'Unable to sync the Google Sheet.');
+      setNotice(`${result.synced} workout ${result.synced === 1 ? 'entry' : 'entries'} synced to Google Sheet`);
+    } catch (syncError) {
+      setError(syncError instanceof Error ? syncError.message : 'Unable to sync the Google Sheet.');
+    } finally {
+      setSyncingSheet(false);
+    }
   }
 
   return (
@@ -410,7 +432,12 @@ export function WorkoutApp() {
 
         {view === 'progress' && (
           <section>
-            <div className="mb-6"><p className="font-sans text-sm font-semibold text-primary">TRAINING SUMMARY</p><h1 className="font-sans text-3xl font-bold tracking-tight">Progress across 12 weeks.</h1><p className="mt-1 font-sans text-muted-foreground">The same core KPIs and weekly totals as your spreadsheet, updated automatically.</p></div>
+            <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+              <div><p className="font-sans text-sm font-semibold text-primary">TRAINING SUMMARY</p><h1 className="font-sans text-3xl font-bold tracking-tight">Progress across 12 weeks.</h1><p className="mt-1 font-sans text-muted-foreground">The same core KPIs and weekly totals as your spreadsheet, updated automatically.</p></div>
+              <Button variant="outline" className="font-sans" disabled={syncingSheet || loading} onClick={syncGoogleSheet}>
+                {syncingSheet ? <Loader2 className="animate-spin" /> : <FileSpreadsheet />} {syncingSheet ? 'Syncing…' : 'Sync Google Sheet'}
+              </Button>
+            </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {[
                 ['Exercise rows', totalRows.toLocaleString(), Dumbbell], ['Total volume', `${Math.round(totalVolume).toLocaleString()} kg`, TrendingUp],

@@ -1,5 +1,6 @@
 import { env } from 'cloudflare:workers';
 
+import { syncWorkoutEntries, type WorkoutSheetEntry } from '@/lib/google-sheet-sync';
 import { routine, targetLabel, type TrainingDay } from '@/lib/routine';
 
 type WorkoutPayload = {
@@ -97,8 +98,9 @@ export async function POST(request: Request) {
         nullableNumber(body.set3Weight), nullableNumber(body.set3Reps), nullableNumber(body.rir), String(body.notes ?? '').slice(0, 1000),
         body.completed ? 1 : 0, completedAt, now,
       ).run();
-    const saved = await db.prepare(`SELECT ${selectColumns} FROM workout_entries WHERE week = ? AND day = ? AND exercise_order = ?`).bind(week, day, exerciseOrder).first();
-    return Response.json({ entry: saved });
+    const saved = await db.prepare(`SELECT ${selectColumns} FROM workout_entries WHERE week = ? AND day = ? AND exercise_order = ?`).bind(week, day, exerciseOrder).first<WorkoutSheetEntry>();
+    const sheetSync = saved ? await syncWorkoutEntries([saved]) : { ok: false, configured: false, synced: 0 };
+    return Response.json({ entry: saved, sheetSync });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : 'Unable to save workout.' }, { status: 500 });
   }

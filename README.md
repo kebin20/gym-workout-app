@@ -2,7 +2,7 @@
 
 Liftline is a mobile-friendly workout tracker for a 12-week, three-day strength program. It turns the original spreadsheet routine into a clean, touch-first web app for logging weight, reps, RIR, notes, volume, and weekly progress.
 
-Made with ChatGPT COdex
+Made with ChatGPT Codex
 
 ![Liftline workout tracker](public/og.png)
 
@@ -19,6 +19,7 @@ The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgp
 - Weekly session progress, workout history, and progress charts
 - Routine guide with targets, rest periods, muscle groups, and alternatives
 - Persistent workout data backed by Cloudflare D1
+- Optional automatic mirroring to the original Google Sheet layout
 - Responsive Material-inspired interface using Geist typography
 
 ## Technology
@@ -57,6 +58,7 @@ npm run db:generate  # Generate a Drizzle migration after schema changes
 ```text
 app/
   api/workouts/route.ts  Workout history API and D1 initialization
+  api/workouts/sync-sheet/route.ts  Full Google Sheet backfill endpoint
   workout-app.tsx        Main responsive application interface
 db/schema.ts             Drizzle schema
 drizzle/                 Generated SQLite migrations
@@ -69,3 +71,20 @@ public/                   Liftline icons and sharing artwork
 Workout entries are keyed by week, day, and exercise. Saving an exercise creates or updates that entry, so a session can be resumed without duplicating records. The dashboard derives completion, session totals, training volume, and progression suggestions from the saved entries.
 
 The initial Week 1 example entries mirror the source spreadsheet so the progress experience is visible immediately. New and updated entries are stored persistently in D1.
+
+## Google Sheet sync
+
+Liftline can mirror completed entries into the existing `Workout Log` layout. D1 remains the source of truth: a failed Google request never discards a workout saved in Liftline. Each normal save updates its matching Week/Day/Exercise row, and the Progress screen includes a **Sync Google Sheet** button for backfilling all completed entries.
+
+The linked workbook is currently an Excel `.xlsm` file in Google Drive. Google requires an Office file to be converted before Apps Script can be attached. Use **File → Save as Google Sheets**; Google creates a separate native copy and leaves the `.xlsm` original unchanged.
+
+1. Open the native Google Sheet copy and choose **Extensions → Apps Script**.
+2. Paste `integrations/google-apps-script/Code.gs` into the script editor.
+3. Replace `replace-with-a-long-random-token` with a long random token.
+4. Choose **Deploy → New deployment → Web app**, run it as yourself, and allow anyone to invoke it. The token is still required for every write.
+5. Configure the private Liftline Site with these production secrets and deploy again:
+
+   - `GOOGLE_SHEETS_WEBHOOK_URL`: the Apps Script `/exec` URL
+   - `GOOGLE_SHEETS_SYNC_TOKEN`: the same random token
+
+The Apps Script only writes Date, set weights/reps, RIR, Notes, and Logged status. It identifies rows by Week, Day, and Exercise number, preserving the workbook's existing formulas and formatting.
