@@ -4,14 +4,16 @@ import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle, BarChart3, BookOpen, CalendarDays, Check,
   CheckCircle2, ChevronLeft, ChevronRight, Clock3, Dumbbell,
-  CirclePlay, FileSpreadsheet, Home, Loader2, Minus, NotebookPen, Plus, RotateCcw, Sparkles,
-  Target, TrendingUp,
+  CirclePlay, Download, FileSpreadsheet, Home, Loader2, Minus, NotebookPen, Plus, RotateCcw,
+  ShieldCheck, Sparkles, Target, TrendingUp,
 } from 'lucide-react';
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { days, routine, targetLabel, workingSetsForWeek, type RoutineExercise, type TrainingDay } from '@/lib/routine';
@@ -48,6 +50,21 @@ type SheetSyncResult = {
   ok: boolean;
   configured: boolean;
   synced: number;
+  message?: string;
+};
+
+type SheetImportItem = {
+  key: string;
+  status: 'new' | 'unchanged' | 'protected';
+  source: WorkoutEntry;
+  liftlineUpdatedAt: string | null;
+  sheetCompletedAt: string | null;
+};
+
+type SheetImportPreview = {
+  ok: boolean;
+  items: SheetImportItem[];
+  summary: { new: number; unchanged: number; protected: number };
   message?: string;
 };
 
@@ -109,6 +126,16 @@ function exerciseVideoUrl(exercise: RoutineExercise) {
   return `https://www.youtube.com/results?search_query=${encodeURIComponent(`${primaryExercise} short exercise demonstration`)}`;
 }
 
+function sheetEntrySummary(entry: WorkoutEntry) {
+  const unit = entry.exercise === 'Plank' ? 'sec' : 'reps';
+  return ([1, 2, 3] as const).flatMap((set) => {
+    const weight = entry[`set${set}Weight`];
+    const reps = entry[`set${set}Reps`];
+    if (reps == null) return [];
+    return [weight == null ? `${reps} ${unit}` : `${weight} kg × ${reps}`];
+  }).join(' · ');
+}
+
 function NavButton({ view, active, icon: Icon, label, onChange, compact = false }: {
   view: View; active: boolean; icon: typeof Home; label: string; onChange: (view: View) => void; compact?: boolean;
 }) {
@@ -138,6 +165,12 @@ export function WorkoutApp() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [syncingSheet, setSyncingSheet] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [loadingImport, setLoadingImport] = useState(false);
+  const [importingSheet, setImportingSheet] = useState(false);
+  const [importPreview, setImportPreview] = useState<SheetImportPreview | null>(null);
+  const [selectedImportKeys, setSelectedImportKeys] = useState<string[]>([]);
+  const [sheetImportError, setSheetImportError] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [showNotes, setShowNotes] = useState(false);
@@ -249,6 +282,47 @@ export function WorkoutApp() {
     } finally {
       setSyncingSheet(false);
     }
+  }
+
+  async function previewGoogleSheetImport() {
+    setImportOpen(true); setLoadingImport(true); setImportPreview(null); setSelectedImportKeys([]); setSheetImportError(''); setError(''); setNotice('');
+    try {
+      const response = await fetch('/api/workouts/import-sheet');
+      const result = await response.json() as SheetImportPreview;
+      if (!response.ok || !result.ok) throw new Error(result.message ?? 'Unable to preview the Google Sheet.');
+      setImportPreview(result);
+      setSelectedImportKeys(result.items.filter((item) => item.status === 'new').map((item) => item.key));
+    } catch (previewError) {
+      setSheetImportError(previewError instanceof Error ? previewError.message : 'Unable to preview the Google Sheet.');
+    } finally { setLoadingImport(false); }
+  }
+
+  function toggleImportItem(key: string, checked: boolean) {
+    setSelectedImportKeys((current) => checked ? [...new Set([...current, key])] : current.filter((currentKey) => currentKey !== key));
+  }
+
+  async function importSelectedSheetEntries() {
+    if (selectedImportKeys.length === 0) return;
+    setImportingSheet(true); setSheetImportError('');
+    try {
+      const protectedKeys = new Set(importPreview?.items.filter((item) => item.status === 'protected').map((item) => item.key) ?? []);
+      const response = await fetch('/api/workouts/import-sheet', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keys: selectedImportKeys, overwriteKeys: selectedImportKeys.filter((key) => protectedKeys.has(key)) }),
+      });
+      const result = await response.json() as { ok?: boolean; imported?: number; protected?: number; message?: string };
+      if (!response.ok || !result.ok) throw new Error(result.message ?? 'Unable to import the Google Sheet.');
+
+      const entriesResponse = await fetch('/api/workouts');
+      const entriesResult = await entriesResponse.json() as { entries?: WorkoutEntry[]; error?: string };
+      if (!entriesResponse.ok) throw new Error(entriesResult.error ?? 'The import finished, but Liftline could not refresh.');
+      setEntries((entriesResult.entries ?? []).map((entry) => ({ ...entry, completed: Boolean(entry.completed) })));
+      setImportOpen(false);
+      const imported = result.imported ?? 0;
+      setNotice(imported > 0 ? `${imported} workout ${imported === 1 ? 'entry' : 'entries'} imported from Google Sheet` : 'No Liftline records needed updating.');
+    } catch (importError) {
+      setSheetImportError(importError instanceof Error ? importError.message : 'Unable to import the Google Sheet.');
+    } finally { setImportingSheet(false); }
   }
 
   return (
@@ -434,9 +508,14 @@ export function WorkoutApp() {
           <section>
             <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
               <div><p className="font-sans text-sm font-semibold text-primary">TRAINING SUMMARY</p><h1 className="font-sans text-3xl font-bold tracking-tight">Progress across 12 weeks.</h1><p className="mt-1 font-sans text-muted-foreground">The same core KPIs and weekly totals as your spreadsheet, updated automatically.</p></div>
-              <Button variant="outline" className="font-sans" disabled={syncingSheet || loading} onClick={syncGoogleSheet}>
-                {syncingSheet ? <Loader2 className="animate-spin" /> : <FileSpreadsheet />} {syncingSheet ? 'Syncing…' : 'Sync Google Sheet'}
-              </Button>
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                <Button variant="outline" className="font-sans" disabled={loadingImport || importingSheet || loading} onClick={previewGoogleSheetImport}>
+                  {loadingImport ? <Loader2 className="animate-spin" /> : <Download />} {loadingImport ? 'Checking…' : 'Import from Google Sheet'}
+                </Button>
+                <Button variant="outline" className="font-sans" disabled={syncingSheet || loading} onClick={syncGoogleSheet}>
+                  {syncingSheet ? <Loader2 className="animate-spin" /> : <FileSpreadsheet />} {syncingSheet ? 'Sending…' : 'Send to Google Sheet'}
+                </Button>
+              </div>
             </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {[
@@ -501,6 +580,57 @@ export function WorkoutApp() {
           </section>
         )}
       </div>
+
+      <Dialog open={importOpen} onOpenChange={(open) => { if (!importingSheet) setImportOpen(open); }}>
+        <DialogContent className="max-h-[88vh] overflow-hidden p-0 sm:max-w-2xl">
+          <DialogHeader className="px-5 pt-5">
+            <DialogTitle className="font-sans text-lg font-semibold">Preview Google Sheet import</DialogTitle>
+            <DialogDescription className="font-sans">Nothing changes until you confirm. New entries are selected; existing Liftline records remain protected unless you select them.</DialogDescription>
+          </DialogHeader>
+
+          <div className="min-h-0 overflow-y-auto px-5 pb-2">
+            {loadingImport && <div className="grid min-h-52 place-items-center text-muted-foreground"><div className="flex items-center gap-2 font-sans"><Loader2 className="size-5 animate-spin" /> Reading Workout Log…</div></div>}
+            {sheetImportError && <Alert variant="destructive" className="my-3"><AlertCircle /><AlertTitle>Import preview unavailable</AlertTitle><AlertDescription>{sheetImportError}</AlertDescription></Alert>}
+
+            {importPreview && !loadingImport && (
+              <div className="space-y-4 py-2">
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="rounded-xl bg-success-soft p-3"><p className="font-sans text-xl font-bold text-success">{importPreview.summary.new}</p><p className="font-sans text-xs text-success/80">New</p></div>
+                  <div className="rounded-xl bg-secondary p-3"><p className="font-sans text-xl font-bold">{importPreview.summary.unchanged}</p><p className="font-sans text-xs text-muted-foreground">Already matches</p></div>
+                  <div className="rounded-xl bg-warning-soft p-3"><p className="font-sans text-xl font-bold text-warning-foreground">{importPreview.summary.protected}</p><p className="font-sans text-xs text-warning-foreground/80">Protected</p></div>
+                </div>
+
+                {importPreview.items.some((item) => item.status !== 'unchanged') ? (
+                  <div className="space-y-2">
+                    {importPreview.items.filter((item) => item.status !== 'unchanged').map((item) => {
+                      const selected = selectedImportKeys.includes(item.key);
+                      return (
+                        <label key={item.key} className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors ${selected ? 'border-primary/35 bg-accent/35' : 'border-border/80 bg-card'}`}>
+                          <Checkbox checked={selected} onCheckedChange={(checked) => toggleImportItem(item.key, checked === true)} aria-label={`Import ${item.source.exercise}`} className="mt-0.5" />
+                          <span className="min-w-0 flex-1">
+                            <span className="flex flex-wrap items-center gap-2"><span className="font-sans text-sm font-semibold">Week {item.source.week} · Day {item.source.day} · {item.source.exercise}</span><Badge className={`font-sans text-[10px] ${item.status === 'new' ? 'bg-success-soft text-success' : 'bg-warning-soft text-warning-foreground'}`}>{item.status === 'new' ? 'New' : 'Existing record'}</Badge></span>
+                            <span className="mt-1 block font-sans text-xs text-muted-foreground">{sheetEntrySummary(item.source) || 'No set values'}{item.source.rir == null ? '' : ` · RIR ${item.source.rir}`}</span>
+                            {item.status === 'protected' && <span className="mt-1.5 flex items-center gap-1 font-sans text-xs font-medium text-warning-foreground"><ShieldCheck className="size-3.5" /> Selecting this will replace the Liftline values.</span>}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                ) : <div className="flex items-center gap-3 rounded-xl border border-success/25 bg-success-soft p-4 text-success"><CheckCircle2 className="size-5" /><p className="font-sans text-sm font-medium">Liftline already matches every completed Google Sheet row.</p></div>}
+
+                {selectedImportKeys.some((key) => importPreview.items.some((item) => item.key === key && item.status === 'protected')) && <Alert className="border-warning/25 bg-warning-soft text-warning-foreground"><ShieldCheck /><AlertTitle>Replacement selected</AlertTitle><AlertDescription className="text-warning-foreground/80">One or more existing Liftline records will be replaced with the Google Sheet values when you confirm.</AlertDescription></Alert>}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="m-0 px-5 py-4">
+            <Button variant="outline" onClick={() => setImportOpen(false)} disabled={importingSheet}>Cancel</Button>
+            <Button onClick={importSelectedSheetEntries} disabled={!importPreview || selectedImportKeys.length === 0 || importingSheet}>
+              {importingSheet ? <Loader2 className="animate-spin" /> : <Download />}{importingSheet ? 'Importing…' : `Import selected${selectedImportKeys.length > 0 ? ` (${selectedImportKeys.length})` : ''}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <nav aria-label="Primary navigation" className="fixed inset-x-0 bottom-0 z-30 border-t bg-card/95 px-2 pb-[max(.5rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-8px_30px_rgb(15_23_42/7%)] backdrop-blur md:hidden">
         <div className="mx-auto grid max-w-sm grid-cols-3">

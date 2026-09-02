@@ -19,7 +19,7 @@ The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgp
 - Weekly session progress, workout history, and progress charts
 - Routine guide with targets, rest periods, muscle groups, and alternatives
 - Persistent workout data backed by Cloudflare D1
-- Optional automatic mirroring to the original Google Sheet layout
+- Review-first import from and automatic mirroring to the original Google Sheet layout
 - Responsive Material-inspired interface using Geist typography
 
 ## Technology
@@ -59,6 +59,7 @@ npm run db:generate  # Generate a Drizzle migration after schema changes
 app/
   api/workouts/route.ts  Workout history API and D1 initialization
   api/workouts/sync-sheet/route.ts  Full Google Sheet backfill endpoint
+  api/workouts/import-sheet/route.ts  Protected Google Sheet import preview and apply endpoint
   workout-app.tsx        Main responsive application interface
 db/schema.ts             Drizzle schema
 drizzle/                 Generated SQLite migrations
@@ -74,7 +75,9 @@ The initial Week 1 example entries mirror the source spreadsheet so the progress
 
 ## Google Sheet sync
 
-Liftline can mirror completed entries into the existing `Workout Log` layout. D1 remains the source of truth: a failed Google request never discards a workout saved in Liftline. Each normal save updates its matching Week/Day/Exercise row, and the Progress screen includes a **Sync Google Sheet** button for backfilling all completed entries.
+Liftline can exchange completed entries with the existing `Workout Log` layout. Each normal save updates its matching Week/Day/Exercise row, and the Progress screen includes a **Send to Google Sheet** button for backfilling all completed Liftline entries.
+
+The separate **Import from Google Sheet** action always shows a preview first. New rows are selected automatically. When the same Week/Day/Exercise already exists in Liftline with different values, it is protected and stays unselected unless the owner explicitly chooses to replace it. The server reads the Sheet again when the import is confirmed, so a record created in Liftline after the preview is also protected.
 
 The linked workbook is currently an Excel `.xlsm` file in Google Drive. Google requires an Office file to be converted before Apps Script can be attached. Use **File → Save as Google Sheets**; Google creates a separate native copy and leaves the `.xlsm` original unchanged.
 
@@ -87,4 +90,4 @@ The linked workbook is currently an Excel `.xlsm` file in Google Drive. Google r
    - `GOOGLE_SHEETS_WEBHOOK_URL`: the Apps Script `/exec` URL
    - `GOOGLE_SHEETS_SYNC_TOKEN`: the same random token
 
-The Apps Script only writes Date, set weights/reps, RIR, Notes, and Logged status. It identifies rows by Week, Day, and Exercise number, preserving the workbook's existing formulas and formatting.
+The Apps Script reads completed rows and only writes Date, set weights/reps, RIR, Notes, and Logged status. It identifies rows by Week, Day, and Exercise number, preserving the workbook's existing formulas and formatting.

@@ -16,6 +16,8 @@ function doPost(event) {
       return jsonResponse({ ok: false, error: 'Unauthorized.' });
     }
 
+    if (payload.action === 'read') return readWorkoutEntries();
+
     const entries = Array.isArray(payload.entries) ? payload.entries : [];
     if (entries.length === 0) return jsonResponse({ ok: true, synced: 0 });
 
@@ -61,12 +63,51 @@ function doPost(event) {
   }
 }
 
+function readWorkoutEntries() {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = spreadsheet.getSheetByName(WORKOUT_SHEET_NAME);
+  if (!sheet) throw new Error('Workout Log sheet not found.');
+
+  const firstDataRow = HEADER_ROW + 1;
+  const rowCount = Math.max(0, sheet.getLastRow() - HEADER_ROW);
+  if (rowCount === 0) return jsonResponse({ ok: true, entries: [] });
+
+  const rows = sheet.getRange(firstDataRow, 1, rowCount, COLUMN_COUNT).getValues();
+  const entries = rows.filter(function (row) {
+    const logged = String(row[17] || '').trim().toLowerCase();
+    return logged === 'yes' || logged === 'true' || row[17] === true;
+  }).map(function (row) {
+    return {
+      week: numberValue(row[0]), day: String(row[1] || '').trim().toUpperCase(),
+      exerciseOrder: numberValue(row[16]), exercise: String(row[3] || ''), target: String(row[4] || ''),
+      set1Weight: numberValue(row[5]), set1Reps: numberValue(row[6]),
+      set2Weight: numberValue(row[7]), set2Reps: numberValue(row[8]),
+      set3Weight: numberValue(row[9]), set3Reps: numberValue(row[10]),
+      rir: numberValue(row[11]), notes: String(row[14] || ''), completed: true,
+      completedAt: dateValue(row[2]),
+    };
+  });
+
+  return jsonResponse({ ok: true, entries: entries });
+}
+
 function entryKey(week, day, exerciseOrder) {
   return Number(week) + '|' + String(day || '').trim().toUpperCase() + '|' + Number(exerciseOrder);
 }
 
 function cellValue(value) {
   return value === null || value === undefined || value === '' ? '' : Number(value);
+}
+
+function numberValue(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const number = Number(value);
+  return isNaN(number) ? null : number;
+}
+
+function dateValue(value) {
+  if (Object.prototype.toString.call(value) !== '[object Date]' || isNaN(value.getTime())) return null;
+  return value.toISOString();
 }
 
 function secureTokenMatches(candidate, expected) {

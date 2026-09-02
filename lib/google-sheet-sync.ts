@@ -26,6 +26,13 @@ export type SheetSyncResult = {
   message?: string;
 };
 
+export type SheetReadResult = {
+  ok: boolean;
+  configured: boolean;
+  entries: WorkoutSheetEntry[];
+  message?: string;
+};
+
 function getSyncConfig() {
   const webhookUrl = env.GOOGLE_SHEETS_WEBHOOK_URL?.trim();
   const token = env.GOOGLE_SHEETS_SYNC_TOKEN?.trim();
@@ -59,7 +66,7 @@ export async function syncWorkoutEntries(entries: WorkoutSheetEntry[]): Promise<
     const response = await fetch(config.webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-      body: JSON.stringify({ token: config.token, entries }),
+      body: JSON.stringify({ token: config.token, action: 'write', entries }),
       redirect: 'follow',
       signal: AbortSignal.timeout(10_000),
     });
@@ -92,5 +99,40 @@ export async function syncWorkoutEntries(entries: WorkoutSheetEntry[]): Promise<
       synced: 0,
       message: 'Liftline is saved, but the Google Sheet could not be reached.',
     };
+  }
+}
+
+export async function readWorkoutEntriesFromSheet(): Promise<SheetReadResult> {
+  const config = getSyncConfig();
+  if (!config) {
+    return { ok: false, configured: false, entries: [], message: 'Google Sheet sync is not connected yet.' };
+  }
+
+  try {
+    const response = await fetch(config.webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+      body: JSON.stringify({ token: config.token, action: 'read' }),
+      redirect: 'follow',
+      signal: AbortSignal.timeout(10_000),
+    });
+    const responseText = await response.text();
+    let result: { ok?: boolean; entries?: WorkoutSheetEntry[]; error?: string } = {};
+    try {
+      result = JSON.parse(responseText) as typeof result;
+    } catch {
+      // A non-JSON response is handled by the failure branch below.
+    }
+
+    if (!response.ok || !result.ok || !Array.isArray(result.entries)) {
+      return {
+        ok: false, configured: true, entries: [],
+        message: result.error ?? 'The Google Sheet import connector needs to be updated.',
+      };
+    }
+
+    return { ok: true, configured: true, entries: result.entries };
+  } catch {
+    return { ok: false, configured: true, entries: [], message: 'The Google Sheet could not be reached.' };
   }
 }
