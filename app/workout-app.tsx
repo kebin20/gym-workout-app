@@ -324,13 +324,7 @@ export function WorkoutApp() {
 
   useEffect(() => {
     const current = entries.find((entry) => entry.week === activeWeek && entry.day === activeDay && entry.exerciseOrder === exercise.order);
-    const previous = [...entries]
-      .filter((entry) => entry.week < activeWeek && entry.day === activeDay && entry.exerciseOrder === exercise.order)
-      .sort((a, b) => b.week - a.week)[0];
-    setDraft(draftFromEntry(current ?? previous));
-    if (!current && previous) {
-      setDraft((value) => ({ ...value, sets: value.sets.map((set) => ({ ...set, done: false })), rir: '', notes: '' }));
-    }
+    setDraft(draftFromEntry(current));
     setShowNotes(Boolean(current?.notes));
     setNotice('');
   }, [activeDay, activeWeek, entries, exercise.order]);

@@ -23,6 +23,7 @@ The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgp
 - Persistent workout data backed by Cloudflare D1
 - Review-first import from and automatic mirroring to the original Google Sheet layout
 - Previous-session recall beside each exercise, including the logged date, weights, reps, and RIR
+- Fresh weight and rep inputs for each new week, without copying the previous workout into the new record
 - Fast installed-app startup with a cached interface and immediate device-local display of the latest synced workouts
 - Responsive Material-inspired interface using Geist typography
 
