@@ -68,11 +68,36 @@ type SheetImportPreview = {
   message?: string;
 };
 
+const workoutCacheKey = 'liftline.workout-entries.v1';
+
 const emptyDraft: Draft = {
   sets: Array.from({ length: 3 }, () => ({ weight: '', reps: '', done: false })),
   rir: '',
   notes: '',
 };
+
+function normaliseWorkoutEntries(entries: WorkoutEntry[]) {
+  return entries.map((entry) => ({ ...entry, completed: Boolean(entry.completed) }));
+}
+
+function readCachedWorkoutEntries(): WorkoutEntry[] | null {
+  try {
+    const cached = window.localStorage.getItem(workoutCacheKey);
+    if (!cached) return null;
+    const parsed = JSON.parse(cached) as { entries?: WorkoutEntry[] };
+    return Array.isArray(parsed.entries) ? normaliseWorkoutEntries(parsed.entries) : null;
+  } catch {
+    return null;
+  }
+}
+
+function cacheWorkoutEntries(entries: WorkoutEntry[]) {
+  try {
+    window.localStorage.setItem(workoutCacheKey, JSON.stringify({ entries, cachedAt: Date.now() }));
+  } catch {
+    // Device storage can be unavailable in private browsing. The server remains authoritative.
+  }
+}
 
 const ProgressChart = lazy(() => import('./progress-chart'));
 
@@ -201,18 +226,61 @@ export function WorkoutApp() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/workouts')
+    const cachedEntries = readCachedWorkoutEntries();
+    if (cachedEntries) {
+      queueMicrotask(() => {
+        if (!cancelled) setEntries(cachedEntries);
+      });
+    }
+
+    fetch('/api/workouts', { cache: 'no-store' })
       .then(async (response) => {
         const data = await response.json() as { entries?: WorkoutEntry[]; error?: string };
         if (!response.ok) throw new Error(data.error ?? 'Unable to load workouts.');
         if (!cancelled) {
-          setEntries((data.entries ?? []).map((entry) => ({ ...entry, completed: Boolean(entry.completed) })));
+          const freshEntries = normaliseWorkoutEntries(data.entries ?? []);
+          setEntries(freshEntries);
+          cacheWorkoutEntries(freshEntries);
           setError('');
         }
       })
-      .catch((loadError: Error) => { if (!cancelled) setError(loadError.message); })
+      .catch((loadError: Error) => {
+        if (!cancelled && !cachedEntries) setError(loadError.message);
+      })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'production' || !('serviceWorker' in navigator)) return;
+
+    const register = () => {
+      navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' })
+        .then(() => navigator.serviceWorker.ready)
+        .then((registration) => {
+          const worker = registration.active;
+          if (!worker) return;
+          const assets = performance.getEntriesByType('resource')
+            .map((entry) => entry.name)
+            .filter((url) => {
+              try {
+                const resource = new URL(url);
+                return resource.origin === window.location.origin && resource.pathname.startsWith('/_next/static/');
+              } catch {
+                return false;
+              }
+            });
+          worker.postMessage({ type: 'WARM_ASSETS', assets });
+        })
+        .catch(() => {
+          // Liftline still works normally when service workers are unavailable.
+        });
+    };
+
+    if (document.readyState === 'complete') register();
+    else window.addEventListener('load', register, { once: true });
+
+    return () => window.removeEventListener('load', register);
   }, []);
 
   useEffect(() => {
@@ -281,7 +349,11 @@ export function WorkoutApp() {
       const data = await response.json() as { entry?: WorkoutEntry; sheetSync?: SheetSyncResult; error?: string };
       if (!response.ok || !data.entry) throw new Error(data.error ?? 'Unable to save exercise.');
       const saved = { ...data.entry, completed: Boolean(data.entry.completed) };
-      setEntries((current) => [...current.filter((entry) => !(entry.week === saved.week && entry.day === saved.day && entry.exerciseOrder === saved.exerciseOrder)), saved]);
+      setEntries((current) => {
+        const nextEntries = [...current.filter((entry) => !(entry.week === saved.week && entry.day === saved.day && entry.exerciseOrder === saved.exerciseOrder)), saved];
+        cacheWorkoutEntries(nextEntries);
+        return nextEntries;
+      });
       setNotice(data.sheetSync?.ok ? `${exercise.name} saved and synced to Google Sheet` : `${exercise.name} saved`);
       if (activeIndex < dayExercises.length - 1) setActiveIndex((index) => index + 1);
     } catch (saveError) {
@@ -335,7 +407,9 @@ export function WorkoutApp() {
       const entriesResponse = await fetch('/api/workouts');
       const entriesResult = await entriesResponse.json() as { entries?: WorkoutEntry[]; error?: string };
       if (!entriesResponse.ok) throw new Error(entriesResult.error ?? 'The import finished, but Liftline could not refresh.');
-      setEntries((entriesResult.entries ?? []).map((entry) => ({ ...entry, completed: Boolean(entry.completed) })));
+      const freshEntries = normaliseWorkoutEntries(entriesResult.entries ?? []);
+      setEntries(freshEntries);
+      cacheWorkoutEntries(freshEntries);
       setImportOpen(false);
       const imported = result.imported ?? 0;
       setNotice(imported > 0 ? `${imported} workout ${imported === 1 ? 'entry' : 'entries'} imported from Google Sheet` : 'No Liftline records needed updating.');

@@ -21,6 +21,7 @@ The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgp
 - Persistent workout data backed by Cloudflare D1
 - Review-first import from and automatic mirroring to the original Google Sheet layout
 - Previous-session recall beside each exercise, including the logged date, weights, reps, and RIR
+- Fast installed-app startup with a cached interface and immediate device-local display of the latest synced workouts
 - Responsive Material-inspired interface using Geist typography
 
 ## Technology
@@ -41,7 +42,7 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The local development environment uses the configured `DB` D1 binding and initializes the `workout_entries` table automatically on first use.
+Open [http://localhost:3000](http://localhost:3000). The local development environment uses the configured `DB` D1 binding and applies the generated migrations.
 
 ## Useful commands
 
@@ -58,7 +59,7 @@ npm run db:generate  # Generate a Drizzle migration after schema changes
 
 ```text
 app/
-  api/workouts/route.ts  Workout history API and D1 initialization
+  api/workouts/route.ts  Workout history API
   api/workouts/sync-sheet/route.ts  Full Google Sheet backfill endpoint
   api/workouts/import-sheet/route.ts  Protected Google Sheet import preview and apply endpoint
   workout-app.tsx        Main responsive application interface
