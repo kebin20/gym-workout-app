@@ -107,6 +107,20 @@ const weekDates = [
   'Oct 7–13', 'Oct 14–20', 'Oct 21–27', 'Oct 28–Nov 3', 'Nov 4–10', 'Nov 11–17',
 ];
 
+const trainingTips = [
+  { title: 'Ramp in gradually', body: 'Weeks 1–2 use two working sets for most exercises at RIR ~3. Weeks 3–4 build toward the full routine.' },
+  { title: 'Make every rep repeatable', body: 'Use the same setup and range of motion on each rep. Consistency makes your progress easier to judge.' },
+  { title: 'Rest with purpose', body: 'Take 2–3 minutes after demanding compound lifts. Shorter rests are usually enough for smaller isolation exercises.' },
+  { title: 'Technique comes first', body: 'If your form changes noticeably, reduce the load or end the set. Clean repetitions are more valuable than forced ones.' },
+  { title: 'Control the lowering phase', body: 'Lower the weight under control instead of letting it drop. Stay smooth, then drive through the working muscles.' },
+  { title: 'Progress in small steps', body: 'Once you reach the top of the rep range with clean form and 1–2 RIR, add the smallest practical amount of weight.' },
+  { title: 'Warm up specifically', body: 'Before your first major lift, perform a few lighter sets that gradually approach your working weight without causing fatigue.' },
+  { title: 'Brace before you move', body: 'Take a breath and gently tighten your trunk before each demanding rep to create a stable base for the lift.' },
+  { title: 'Recovery drives progress', body: 'Training provides the stimulus; sleep, food, hydration, and easier days give your body the chance to adapt.' },
+  { title: 'Track more than load', body: 'Reps, RIR, range of motion, and technique all show progress—even when the weight on the machine stays the same.' },
+  { title: 'Use pain as a stop signal', body: 'Muscle effort is expected, but sharp or unusual joint pain is not. Stop the movement and reassess your setup.' },
+] as const;
+
 function numberOrNull(value: string) {
   if (value.trim() === '') return null;
   const parsed = Number(value);
@@ -216,6 +230,7 @@ export function WorkoutApp() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [showNotes, setShowNotes] = useState(false);
+  const [activeTipIndex, setActiveTipIndex] = useState(0);
 
   const dayExercises = useMemo(() => routine.filter((exercise) => exercise.day === activeDay), [activeDay]);
   const exercise = dayExercises[activeIndex] ?? dayExercises[0];
@@ -282,6 +297,29 @@ export function WorkoutApp() {
     else window.addEventListener('load', register, { once: true });
 
     return () => window.removeEventListener('load', register);
+  }, []);
+
+  useEffect(() => {
+    let tipTimer: number | undefined;
+    let cancelled = false;
+
+    const scheduleNextTip = () => {
+      const delay = 24_000 + Math.random() * 18_000;
+      tipTimer = window.setTimeout(() => {
+        if (cancelled) return;
+        setActiveTipIndex((current) => {
+          const offset = 1 + Math.floor(Math.random() * (trainingTips.length - 1));
+          return (current + offset) % trainingTips.length;
+        });
+        scheduleNextTip();
+      }, delay);
+    };
+
+    scheduleNextTip();
+    return () => {
+      cancelled = true;
+      if (tipTimer != null) window.clearTimeout(tipTimer);
+    };
   }, []);
 
   useEffect(() => {
@@ -597,7 +635,12 @@ export function WorkoutApp() {
                   })}
                 </CardContent>
               </Card>
-              <Card className="bg-warning-soft ring-warning/20"><CardHeader><CardTitle className="flex items-center gap-2 font-sans text-warning-foreground"><Target className="size-4" /> Ramp-in tip</CardTitle><CardDescription className="font-sans text-warning-foreground/80">Weeks 1–2 use two working sets for most exercises at RIR ~3. Weeks 3–4 build toward the full routine.</CardDescription></CardHeader></Card>
+              <Card className="min-h-32 bg-warning-soft ring-warning/20" aria-live="polite" aria-atomic="true">
+                <CardHeader key={trainingTips[activeTipIndex].title}>
+                  <CardTitle className="flex items-center gap-2 font-sans text-warning-foreground"><Target className="size-4" /> {trainingTips[activeTipIndex].title}</CardTitle>
+                  <CardDescription className="font-sans leading-relaxed text-warning-foreground/80">{trainingTips[activeTipIndex].body}</CardDescription>
+                </CardHeader>
+              </Card>
             </aside>
           </div>
         )}
