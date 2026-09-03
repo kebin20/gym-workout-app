@@ -12,6 +12,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -663,6 +664,96 @@ export function WorkoutApp() {
                 </CardContent>
               </Card>
             </div>
+            <Card className="mt-5 overflow-hidden">
+              <CardHeader className="border-b border-border/70">
+                <div>
+                  <CardTitle className="flex items-center gap-2 font-sans"><History className="size-5 text-primary" /> Exercise history</CardTitle>
+                  <CardDescription className="mt-1 font-sans">Swipe between Day A, B, and C to review every completed exercise, set, and note.</CardDescription>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-5">
+                <Carousel opts={{ align: 'start', loop: false }} aria-label="Workout history by training day">
+                  <CarouselContent>
+                    {days.map((day) => {
+                      const dayEntries = entries.filter((entry) => entry.completed && entry.day === day);
+                      const sessionCount = new Set(dayEntries.map((entry) => entry.week)).size;
+                      const dayVolume = dayEntries.reduce((sum, entry) => sum + entryVolume(entry), 0);
+                      const dayExercises = routine.filter((item) => item.day === day);
+                      const dayColor = day === 'A' ? 'bg-blue-100 text-blue-700' : day === 'B' ? 'bg-emerald-100 text-emerald-700' : 'bg-violet-100 text-violet-700';
+
+                      return (
+                        <CarouselItem key={day}>
+                          <div className="rounded-2xl border border-border/80 bg-muted/20 p-3 sm:p-5">
+                            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 pb-4">
+                              <div className="flex items-center gap-3">
+                                <span className={`grid size-11 place-items-center rounded-xl font-sans text-sm font-bold ${dayColor}`}>Day {day}</span>
+                                <div>
+                                  <p className="font-sans font-semibold">{dayExercises.length} exercises</p>
+                                  <p className="font-sans text-xs text-muted-foreground">Full workout history</p>
+                                </div>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                <Badge variant="outline" className="bg-card font-sans">{sessionCount} {sessionCount === 1 ? 'session' : 'sessions'}</Badge>
+                                <Badge variant="outline" className="bg-card font-sans">{Math.round(dayVolume).toLocaleString()} kg volume</Badge>
+                              </div>
+                            </div>
+
+                            <div className="mt-4 max-h-[560px] space-y-3 overflow-y-auto pr-1">
+                              {dayExercises.map((item) => {
+                                const exerciseEntries = dayEntries
+                                  .filter((entry) => entry.exerciseOrder === item.order)
+                                  .sort((a, b) => b.week - a.week || Date.parse(b.completedAt ?? b.updatedAt ?? '') - Date.parse(a.completedAt ?? a.updatedAt ?? ''));
+
+                                return (
+                                  <article key={`${day}-${item.order}`} className="rounded-xl border border-border/70 bg-card p-3 sm:p-4">
+                                    <div className="flex items-start gap-3">
+                                      <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-secondary font-sans text-xs font-bold">{item.order}</span>
+                                      <div className="min-w-0 flex-1">
+                                        <h3 className="font-sans text-sm font-semibold sm:text-base">{item.name}</h3>
+                                        <p className="mt-0.5 font-sans text-xs text-muted-foreground">{targetLabel(item)} · {item.muscles}</p>
+                                      </div>
+                                    </div>
+
+                                    {exerciseEntries.length > 0 ? (
+                                      <div className="mt-3 space-y-2 pl-0 sm:pl-11">
+                                        {exerciseEntries.map((entry) => (
+                                          <div key={`${entry.week}-${entry.exerciseOrder}`} className="rounded-xl bg-muted/55 px-3 py-2.5">
+                                            <div className="flex flex-wrap items-center justify-between gap-1 font-sans text-xs">
+                                              <span className="font-semibold text-foreground">Week {entry.week}</span>
+                                              <span className="text-muted-foreground">{formatWorkoutDate(entry.completedAt ?? entry.updatedAt)}</span>
+                                            </div>
+                                            <div className="mt-2 flex flex-wrap gap-1.5">
+                                              {loggedSets(entry).map((set) => (
+                                                <span key={set.set} className="rounded-lg border border-border/80 bg-card px-2 py-1 font-sans text-xs font-medium">
+                                                  Set {set.set}: {set.weight == null ? `${set.reps} ${item.name === 'Plank' ? 'sec' : 'reps'}` : `${set.weight} kg × ${set.reps}`}
+                                                </span>
+                                              ))}
+                                              {entry.rir != null && <span className="rounded-lg border border-primary/20 bg-accent px-2 py-1 font-sans text-xs font-medium text-primary">RIR {entry.rir}</span>}
+                                            </div>
+                                            {entry.notes && <p className="mt-2 flex gap-1.5 font-sans text-xs leading-relaxed text-muted-foreground"><NotebookPen className="mt-0.5 size-3.5 shrink-0" />{entry.notes}</p>}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : <p className="mt-3 rounded-lg bg-muted/45 px-3 py-2 font-sans text-xs text-muted-foreground sm:ml-11">No logged sessions yet.</p>}
+                                  </article>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </CarouselItem>
+                      );
+                    })}
+                  </CarouselContent>
+                  <div className="mt-4 flex items-center justify-between gap-3">
+                    <p className="font-sans text-xs text-muted-foreground">Swipe horizontally or use the arrows to change day.</p>
+                    <div className="flex shrink-0 gap-2">
+                      <CarouselPrevious className="static inset-auto m-0 translate-x-0 translate-y-0" />
+                      <CarouselNext className="static inset-auto m-0 translate-x-0 translate-y-0" />
+                    </div>
+                  </div>
+                </Carousel>
+              </CardContent>
+            </Card>
           </section>
         )}
 
