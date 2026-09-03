@@ -17,7 +17,7 @@ The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgp
 - Per-set completion tracking and exercise notes
 - Automatic volume totals and next-session progression guidance
 - Weekly session progress, workout history, and progress charts
-- Day-by-day exercise history carousel with dates, sets, RIR, and notes
+- Responsive day-by-day exercise history carousel and grid with dates, sets, RIR, and notes
 - Automatically rotating training tips covering form, progression, rest, and recovery
 - Routine guide with targets, rest periods, muscle groups, and alternatives
 - Persistent workout data backed by Cloudflare D1

@@ -741,14 +741,14 @@ export function WorkoutApp() {
                               </div>
                             </div>
 
-                            <div className="mt-4 max-h-[560px] space-y-3 overflow-y-auto pr-1">
+                            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
                               {dayExercises.map((item) => {
                                 const exerciseEntries = dayEntries
                                   .filter((entry) => entry.exerciseOrder === item.order)
                                   .sort((a, b) => b.week - a.week || Date.parse(b.completedAt ?? b.updatedAt ?? '') - Date.parse(a.completedAt ?? a.updatedAt ?? ''));
 
                                 return (
-                                  <article key={`${day}-${item.order}`} className="rounded-xl border border-border/70 bg-card p-3 sm:p-4">
+                                  <article key={`${day}-${item.order}`} className="flex min-h-56 flex-col rounded-xl border border-border/70 bg-card p-3 sm:p-4">
                                     <div className="flex items-start gap-3">
                                       <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-secondary font-sans text-xs font-bold">{item.order}</span>
                                       <div className="min-w-0 flex-1">
@@ -758,7 +758,7 @@ export function WorkoutApp() {
                                     </div>
 
                                     {exerciseEntries.length > 0 ? (
-                                      <div className="mt-3 space-y-2 pl-0 sm:pl-11">
+                                      <div className="mt-3 max-h-64 space-y-2 overflow-y-auto pr-1">
                                         {exerciseEntries.map((entry) => (
                                           <div key={`${entry.week}-${entry.exerciseOrder}`} className="rounded-xl bg-muted/55 px-3 py-2.5">
                                             <div className="flex flex-wrap items-center justify-between gap-1 font-sans text-xs">
@@ -777,7 +777,7 @@ export function WorkoutApp() {
                                           </div>
                                         ))}
                                       </div>
-                                    ) : <p className="mt-3 rounded-lg bg-muted/45 px-3 py-2 font-sans text-xs text-muted-foreground sm:ml-11">No logged sessions yet.</p>}
+                                    ) : <p className="mt-3 flex flex-1 items-center justify-center rounded-lg bg-muted/45 px-3 py-5 text-center font-sans text-xs text-muted-foreground">No logged sessions yet.</p>}
                                   </article>
                                 );
                               })}
