@@ -14,6 +14,8 @@ type ImportRequest = {
 const selectColumns = `id, week, day, exercise_order AS exerciseOrder, exercise, target,
   set1_weight AS set1Weight, set1_reps AS set1Reps, set2_weight AS set2Weight,
   set2_reps AS set2Reps, set3_weight AS set3Weight, set3_reps AS set3Reps,
+  set4_weight AS set4Weight, set4_reps AS set4Reps, set5_weight AS set5Weight,
+  set5_reps AS set5Reps, set_count AS setCount,
   rir, notes, completed, completed_at AS completedAt, updated_at AS updatedAt`;
 
 function entryKey(
@@ -51,6 +53,14 @@ function normalizedEntry(entry: WorkoutSheetEntry): WorkoutSheetEntry | null {
     set2Reps: nullableNumber(entry.set2Reps),
     set3Weight: nullableNumber(entry.set3Weight),
     set3Reps: nullableNumber(entry.set3Reps),
+    set4Weight: null,
+    set4Reps: null,
+    set5Weight: null,
+    set5Reps: null,
+    setCount: Math.max(
+      exercise.targetSets,
+      entry.set3Reps != null ? 3 : entry.set2Reps != null ? 2 : 1,
+    ),
     rir: nullableNumber(entry.rir),
     notes: String(entry.notes ?? '').slice(0, 1000),
     completed: Boolean(entry.completed),
@@ -66,6 +76,10 @@ function workoutValuesMatch(left: WorkoutSheetEntry, right: WorkoutSheetEntry) {
     left.set2Reps === right.set2Reps &&
     left.set3Weight === right.set3Weight &&
     left.set3Reps === right.set3Reps &&
+    (left.set4Weight ?? null) === (right.set4Weight ?? null) &&
+    (left.set4Reps ?? null) === (right.set4Reps ?? null) &&
+    (left.set5Weight ?? null) === (right.set5Weight ?? null) &&
+    (left.set5Reps ?? null) === (right.set5Reps ?? null) &&
     left.rir === right.rir &&
     String(left.notes ?? '') === String(right.notes ?? '') &&
     Boolean(left.completed) === Boolean(right.completed)
@@ -195,13 +209,17 @@ export async function POST(request: Request) {
       statements.push(
         env.DB.prepare(`INSERT INTO workout_entries (
         week, day, exercise_order, exercise, target, set1_weight, set1_reps, set2_weight,
-        set2_reps, set3_weight, set3_reps, rir, notes, completed, completed_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+        set2_reps, set3_weight, set3_reps, set4_weight, set4_reps, set5_weight, set5_reps,
+        set_count, rir, notes, completed, completed_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
       ON CONFLICT(week, day, exercise_order) DO UPDATE SET
         exercise = excluded.exercise, target = excluded.target,
         set1_weight = excluded.set1_weight, set1_reps = excluded.set1_reps,
         set2_weight = excluded.set2_weight, set2_reps = excluded.set2_reps,
         set3_weight = excluded.set3_weight, set3_reps = excluded.set3_reps,
+        set4_weight = excluded.set4_weight, set4_reps = excluded.set4_reps,
+        set5_weight = excluded.set5_weight, set5_reps = excluded.set5_reps,
+        set_count = excluded.set_count,
         rir = excluded.rir, notes = excluded.notes, completed = 1,
         completed_at = excluded.completed_at, updated_at = excluded.updated_at`).bind(
           source.week,
@@ -215,6 +233,11 @@ export async function POST(request: Request) {
           source.set2Reps,
           source.set3Weight,
           source.set3Reps,
+          source.set4Weight ?? null,
+          source.set4Reps ?? null,
+          source.set5Weight ?? null,
+          source.set5Reps ?? null,
+          source.setCount ?? null,
           source.rir,
           source.notes ?? '',
           source.completedAt ?? null,

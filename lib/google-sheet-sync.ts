@@ -12,6 +12,11 @@ export type WorkoutSheetEntry = {
   set2Reps: number | null;
   set3Weight: number | null;
   set3Reps: number | null;
+  set4Weight?: number | null;
+  set4Reps?: number | null;
+  set5Weight?: number | null;
+  set5Reps?: number | null;
+  setCount?: number | null;
   rir: number | null;
   notes: string | null;
   completed: number | boolean;

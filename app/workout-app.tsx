@@ -1,11 +1,11 @@
 'use client';
 
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle, BarChart3, BookOpen, CalendarDays, Check,
   CheckCircle2, ChevronLeft, ChevronRight, Clock3, Dumbbell,
-  CirclePlay, Download, FileSpreadsheet, History, Home, Loader2, Minus, NotebookPen, Plus, RotateCcw,
-  ShieldCheck, Sparkles, Target, TrendingUp,
+  CirclePlay, Download, FileSpreadsheet, History, Home, Loader2, Minus, NotebookPen, Pause, Play, Plus, RotateCcw,
+  ShieldCheck, Sparkles, Target, TimerReset, TrendingUp,
 } from 'lucide-react';
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -34,6 +34,11 @@ type WorkoutEntry = {
   set2Reps: number | null;
   set3Weight: number | null;
   set3Reps: number | null;
+  set4Weight?: number | null;
+  set4Reps?: number | null;
+  set5Weight?: number | null;
+  set5Reps?: number | null;
+  setCount?: number | null;
   rir: number | null;
   notes: string;
   completed: boolean;
@@ -70,9 +75,10 @@ type SheetImportPreview = {
 };
 
 const workoutCacheKey = 'liftline.workout-entries.v1';
+const setNumbers = [1, 2, 3, 4, 5] as const;
 
 const emptyDraft: Draft = {
-  sets: Array.from({ length: 3 }, () => ({ weight: '', reps: '', done: false })),
+  sets: Array.from({ length: 5 }, () => ({ weight: '', reps: '', done: false })),
   rir: '',
   notes: '',
 };
@@ -128,7 +134,7 @@ function numberOrNull(value: string) {
 }
 
 function entryVolume(entry: WorkoutEntry) {
-  return ([1, 2, 3] as const).reduce((sum, set) => {
+  return setNumbers.reduce((sum, set) => {
     const weight = entry[`set${set}Weight`];
     const reps = entry[`set${set}Reps`];
     return sum + (weight ?? 0) * (reps ?? 0);
@@ -138,7 +144,7 @@ function entryVolume(entry: WorkoutEntry) {
 function draftFromEntry(entry?: WorkoutEntry): Draft {
   if (!entry) return structuredClone(emptyDraft);
   return {
-    sets: ([1, 2, 3] as const).map((set) => {
+    sets: setNumbers.map((set) => {
       const weight = entry[`set${set}Weight`];
       const reps = entry[`set${set}Reps`];
       return { weight: weight == null ? '' : String(weight), reps: reps == null ? '' : String(reps), done: reps != null };
@@ -184,12 +190,29 @@ function formatWorkoutDate(value?: string | null) {
 }
 
 function loggedSets(entry: WorkoutEntry) {
-  return ([1, 2, 3] as const).flatMap((set) => {
+  return setNumbers.flatMap((set) => {
     const weight = entry[`set${set}Weight`];
     const reps = entry[`set${set}Reps`];
     if (reps == null) return [];
     return [{ set, weight, reps }];
   });
+}
+
+function visibleSetsForEntry(entry: WorkoutEntry | undefined, fallback: number) {
+  if (entry?.setCount != null && Number.isInteger(entry.setCount)) return Math.min(5, Math.max(1, entry.setCount));
+  const highestLoggedSet = entry ? setNumbers.reduce((highest, set) => entry[`set${set}Reps`] == null ? highest : set, 0) : 0;
+  return Math.min(5, Math.max(1, fallback, highestLoggedSet));
+}
+
+function recommendedRestSeconds(rest: string) {
+  const values = rest.match(/\d+/g)?.map(Number) ?? [60];
+  const longest = values.at(-1) ?? 60;
+  return rest.includes('min') ? longest * 60 : longest;
+}
+
+function formatTimer(seconds: number) {
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
 function NavButton({ view, active, icon: Icon, label, onChange, compact = false }: {
@@ -231,6 +254,10 @@ export function WorkoutApp() {
   const [notice, setNotice] = useState('');
   const [showNotes, setShowNotes] = useState(false);
   const [activeTipIndex, setActiveTipIndex] = useState(0);
+  const [visibleSetCount, setVisibleSetCount] = useState(3);
+  const [restTimerSeconds, setRestTimerSeconds] = useState(120);
+  const [restTimerRunning, setRestTimerRunning] = useState(false);
+  const restTimerEndsAt = useRef<number | null>(null);
 
   const dayExercises = useMemo(() => routine.filter((exercise) => exercise.day === activeDay), [activeDay]);
   const exercise = dayExercises[activeIndex] ?? dayExercises[0];
@@ -239,6 +266,7 @@ export function WorkoutApp() {
     .filter((entry) => entry.completed && entry.week < activeWeek && entry.day === activeDay && entry.exerciseOrder === exercise.order)
     .sort((a, b) => b.week - a.week)[0];
   const activeSets = workingSetsForWeek(exercise, activeWeek);
+  const suggestedRestSeconds = recommendedRestSeconds(exercise.rest);
 
   useEffect(() => {
     let cancelled = false;
@@ -325,9 +353,32 @@ export function WorkoutApp() {
   useEffect(() => {
     const current = entries.find((entry) => entry.week === activeWeek && entry.day === activeDay && entry.exerciseOrder === exercise.order);
     setDraft(draftFromEntry(current));
+    setVisibleSetCount(visibleSetsForEntry(current, exercise.targetSets));
     setShowNotes(Boolean(current?.notes));
     setNotice('');
-  }, [activeDay, activeWeek, entries, exercise.order]);
+  }, [activeDay, activeWeek, entries, exercise.order, exercise.targetSets]);
+
+  useEffect(() => {
+    restTimerEndsAt.current = null;
+    setRestTimerRunning(false);
+    setRestTimerSeconds(suggestedRestSeconds);
+  }, [activeDay, exercise.order, suggestedRestSeconds]);
+
+  useEffect(() => {
+    if (!restTimerRunning) return;
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil(((restTimerEndsAt.current ?? Date.now()) - Date.now()) / 1000));
+      setRestTimerSeconds(remaining);
+      if (remaining === 0) {
+        restTimerEndsAt.current = null;
+        setRestTimerRunning(false);
+        navigator.vibrate?.([160, 80, 160]);
+      }
+    };
+    tick();
+    const timer = window.setInterval(tick, 250);
+    return () => window.clearInterval(timer);
+  }, [restTimerRunning]);
 
   const weeklySummaries = useMemo(() => Array.from({ length: 12 }, (_, index) => {
     const week = index + 1;
@@ -350,8 +401,8 @@ export function WorkoutApp() {
   const totalVolume = weeklySummaries.reduce((sum, week) => sum + week.volume, 0);
   const totalRows = weeklySummaries.reduce((sum, week) => sum + week.rows, 0);
   const totalSessions = weeklySummaries.reduce((sum, week) => sum + week.sessions, 0);
-  const advice = progressionAdvice(exercise, draft, activeSets);
-  const readyToSave = draft.sets.slice(0, activeSets).every((set) => numberOrNull(set.reps) != null);
+  const advice = progressionAdvice(exercise, draft, visibleSetCount);
+  const readyToSave = draft.sets.slice(0, visibleSetCount).every((set) => numberOrNull(set.reps) != null);
 
   function chooseDay(day: TrainingDay) {
     setActiveDay(day); setActiveIndex(0); setView('today');
@@ -367,19 +418,56 @@ export function WorkoutApp() {
     updateSet(index, key, String(next));
   }
 
+  function addSet() {
+    setVisibleSetCount((count) => Math.min(5, count + 1));
+  }
+
+  function removeSet() {
+    if (visibleSetCount <= 1) return;
+    const removedIndex = visibleSetCount - 1;
+    setDraft((current) => ({
+      ...current,
+      sets: current.sets.map((set, index) => index === removedIndex ? { weight: '', reps: '', done: false } : set),
+    }));
+    setVisibleSetCount((count) => Math.max(1, count - 1));
+  }
+
+  function toggleRestTimer() {
+    if (restTimerRunning) {
+      const remaining = Math.max(0, Math.ceil(((restTimerEndsAt.current ?? Date.now()) - Date.now()) / 1000));
+      restTimerEndsAt.current = null;
+      setRestTimerSeconds(remaining);
+      setRestTimerRunning(false);
+      return;
+    }
+    const startingSeconds = restTimerSeconds === 0 ? suggestedRestSeconds : restTimerSeconds;
+    setRestTimerSeconds(startingSeconds);
+    restTimerEndsAt.current = Date.now() + startingSeconds * 1000;
+    setRestTimerRunning(true);
+  }
+
+  function resetRestTimer() {
+    restTimerEndsAt.current = null;
+    setRestTimerRunning(false);
+    setRestTimerSeconds(suggestedRestSeconds);
+  }
+
   async function saveExercise() {
-    if (!readyToSave) { setError(`Enter reps for the first ${activeSets} working sets.`); return; }
+    if (!readyToSave) { setError(`Enter reps for all ${visibleSetCount} displayed sets.`); return; }
     setSaving(true); setError(''); setNotice('');
     const payload = {
       week: activeWeek, day: activeDay, exerciseOrder: exercise.order,
       set1Weight: numberOrNull(draft.sets[0].weight), set1Reps: numberOrNull(draft.sets[0].reps),
       set2Weight: numberOrNull(draft.sets[1].weight), set2Reps: numberOrNull(draft.sets[1].reps),
       set3Weight: numberOrNull(draft.sets[2].weight), set3Reps: numberOrNull(draft.sets[2].reps),
+      set4Weight: numberOrNull(draft.sets[3].weight), set4Reps: numberOrNull(draft.sets[3].reps),
+      set5Weight: numberOrNull(draft.sets[4].weight), set5Reps: numberOrNull(draft.sets[4].reps),
+      setCount: visibleSetCount,
       rir: numberOrNull(draft.rir), notes: draft.notes, completed: true,
     };
     try {
       const response = await fetch('/api/workouts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      const data = await response.json() as { entry?: WorkoutEntry; sheetSync?: SheetSyncResult; error?: string };
+      const data = await response.json() as { entry?: WorkoutEntry; sheetSyncQueued?: boolean; error?: string };
       if (!response.ok || !data.entry) throw new Error(data.error ?? 'Unable to save exercise.');
       const saved = { ...data.entry, completed: Boolean(data.entry.completed) };
       setEntries((current) => {
@@ -387,7 +475,7 @@ export function WorkoutApp() {
         cacheWorkoutEntries(nextEntries);
         return nextEntries;
       });
-      setNotice(data.sheetSync?.ok ? `${exercise.name} saved and synced to Google Sheet` : `${exercise.name} saved`);
+      setNotice(`${exercise.name} saved`);
       if (activeIndex < dayExercises.length - 1) setActiveIndex((index) => index + 1);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Unable to save exercise.');
@@ -542,6 +630,21 @@ export function WorkoutApp() {
                       <CirclePlay className="size-4" /> Watch demo
                     </a>
                   </div>
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/15 bg-background/90 p-3 shadow-sm shadow-slate-900/5">
+                    <div className="flex items-center gap-3">
+                      <span className={`grid size-9 shrink-0 place-items-center rounded-lg ${restTimerSeconds === 0 ? 'bg-success-soft text-success' : 'bg-accent text-primary'}`}><Clock3 className="size-4" /></span>
+                      <div>
+                        <p className="font-sans text-xs font-medium text-muted-foreground">{restTimerSeconds === 0 ? 'Rest complete' : `Rest timer · ${exercise.rest}`}</p>
+                        <time className="font-sans text-xl font-bold tabular-nums" aria-live="polite">{formatTimer(restTimerSeconds)}</time>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button type="button" variant={restTimerRunning ? 'secondary' : 'default'} size="sm" onClick={toggleRestTimer}>
+                        {restTimerRunning ? <Pause /> : <Play />}{restTimerRunning ? 'Pause' : restTimerSeconds === 0 ? 'Again' : 'Start'}
+                      </Button>
+                      <Button type="button" variant="outline" size="icon-sm" aria-label="Reset rest timer" onClick={resetRestTimer}><TimerReset /></Button>
+                    </div>
+                  </div>
                   <div className="mt-3 rounded-xl border border-primary/15 bg-background/90 p-3 shadow-sm shadow-slate-900/5">
                     <div className="flex items-start gap-3">
                       <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-accent text-primary"><History className="size-4" /></span>
@@ -570,22 +673,33 @@ export function WorkoutApp() {
                   <div className="grid grid-cols-[42px_1fr_1fr] items-center gap-2 border-b py-2 font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:grid-cols-[42px_1fr_1fr_64px]">
                     <span>Set</span><span>Weight (kg)</span><span>{exercise.name === 'Plank' ? 'Seconds' : 'Reps'}</span><span className="hidden text-center sm:block">Status</span>
                   </div>
-                  {draft.sets.slice(0, exercise.targetSets).map((set, index) => (
-                    <div key={index} className="grid grid-cols-[42px_1fr_1fr] items-center gap-2 border-b border-border/70 py-3 last:border-0 sm:grid-cols-[42px_1fr_1fr_64px]">
-                      <span className="relative grid size-8 place-items-center rounded-full bg-secondary font-sans text-sm font-bold">{index + 1}{index >= activeSets && <span className="absolute -right-2.5 -top-2 rounded bg-warning-soft px-1 font-sans text-[8px] text-warning-foreground">OPT</span>}</span>
-                      <div className="flex items-center gap-1">
-                        <Button variant="outline" size="icon-sm" aria-label={`Decrease set ${index + 1} weight`} onClick={() => stepSet(index, 'weight', -2.5)}><Minus /></Button>
-                        <Input aria-label={`Set ${index + 1} weight in kilograms`} inputMode="decimal" type="number" value={set.weight} placeholder={exercise.name === 'Plank' ? 'Optional' : '0'} onFocus={(event) => event.currentTarget.select()} onChange={(event) => updateSet(index, 'weight', event.target.value)} className="h-11 min-w-0 bg-background text-center font-sans text-lg font-semibold tabular-nums" />
-                        <Button variant="outline" size="icon-sm" aria-label={`Increase set ${index + 1} weight`} onClick={() => stepSet(index, 'weight', 2.5)}><Plus /></Button>
+                  {draft.sets.slice(0, visibleSetCount).map((set, index) => {
+                    const setLabel = index >= exercise.targetSets ? 'EXTRA' : index >= activeSets ? 'OPT' : '';
+                    return (
+                      <div key={index} className="grid grid-cols-[42px_1fr_1fr] items-center gap-2 border-b border-border/70 py-3 last:border-0 sm:grid-cols-[42px_1fr_1fr_64px]">
+                        <span className="relative grid size-8 place-items-center rounded-full bg-secondary font-sans text-sm font-bold">{index + 1}{setLabel && <span className="absolute -right-3 -top-2 rounded bg-warning-soft px-1 font-sans text-[8px] text-warning-foreground">{setLabel}</span>}</span>
+                        <div className="flex items-center gap-1">
+                          <Button variant="outline" size="icon-sm" aria-label={`Decrease set ${index + 1} weight`} onClick={() => stepSet(index, 'weight', -2.5)}><Minus /></Button>
+                          <Input aria-label={`Set ${index + 1} weight in kilograms`} inputMode="decimal" type="number" value={set.weight} placeholder={exercise.name === 'Plank' ? 'Optional' : '0'} onFocus={(event) => event.currentTarget.select()} onChange={(event) => updateSet(index, 'weight', event.target.value)} className="h-11 min-w-0 bg-background text-center font-sans text-lg font-semibold tabular-nums" />
+                          <Button variant="outline" size="icon-sm" aria-label={`Increase set ${index + 1} weight`} onClick={() => stepSet(index, 'weight', 2.5)}><Plus /></Button>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Button variant="outline" size="icon-sm" aria-label={`Decrease set ${index + 1} repetitions`} onClick={() => stepSet(index, 'reps', -1)}><Minus /></Button>
+                          <Input aria-label={`Set ${index + 1} ${exercise.name === 'Plank' ? 'seconds' : 'repetitions'}`} inputMode="numeric" type="number" value={set.reps} placeholder="0" onFocus={(event) => event.currentTarget.select()} onChange={(event) => updateSet(index, 'reps', event.target.value)} className="h-11 min-w-0 bg-background text-center font-sans text-lg font-semibold tabular-nums" />
+                          <Button variant="outline" size="icon-sm" aria-label={`Increase set ${index + 1} repetitions`} onClick={() => stepSet(index, 'reps', 1)}><Plus /></Button>
+                        </div>
+                        <span className={`mx-auto hidden size-8 place-items-center rounded-full border-2 sm:grid ${set.done ? 'border-success bg-success text-white' : 'border-border text-transparent'}`}><Check className="size-4" /></span>
                       </div>
-                      <div className="flex items-center gap-1">
-                        <Button variant="outline" size="icon-sm" aria-label={`Decrease set ${index + 1} repetitions`} onClick={() => stepSet(index, 'reps', -1)}><Minus /></Button>
-                        <Input aria-label={`Set ${index + 1} ${exercise.name === 'Plank' ? 'seconds' : 'repetitions'}`} inputMode="numeric" type="number" value={set.reps} placeholder="0" onFocus={(event) => event.currentTarget.select()} onChange={(event) => updateSet(index, 'reps', event.target.value)} className="h-11 min-w-0 bg-background text-center font-sans text-lg font-semibold tabular-nums" />
-                        <Button variant="outline" size="icon-sm" aria-label={`Increase set ${index + 1} repetitions`} onClick={() => stepSet(index, 'reps', 1)}><Plus /></Button>
-                      </div>
-                      <span className={`mx-auto hidden size-8 place-items-center rounded-full border-2 sm:grid ${set.done ? 'border-success bg-success text-white' : 'border-border text-transparent'}`}><Check className="size-4" /></span>
+                    );
+                  })}
+
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-muted/55 p-2.5">
+                    <p className="px-1 font-sans text-xs text-muted-foreground"><strong className="text-foreground">{visibleSetCount} {visibleSetCount === 1 ? 'set' : 'sets'}</strong> · {activeSets} recommended this week</p>
+                    <div className="flex gap-2">
+                      <Button type="button" variant="outline" size="sm" disabled={visibleSetCount <= 1} onClick={removeSet}><Minus /> Remove set</Button>
+                      <Button type="button" variant="outline" size="sm" disabled={visibleSetCount >= 5} onClick={addSet}><Plus /> Add set</Button>
                     </div>
-                  ))}
+                  </div>
 
                   <div className="mt-4 grid grid-cols-[1fr_112px] items-end gap-3">
                     <div><label htmlFor="rir" className="mb-1.5 block font-sans text-sm font-medium">Reps in reserve (RIR)</label><p className="font-sans text-xs text-muted-foreground">{activeWeek <= 2 ? 'Aim for about 3 during ramp-in.' : 'Aim for 1–2 with clean form.'}</p></div>

@@ -5,6 +5,8 @@ import { syncWorkoutEntries, type WorkoutSheetEntry } from '@/lib/google-sheet-s
 const selectColumns = `id, week, day, exercise_order AS exerciseOrder, exercise, target,
   set1_weight AS set1Weight, set1_reps AS set1Reps, set2_weight AS set2Weight,
   set2_reps AS set2Reps, set3_weight AS set3Weight, set3_reps AS set3Reps,
+  set4_weight AS set4Weight, set4_reps AS set4Reps, set5_weight AS set5Weight,
+  set5_reps AS set5Reps, set_count AS setCount,
   rir, notes, completed, completed_at AS completedAt, updated_at AS updatedAt`;
 
 export async function POST() {

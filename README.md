@@ -14,6 +14,8 @@ The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgp
 
 - Complete 12-week plan with Day A, B, and C workouts
 - Large mobile-friendly controls for entering weight, reps, and RIR
+- Per-exercise set controls supporting one to five saved sets
+- Exercise-aware rest timer with pause, resume, reset, and completion vibration where supported
 - Per-set completion tracking and exercise notes
 - Automatic volume totals and next-session progression guidance
 - Weekly session progress, workout history, and progress charts
@@ -22,6 +24,7 @@ The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgp
 - Routine guide with targets, rest periods, muscle groups, and alternatives
 - Persistent workout data backed by Cloudflare D1
 - Review-first import from and automatic mirroring to the original Google Sheet layout
+- Fast database-first saves with Google Sheet mirroring completed in the background
 - Previous-session recall beside each exercise, including the logged date, weights, reps, and RIR
 - Fresh weight and rep inputs for each new week, without copying the previous workout into the new record
 - Fast installed-app startup with a cached interface and immediate device-local display of the latest synced workouts
@@ -76,11 +79,15 @@ public/                   Liftline icons and sharing artwork
 
 Workout entries are keyed by week, day, and exercise. Saving an exercise creates or updates that entry, so a session can be resumed without duplicating records. The dashboard derives completion, session totals, training volume, and progression suggestions from the saved entries.
 
+Each exercise can store between one and five sets. Removing a set clears that row from the saved record; adding it again starts with an empty row.
+
 The initial Week 1 example entries mirror the source spreadsheet so the progress experience is visible immediately. New and updated entries are stored persistently in D1.
 
 ## Google Sheet sync
 
 Liftline can exchange completed entries with the existing `Workout Log` layout. Each normal save updates its matching Week/Day/Exercise row, and the Progress screen includes a **Send to Google Sheet** button for backfilling all completed Liftline entries.
+
+Normal saves return as soon as Liftline's database has stored the workout, while Google Sheet mirroring continues in the background. Because the existing sheet layout contains three set pairs, sets 4–5 remain stored and visible in Liftline while the first three sets are mirrored to Google Sheets.
 
 The separate **Import from Google Sheet** action always shows a preview first. New rows are selected automatically. When the same Week/Day/Exercise already exists in Liftline with different values, it is protected and stays unselected unless the owner explicitly chooses to replace it. The server reads the Sheet again when the import is confirmed, so a record created in Liftline after the preview is also protected.
 
