@@ -1,5 +1,6 @@
 const LIFTLINE_SYNC_TOKEN = 'replace-with-a-long-random-token';
 const WORKOUT_SHEET_NAME = 'Workout Log';
+const WORKOUT_TIME_ZONE = 'Asia/Tokyo';
 const HEADER_ROW = 4;
 const COLUMN_COUNT = 18;
 
@@ -42,8 +43,7 @@ function doPost(event) {
         throw new Error('No matching Workout Log row for week ' + entry.week + ', day ' + entry.day + ', exercise ' + entry.exerciseOrder + '.');
       }
 
-      const completedAt = entry.completedAt ? new Date(entry.completedAt) : new Date();
-      sheet.getRange(rowNumber, 3).setValue(completedAt);
+      sheet.getRange(rowNumber, 3).setValue(calendarDateSerial(entry.completedOn, entry.completedAt));
       sheet.getRange(rowNumber, 6, 1, 7).setValues([[
         cellValue(entry.set1Weight), cellValue(entry.set1Reps),
         cellValue(entry.set2Weight), cellValue(entry.set2Reps),
@@ -65,6 +65,7 @@ function doPost(event) {
 
 function readWorkoutEntries() {
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const spreadsheetTimeZone = spreadsheet.getSpreadsheetTimeZone() || WORKOUT_TIME_ZONE;
   const sheet = spreadsheet.getSheetByName(WORKOUT_SHEET_NAME);
   if (!sheet) throw new Error('Workout Log sheet not found.');
 
@@ -84,7 +85,7 @@ function readWorkoutEntries() {
       set2Weight: numberValue(row[7]), set2Reps: numberValue(row[8]),
       set3Weight: numberValue(row[9]), set3Reps: numberValue(row[10]),
       rir: numberValue(row[11]), notes: String(row[14] || ''), completed: true,
-      completedAt: dateValue(row[2]),
+      completedAt: dateValue(row[2], spreadsheetTimeZone),
     };
   });
 
@@ -105,9 +106,21 @@ function numberValue(value) {
   return isNaN(number) ? null : number;
 }
 
-function dateValue(value) {
+function calendarDateSerial(completedOn, completedAt) {
+  let calendarDate = String(completedOn || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(calendarDate)) {
+    const date = completedAt ? new Date(completedAt) : new Date();
+    if (isNaN(date.getTime())) throw new Error('Invalid workout completion date.');
+    calendarDate = Utilities.formatDate(date, WORKOUT_TIME_ZONE, 'yyyy-MM-dd');
+  }
+
+  const parts = calendarDate.split('-').map(Number);
+  return Date.UTC(parts[0], parts[1] - 1, parts[2]) / 86400000 + 25569;
+}
+
+function dateValue(value, timeZone) {
   if (Object.prototype.toString.call(value) !== '[object Date]' || isNaN(value.getTime())) return null;
-  return value.toISOString();
+  return Utilities.formatDate(value, timeZone || WORKOUT_TIME_ZONE, 'yyyy-MM-dd') + 'T12:00:00.000Z';
 }
 
 function secureTokenMatches(candidate, expected) {

@@ -20,6 +20,7 @@ export type WorkoutSheetEntry = {
   rir: number | null;
   notes: string | null;
   completed: number | boolean;
+  completedOn?: string | null;
   completedAt?: string | null;
   updatedAt?: string | null;
 };
@@ -54,6 +55,41 @@ function getSyncConfig() {
   }
 }
 
+const WORKOUT_TIME_ZONE = 'Asia/Tokyo';
+const workoutDateFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: WORKOUT_TIME_ZONE,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+function workoutCalendarDate(value?: string | null) {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) return null;
+
+  const parts = Object.fromEntries(
+    workoutDateFormatter
+      .formatToParts(date)
+      .filter((part) => part.type === 'year' || part.type === 'month' || part.type === 'day')
+      .map((part) => [part.type, part.value]),
+  );
+
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function prepareEntryForSheet(entry: WorkoutSheetEntry): WorkoutSheetEntry {
+  const completedOn = workoutCalendarDate(entry.completedAt);
+  if (!completedOn) return entry;
+
+  return {
+    ...entry,
+    completedOn,
+    // Noon UTC keeps the intended calendar day intact in older connector
+    // deployments whose spreadsheet timezone differs from Liftline's.
+    completedAt: `${completedOn}T12:00:00.000Z`,
+  };
+}
+
 export async function syncWorkoutEntries(entries: WorkoutSheetEntry[]): Promise<SheetSyncResult> {
   const config = getSyncConfig();
   if (!config) {
@@ -71,7 +107,11 @@ export async function syncWorkoutEntries(entries: WorkoutSheetEntry[]): Promise<
     const response = await fetch(config.webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-      body: JSON.stringify({ token: config.token, action: 'write', entries }),
+      body: JSON.stringify({
+        token: config.token,
+        action: 'write',
+        entries: entries.map(prepareEntryForSheet),
+      }),
       redirect: 'follow',
       signal: AbortSignal.timeout(10_000),
     });

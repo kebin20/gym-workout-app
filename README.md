@@ -103,3 +103,5 @@ The linked workbook is currently an Excel `.xlsm` file in Google Drive. Google r
    - `GOOGLE_SHEETS_SYNC_TOKEN`: the same random token
 
 The Apps Script reads completed rows and only writes Date, set weights/reps, RIR, Notes, and Logged status. It identifies rows by Week, Day, and Exercise number, preserving the workbook's existing formulas and formatting.
+
+Workout dates use Liftline's Asia/Tokyo calendar day rather than the Google Sheet's timezone. This prevents an evening workout recorded on September 4 in Liftline from appearing as September 3 in a Sheet configured for a western timezone.
