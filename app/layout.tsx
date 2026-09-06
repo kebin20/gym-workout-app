@@ -7,7 +7,9 @@ const geistSans = Geist({
   subsets: ['latin'],
 });
 
-const publicIconOrigin = 'https://liftline-workout-demo.ktanzyl.chatgpt.site';
+const publicIconOrigin =
+  'https://raw.githubusercontent.com/kebin20/gym-workout-app/main/public';
+const iconVersion = '20260906-gradient';
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://liftline-strength-plan.ktanzyl.chatgpt.site'),
@@ -20,14 +22,14 @@ export const metadata: Metadata = {
     icon: [
       { url: '/favicon.svg', type: 'image/svg+xml' },
       {
-        url: `${publicIconOrigin}/icon-192.png?v=20260902`,
+        url: `${publicIconOrigin}/icon-192.png?v=${iconVersion}`,
         sizes: '192x192',
         type: 'image/png',
       },
     ],
     apple: [
       {
-        url: `${publicIconOrigin}/apple-touch-icon.png?v=20260902`,
+        url: `${publicIconOrigin}/apple-touch-icon.png?v=${iconVersion}`,
         sizes: '180x180',
         type: 'image/png',
       },

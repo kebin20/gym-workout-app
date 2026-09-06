@@ -1522,7 +1522,7 @@ export function WorkoutApp() {
             onClick={() => setView('today')}
             className="flex items-center gap-3 text-left"
           >
-            <span className="grid size-10 place-items-center rounded-xl bg-primary text-primary-foreground shadow-sm shadow-primary/20">
+            <span className="grid size-10 place-items-center rounded-xl bg-[linear-gradient(145deg,#2f75ff_0%,#405fef_55%,#6554db_100%)] text-white shadow-sm shadow-primary/25 ring-1 ring-white/15">
               <Dumbbell className="size-5" />
             </span>
             <span>

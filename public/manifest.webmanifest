@@ -7,16 +7,16 @@
   "scope": "/",
   "display": "standalone",
   "background_color": "#F4F7FF",
-  "theme_color": "#356CF6",
+  "theme_color": "#405FEF",
   "icons": [
     {
-      "src": "https://liftline-workout-demo.ktanzyl.chatgpt.site/icon-192.png?v=20260902",
+      "src": "https://raw.githubusercontent.com/kebin20/gym-workout-app/main/public/icon-192.png?v=20260906-gradient",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "https://liftline-workout-demo.ktanzyl.chatgpt.site/icon-512.png?v=20260902",
+      "src": "https://raw.githubusercontent.com/kebin20/gym-workout-app/main/public/icon-512.png?v=20260906-gradient",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
