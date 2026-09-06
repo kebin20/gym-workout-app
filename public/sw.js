@@ -1,9 +1,8 @@
-const cacheVersion = 'liftline-2026-09-06-1';
+const cacheVersion = 'liftline-2026-09-06-2';
 const shellCache = `${cacheVersion}-shell`;
 const assetCache = `${cacheVersion}-assets`;
 
 const coreShell = [
-  '/',
   '/manifest.webmanifest',
   '/favicon.svg',
   '/app-icon.svg',
@@ -38,16 +37,31 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
       const cacheNames = await caches.keys();
+      const previousAssetCaches = cacheNames
+        .filter(
+          (name) =>
+            name.startsWith('liftline-') &&
+            name.endsWith('-assets') &&
+            name !== assetCache,
+        )
+        .sort();
+      const assetCachesToDelete = previousAssetCaches.slice(
+        0,
+        Math.max(0, previousAssetCaches.length - 2),
+      );
       await Promise.all(
         cacheNames
           .filter(
             (name) =>
               name.startsWith('liftline-') &&
-              name !== shellCache &&
-              name !== assetCache,
+              ((name.endsWith('-shell') && name !== shellCache) ||
+                assetCachesToDelete.includes(name)),
           )
           .map((name) => caches.delete(name)),
       );
+      if ('navigationPreload' in self.registration) {
+        await self.registration.navigationPreload.enable();
+      }
       await self.clients.claim();
     })(),
   );
@@ -95,26 +109,20 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       (async () => {
         const cache = await caches.open(shellCache);
-        const cached = await cache.match('/');
-        const refresh = fetch(request, { credentials: 'same-origin' }).then(
-          async (response) => {
-            const contentType = response.headers.get('content-type') ?? '';
-            if (isCacheable(response) && contentType.includes('text/html')) {
-              await cache.put('/', response.clone());
-            }
-            return response;
-          },
-        );
-
-        if (cached) {
-          event.waitUntil(refresh.catch(() => undefined));
-          return cached;
-        }
-
         try {
-          return await refresh;
+          const response =
+            (await event.preloadResponse) ??
+            (await fetch(request, {
+              cache: 'no-store',
+              credentials: 'same-origin',
+            }));
+          const contentType = response.headers.get('content-type') ?? '';
+          if (isCacheable(response) && contentType.includes('text/html')) {
+            await cache.put('/', response.clone());
+          }
+          return response;
         } catch {
-          return Response.error();
+          return (await cache.match('/')) ?? Response.error();
         }
       })(),
     );
@@ -133,7 +141,7 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     (async () => {
       const cache = await caches.open(assetCache);
-      const cached = await cache.match(request);
+      const cached = await caches.match(request);
       if (cached) return cached;
 
       const response = await fetch(request);
