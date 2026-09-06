@@ -8,32 +8,32 @@ const geistSans = Geist({
 });
 
 const publicIconOrigin =
-  'https://raw.githubusercontent.com/kebin20/gym-workout-app/52e76646144e0b8dda2473ef2b124f6d94fdf721/public';
+  'https://raw.githubusercontent.com/kebin20/gym-workout-app/62c99c0864196e7f05409f47633a79132c185675/public';
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://liftline-strength-plan.ktanzyl.chatgpt.site'),
   title: 'Liftline',
   applicationName: 'Liftline',
-  manifest: '/manifest.webmanifest',
+  manifest: '/manifest-v2.webmanifest',
   description:
     'A mobile-friendly 12-week, 3-day workout tracker for logging sets, reps, RIR, notes, volume, and weekly progress.',
   icons: {
     icon: [
-      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/favicon-v2.svg', type: 'image/svg+xml' },
       {
-        url: `${publicIconOrigin}/icon-192.png`,
+        url: `${publicIconOrigin}/liftline-icon-192-v2.png`,
         sizes: '192x192',
         type: 'image/png',
       },
     ],
     apple: [
       {
-        url: `${publicIconOrigin}/apple-touch-icon.png`,
+        url: `${publicIconOrigin}/liftline-apple-touch-icon-v2.png`,
         sizes: '180x180',
         type: 'image/png',
       },
     ],
-    shortcut: '/favicon.svg',
+    shortcut: '/favicon-v2.svg',
   },
   appleWebApp: {
     capable: true,

@@ -50,7 +50,7 @@ Minor fixes, visual refinements, and deployment maintenance are grouped into the
 - Made individual sessions flexible with exercise reordering, substitutions, skipping, custom exercises, and one-to-five-set controls.
 - Added downloadable backups with preview-first, non-destructive restore.
 - Improved installed-app reliability and cold-start speed so updates no longer leave an outdated, non-interactive screen.
-- Unified the Liftline diagonal dumbbell icon and blue-to-indigo gradient across the app, favicon, Safari, and Chrome/PWA installations.
+- Unified the Liftline diagonal dumbbell icon and blue-to-indigo gradient across the app, added a softer rounded favicon, and refreshed the Safari and Chrome/PWA install assets.
 
 ### v1.5 — Workout history and flexible session tools (3–4 September 2026)
 
