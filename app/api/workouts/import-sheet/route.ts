@@ -5,18 +5,12 @@ import {
   type WorkoutSheetEntry,
 } from '@/lib/google-sheet-sync';
 import { routine, targetLabel, type TrainingDay } from '@/lib/routine';
+import { workoutSelectColumns } from '@/lib/workout-types';
 
 type ImportRequest = {
   keys?: unknown;
   overwriteKeys?: unknown;
 };
-
-const selectColumns = `id, week, day, exercise_order AS exerciseOrder, exercise, target,
-  set1_weight AS set1Weight, set1_reps AS set1Reps, set2_weight AS set2Weight,
-  set2_reps AS set2Reps, set3_weight AS set3Weight, set3_reps AS set3Reps,
-  set4_weight AS set4Weight, set4_reps AS set4Reps, set5_weight AS set5Weight,
-  set5_reps AS set5Reps, set_count AS setCount,
-  rir, notes, completed, completed_at AS completedAt, updated_at AS updatedAt`;
 
 function entryKey(
   entry: Pick<WorkoutSheetEntry, 'week' | 'day' | 'exerciseOrder'>,
@@ -105,7 +99,7 @@ async function loadComparison() {
     throw new Error(sheetResult.message ?? 'Unable to read the Google Sheet.');
 
   const localResults = await env.DB.prepare(
-    `SELECT ${selectColumns} FROM workout_entries ORDER BY week, day, exercise_order`,
+    `SELECT ${workoutSelectColumns} FROM workout_entries ORDER BY week, day, exercise_order`,
   ).all<WorkoutSheetEntry>();
   const localByKey = new Map(
     localResults.results.map((entry) => [entryKey(entry), entry]),
@@ -210,8 +204,8 @@ export async function POST(request: Request) {
         env.DB.prepare(`INSERT INTO workout_entries (
         week, day, exercise_order, exercise, target, set1_weight, set1_reps, set2_weight,
         set2_reps, set3_weight, set3_reps, set4_weight, set4_reps, set5_weight, set5_reps,
-        set_count, rir, notes, completed, completed_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+        set_count, rir, notes, completed, completed_at, sync_status, sheet_synced_at, sync_error, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 'synced', ?, NULL, ?)
       ON CONFLICT(week, day, exercise_order) DO UPDATE SET
         exercise = excluded.exercise, target = excluded.target,
         set1_weight = excluded.set1_weight, set1_reps = excluded.set1_reps,
@@ -221,7 +215,9 @@ export async function POST(request: Request) {
         set5_weight = excluded.set5_weight, set5_reps = excluded.set5_reps,
         set_count = excluded.set_count,
         rir = excluded.rir, notes = excluded.notes, completed = 1,
-        completed_at = excluded.completed_at, updated_at = excluded.updated_at`).bind(
+        completed_at = excluded.completed_at, sync_status = 'synced',
+        sheet_synced_at = excluded.sheet_synced_at, sync_error = NULL,
+        updated_at = excluded.updated_at`).bind(
           source.week,
           source.day,
           source.exerciseOrder,
@@ -241,6 +237,7 @@ export async function POST(request: Request) {
           source.rir,
           source.notes ?? '',
           source.completedAt ?? null,
+          now,
           now,
         ),
       );

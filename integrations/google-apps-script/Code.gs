@@ -12,7 +12,9 @@ function doPost(event) {
   const lock = LockService.getScriptLock();
 
   try {
-    const payload = JSON.parse(event && event.postData ? event.postData.contents : '{}');
+    const payload = JSON.parse(
+      event && event.postData ? event.postData.contents : '{}',
+    );
     if (!secureTokenMatches(String(payload.token || ''), LIFTLINE_SYNC_TOKEN)) {
       return jsonResponse({ ok: false, error: 'Unauthorized.' });
     }
@@ -31,25 +33,45 @@ function doPost(event) {
     const rowCount = Math.max(0, sheet.getLastRow() - HEADER_ROW);
     if (rowCount === 0) throw new Error('Workout Log has no exercise rows.');
 
-    const rows = sheet.getRange(firstDataRow, 1, rowCount, COLUMN_COUNT).getValues();
+    const rows = sheet
+      .getRange(firstDataRow, 1, rowCount, COLUMN_COUNT)
+      .getValues();
     const rowByKey = {};
     rows.forEach(function (row, index) {
       rowByKey[entryKey(row[0], row[1], row[16])] = firstDataRow + index;
     });
 
     entries.forEach(function (entry) {
-      const rowNumber = rowByKey[entryKey(entry.week, entry.day, entry.exerciseOrder)];
+      const rowNumber =
+        rowByKey[entryKey(entry.week, entry.day, entry.exerciseOrder)];
       if (!rowNumber) {
-        throw new Error('No matching Workout Log row for week ' + entry.week + ', day ' + entry.day + ', exercise ' + entry.exerciseOrder + '.');
+        throw new Error(
+          'No matching Workout Log row for week ' +
+            entry.week +
+            ', day ' +
+            entry.day +
+            ', exercise ' +
+            entry.exerciseOrder +
+            '.',
+        );
       }
 
-      sheet.getRange(rowNumber, 3).setValue(calendarDateSerial(entry.completedOn, entry.completedAt));
-      sheet.getRange(rowNumber, 6, 1, 7).setValues([[
-        cellValue(entry.set1Weight), cellValue(entry.set1Reps),
-        cellValue(entry.set2Weight), cellValue(entry.set2Reps),
-        cellValue(entry.set3Weight), cellValue(entry.set3Reps),
-        cellValue(entry.rir),
-      ]]);
+      sheet
+        .getRange(rowNumber, 3)
+        .setValue(calendarDateSerial(entry.completedOn, entry.completedAt));
+      sheet
+        .getRange(rowNumber, 6, 1, 7)
+        .setValues([
+          [
+            cellValue(entry.set1Weight),
+            cellValue(entry.set1Reps),
+            cellValue(entry.set2Weight),
+            cellValue(entry.set2Reps),
+            cellValue(entry.set3Weight),
+            cellValue(entry.set3Reps),
+            cellValue(entry.rir),
+          ],
+        ]);
       sheet.getRange(rowNumber, 15).setValue(String(entry.notes || ''));
       sheet.getRange(rowNumber, 18).setValue(entry.completed ? 'Yes' : '');
     });
@@ -57,7 +79,10 @@ function doPost(event) {
     SpreadsheetApp.flush();
     return jsonResponse({ ok: true, synced: entries.length });
   } catch (error) {
-    return jsonResponse({ ok: false, error: error && error.message ? error.message : String(error) });
+    return jsonResponse({
+      ok: false,
+      error: error && error.message ? error.message : String(error),
+    });
   } finally {
     if (lock.hasLock()) lock.releaseLock();
   }
@@ -65,7 +90,8 @@ function doPost(event) {
 
 function readWorkoutEntries() {
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-  const spreadsheetTimeZone = spreadsheet.getSpreadsheetTimeZone() || WORKOUT_TIME_ZONE;
+  const spreadsheetTimeZone =
+    spreadsheet.getSpreadsheetTimeZone() || WORKOUT_TIME_ZONE;
   const sheet = spreadsheet.getSheetByName(WORKOUT_SHEET_NAME);
   if (!sheet) throw new Error('Workout Log sheet not found.');
 
@@ -73,31 +99,57 @@ function readWorkoutEntries() {
   const rowCount = Math.max(0, sheet.getLastRow() - HEADER_ROW);
   if (rowCount === 0) return jsonResponse({ ok: true, entries: [] });
 
-  const rows = sheet.getRange(firstDataRow, 1, rowCount, COLUMN_COUNT).getValues();
-  const entries = rows.filter(function (row) {
-    const logged = String(row[17] || '').trim().toLowerCase();
-    return logged === 'yes' || logged === 'true' || row[17] === true;
-  }).map(function (row) {
-    return {
-      week: numberValue(row[0]), day: String(row[1] || '').trim().toUpperCase(),
-      exerciseOrder: numberValue(row[16]), exercise: String(row[3] || ''), target: String(row[4] || ''),
-      set1Weight: numberValue(row[5]), set1Reps: numberValue(row[6]),
-      set2Weight: numberValue(row[7]), set2Reps: numberValue(row[8]),
-      set3Weight: numberValue(row[9]), set3Reps: numberValue(row[10]),
-      rir: numberValue(row[11]), notes: String(row[14] || ''), completed: true,
-      completedAt: dateValue(row[2], spreadsheetTimeZone),
-    };
-  });
+  const rows = sheet
+    .getRange(firstDataRow, 1, rowCount, COLUMN_COUNT)
+    .getValues();
+  const entries = rows
+    .filter(function (row) {
+      const logged = String(row[17] || '')
+        .trim()
+        .toLowerCase();
+      return logged === 'yes' || logged === 'true' || row[17] === true;
+    })
+    .map(function (row) {
+      return {
+        week: numberValue(row[0]),
+        day: String(row[1] || '')
+          .trim()
+          .toUpperCase(),
+        exerciseOrder: numberValue(row[16]),
+        exercise: String(row[3] || ''),
+        target: String(row[4] || ''),
+        set1Weight: numberValue(row[5]),
+        set1Reps: numberValue(row[6]),
+        set2Weight: numberValue(row[7]),
+        set2Reps: numberValue(row[8]),
+        set3Weight: numberValue(row[9]),
+        set3Reps: numberValue(row[10]),
+        rir: numberValue(row[11]),
+        notes: String(row[14] || ''),
+        completed: true,
+        completedAt: dateValue(row[2], spreadsheetTimeZone),
+      };
+    });
 
   return jsonResponse({ ok: true, entries: entries });
 }
 
 function entryKey(week, day, exerciseOrder) {
-  return Number(week) + '|' + String(day || '').trim().toUpperCase() + '|' + Number(exerciseOrder);
+  return (
+    Number(week) +
+    '|' +
+    String(day || '')
+      .trim()
+      .toUpperCase() +
+    '|' +
+    Number(exerciseOrder)
+  );
 }
 
 function cellValue(value) {
-  return value === null || value === undefined || value === '' ? '' : Number(value);
+  return value === null || value === undefined || value === ''
+    ? ''
+    : Number(value);
 }
 
 function numberValue(value) {
@@ -110,7 +162,8 @@ function calendarDateSerial(completedOn, completedAt) {
   let calendarDate = String(completedOn || '').trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(calendarDate)) {
     const date = completedAt ? new Date(completedAt) : new Date();
-    if (isNaN(date.getTime())) throw new Error('Invalid workout completion date.');
+    if (isNaN(date.getTime()))
+      throw new Error('Invalid workout completion date.');
     calendarDate = Utilities.formatDate(date, WORKOUT_TIME_ZONE, 'yyyy-MM-dd');
   }
 
@@ -119,13 +172,26 @@ function calendarDateSerial(completedOn, completedAt) {
 }
 
 function dateValue(value, timeZone) {
-  if (Object.prototype.toString.call(value) !== '[object Date]' || isNaN(value.getTime())) return null;
-  return Utilities.formatDate(value, timeZone || WORKOUT_TIME_ZONE, 'yyyy-MM-dd') + 'T12:00:00.000Z';
+  if (
+    Object.prototype.toString.call(value) !== '[object Date]' ||
+    isNaN(value.getTime())
+  )
+    return null;
+  return (
+    Utilities.formatDate(value, timeZone || WORKOUT_TIME_ZONE, 'yyyy-MM-dd') +
+    'T12:00:00.000Z'
+  );
 }
 
 function secureTokenMatches(candidate, expected) {
-  const candidateDigest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, candidate);
-  const expectedDigest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, expected);
+  const candidateDigest = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    candidate,
+  );
+  const expectedDigest = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    expected,
+  );
   if (candidateDigest.length !== expectedDigest.length) return false;
   let difference = 0;
   for (let index = 0; index < candidateDigest.length; index += 1) {
@@ -135,6 +201,7 @@ function secureTokenMatches(candidate, expected) {
 }
 
 function jsonResponse(value) {
-  return ContentService.createTextOutput(JSON.stringify(value))
-    .setMimeType(ContentService.MimeType.JSON);
+  return ContentService.createTextOutput(JSON.stringify(value)).setMimeType(
+    ContentService.MimeType.JSON,
+  );
 }

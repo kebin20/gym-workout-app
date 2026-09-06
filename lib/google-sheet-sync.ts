@@ -46,7 +46,11 @@ function getSyncConfig() {
 
   try {
     const url = new URL(webhookUrl);
-    if (url.protocol !== 'https:' || url.hostname !== 'script.google.com' || !url.pathname.endsWith('/exec')) {
+    if (
+      url.protocol !== 'https:' ||
+      url.hostname !== 'script.google.com' ||
+      !url.pathname.endsWith('/exec')
+    ) {
       return null;
     }
     return { webhookUrl: url.toString(), token };
@@ -70,7 +74,10 @@ function workoutCalendarDate(value?: string | null) {
   const parts = Object.fromEntries(
     workoutDateFormatter
       .formatToParts(date)
-      .filter((part) => part.type === 'year' || part.type === 'month' || part.type === 'day')
+      .filter(
+        (part) =>
+          part.type === 'year' || part.type === 'month' || part.type === 'day',
+      )
       .map((part) => [part.type, part.value]),
   );
 
@@ -90,7 +97,9 @@ function prepareEntryForSheet(entry: WorkoutSheetEntry): WorkoutSheetEntry {
   };
 }
 
-export async function syncWorkoutEntries(entries: WorkoutSheetEntry[]): Promise<SheetSyncResult> {
+export async function syncWorkoutEntries(
+  entries: WorkoutSheetEntry[],
+): Promise<SheetSyncResult> {
   const config = getSyncConfig();
   if (!config) {
     return {
@@ -150,7 +159,12 @@ export async function syncWorkoutEntries(entries: WorkoutSheetEntry[]): Promise<
 export async function readWorkoutEntriesFromSheet(): Promise<SheetReadResult> {
   const config = getSyncConfig();
   if (!config) {
-    return { ok: false, configured: false, entries: [], message: 'Google Sheet sync is not connected yet.' };
+    return {
+      ok: false,
+      configured: false,
+      entries: [],
+      message: 'Google Sheet sync is not connected yet.',
+    };
   }
 
   try {
@@ -162,7 +176,11 @@ export async function readWorkoutEntriesFromSheet(): Promise<SheetReadResult> {
       signal: AbortSignal.timeout(10_000),
     });
     const responseText = await response.text();
-    let result: { ok?: boolean; entries?: WorkoutSheetEntry[]; error?: string } = {};
+    let result: {
+      ok?: boolean;
+      entries?: WorkoutSheetEntry[];
+      error?: string;
+    } = {};
     try {
       result = JSON.parse(responseText) as typeof result;
     } catch {
@@ -171,13 +189,22 @@ export async function readWorkoutEntriesFromSheet(): Promise<SheetReadResult> {
 
     if (!response.ok || !result.ok || !Array.isArray(result.entries)) {
       return {
-        ok: false, configured: true, entries: [],
-        message: result.error ?? 'The Google Sheet import connector needs to be updated.',
+        ok: false,
+        configured: true,
+        entries: [],
+        message:
+          result.error ??
+          'The Google Sheet import connector needs to be updated.',
       };
     }
 
     return { ok: true, configured: true, entries: result.entries };
   } catch {
-    return { ok: false, configured: true, entries: [], message: 'The Google Sheet could not be reached.' };
+    return {
+      ok: false,
+      configured: true,
+      entries: [],
+      message: 'The Google Sheet could not be reached.',
+    };
   }
 }

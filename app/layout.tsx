@@ -19,9 +19,19 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       { url: '/favicon.svg', type: 'image/svg+xml' },
-      { url: `${publicIconOrigin}/icon-192.png?v=20260902`, sizes: '192x192', type: 'image/png' },
+      {
+        url: `${publicIconOrigin}/icon-192.png?v=20260902`,
+        sizes: '192x192',
+        type: 'image/png',
+      },
     ],
-    apple: [{ url: `${publicIconOrigin}/apple-touch-icon.png?v=20260902`, sizes: '180x180', type: 'image/png' }],
+    apple: [
+      {
+        url: `${publicIconOrigin}/apple-touch-icon.png?v=20260902`,
+        sizes: '180x180',
+        type: 'image/png',
+      },
+    ],
     shortcut: '/favicon.svg',
   },
   appleWebApp: {
@@ -31,14 +41,23 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: 'Liftline',
-    description: 'Log every set, follow your 3-day routine, and see 12 weeks of progress.',
+    description:
+      'Log every set, follow your 3-day routine, and see 12 weeks of progress.',
     type: 'website',
-    images: [{ url: '/og.png', width: 1734, height: 909, alt: 'Liftline 12-week strength plan' }],
+    images: [
+      {
+        url: '/og.png',
+        width: 1734,
+        height: 909,
+        alt: 'Liftline 12-week strength plan',
+      },
+    ],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Liftline',
-    description: 'Log every set, follow your 3-day routine, and see 12 weeks of progress.',
+    description:
+      'Log every set, follow your 3-day routine, and see 12 weeks of progress.',
     images: ['/og.png'],
   },
 };
@@ -50,11 +69,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body
-        className={`${geistSans.variable} antialiased`}
-      >
-        {children}
-      </body>
+      <body className={`${geistSans.variable} antialiased`}>{children}</body>
     </html>
   );
 }
