@@ -40,50 +40,38 @@ The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgp
 
 ## Version history
 
-### v2.0.2 — Unified Liftline identity (6 September 2026)
+Minor fixes, visual refinements, and deployment maintenance are grouped into the nearest feature release so this history focuses on meaningful product changes.
 
-- Standardized the diagonal dumbbell mark across the in-app logo, favicon, Safari home-screen icon, and Chrome/PWA icons.
-- Added a subtle blue-to-indigo gradient while retaining the original Liftline visual identity.
-- Moved install-icon delivery to a public, cross-origin-safe source so private-site authentication does not prevent iOS Chrome from retrieving the artwork.
+### v2.0 series — Offline-ready training and deeper insights (6 September 2026)
 
-### v2.0.1 — Installed-app reliability (6 September 2026)
+- Made workout logging instant and offline-safe, with automatic retry and clear device/Google Sheet sync status.
+- Added personal-record detection, per-exercise progress charts, and detailed end-of-session summaries.
+- Added one-tap previous-session values, automatic rest timing, and optional completion alerts.
+- Made individual sessions flexible with exercise reordering, substitutions, skipping, custom exercises, and one-to-five-set controls.
+- Added downloadable backups with preview-first, non-destructive restore.
+- Improved installed-app reliability and cold-start speed so updates no longer leave an outdated, non-interactive screen.
+- Unified the Liftline diagonal dumbbell icon and blue-to-indigo gradient across the app, favicon, Safari, and Chrome/PWA installations.
 
-- Changed page navigation to network-first with an offline fallback, preventing an old app shell from requesting JavaScript files removed by a newer deployment.
-- Retained recent versioned assets during upgrades and enabled navigation preloading for faster cold launches.
-- Preserved all existing D1 workout records during the update.
+### v1.5 — Workout history and flexible session tools (3–4 September 2026)
 
-### v2.0.0 — Offline training and workout insights (6 September 2026)
-
-- Added offline-safe, optimistic workout saving with automatic retry and visible device/Google Sheet sync status.
-- Added personal-record detection, per-exercise progress charts, and completed-session summaries.
-- Added one-tap previous-session values and automatic exercise-aware rest timing with optional alerts.
-- Added session-specific reordering, substitutions, skipping, custom exercises, and one-to-five-set controls.
-- Added downloadable JSON backups and preview-first, non-destructive restore.
-
-### v1.6.0 — Flexible sets and timing (4 September 2026)
-
-- Added the rest timer and controls for adding or removing exercise sets.
-- Improved save responsiveness by moving Google Sheet mirroring into the background.
-- Corrected Google Sheet dates to use Liftline's Asia/Tokyo calendar day.
-
-### v1.5.0 — History and progression (3 September 2026)
-
-- Added previous-session values and dates beside the active exercise.
+- Added previous-session dates, weights, reps, and RIR beside each active exercise.
 - Added the responsive exercise-history grid, weekly volume overview, and rotating training tips.
-- Ensured new weeks start with empty weight and rep inputs while retaining earlier workouts for reference.
-- Improved the installed-app startup cache.
+- Added the rest timer and the ability to add or remove exercise sets.
+- Ensured each new week opens with empty inputs while earlier workouts remain available for reference.
+- Improved save responsiveness and corrected Google Sheet dates to use Liftline's Asia/Tokyo calendar day.
 
-### v1.4.0 — Google Sheet exchange (2 September 2026)
+### v1.4 — Google Sheet exchange (2 September 2026)
 
-- Added background sending to the existing Google Sheet workout log.
-- Added a separate import flow with a complete preview and protection for newer Liftline records.
+- Added background sending from Liftline to the existing Google Sheet workout log.
+- Added a separate import flow with a full preview and protection against overwriting newer Liftline records.
 
-### v1.3.0 — Mobile installation and public demo (1–2 September 2026)
+### v1.1 — Installable app and public demo (1–2 September 2026)
 
-- Added the Liftline home-screen name, install manifest, Safari/Chrome icons, and standalone display mode.
-- Split the owner-only tracker from a read-only public sample and added exercise video-search links.
+- Added home-screen installation, standalone display mode, and mobile icon support.
+- Split the owner-only workout tracker from a read-only public sample.
+- Added exercise video-search links and the first installed-app startup improvements.
 
-### v1.0.0 — Initial release (1 September 2026)
+### v1.0 — Initial release (1 September 2026)
 
 - Converted the 12-week, three-day spreadsheet routine into a responsive React workout tracker.
 - Added weight, rep, RIR, notes, completion, weekly progress, and D1-backed persistence.
