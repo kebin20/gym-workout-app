@@ -577,6 +577,76 @@ function NutritionGuideCard({
   );
 }
 
+function HistoryWeekDisclosure({
+  entry,
+  displayName,
+  defaultExpanded,
+}: {
+  entry: WorkoutEntry;
+  displayName: string;
+  defaultExpanded: boolean;
+}) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  const evenWeek = entry.week % 2 === 0;
+  const surfaceClass = evenWeek
+    ? 'border-blue-200/80 bg-blue-50/75'
+    : 'border-violet-200/80 bg-violet-50/75';
+  const weekClass = evenWeek
+    ? 'bg-blue-100 text-blue-700'
+    : 'bg-violet-100 text-violet-700';
+
+  return (
+    <div className={`overflow-hidden rounded-xl border ${surfaceClass}`}>
+      <button
+        type="button"
+        onClick={() => setExpanded((current) => !current)}
+        aria-expanded={expanded}
+        className="flex w-full items-center gap-2 px-3 py-2.5 text-left font-sans"
+      >
+        <span
+          className={`rounded-lg px-2 py-1 text-xs font-semibold ${weekClass}`}
+        >
+          Week {entry.week}
+        </span>
+        <span className="ml-auto text-xs text-muted-foreground">
+          {formatWorkoutDate(entry.completedAt ?? entry.updatedAt)}
+        </span>
+        <ChevronRight
+          className={`size-4 shrink-0 text-muted-foreground transition-transform ${expanded ? 'rotate-90' : ''}`}
+        />
+      </button>
+      {expanded && (
+        <div className="border-t border-current/5 px-3 pb-3 pt-2">
+          <div className="flex flex-wrap gap-1.5">
+            {loggedSets(entry).map((set) => (
+              <span
+                key={set.set}
+                className="rounded-lg border border-border/80 bg-card px-2 py-1 font-sans text-xs font-medium"
+              >
+                Set {set.set}:{' '}
+                {set.weight == null
+                  ? `${set.reps} ${displayName === 'Plank' ? 'sec' : 'reps'}`
+                  : `${set.weight} kg × ${set.reps}`}
+              </span>
+            ))}
+            {entry.rir != null && (
+              <span className="rounded-lg border border-primary/20 bg-accent px-2 py-1 font-sans text-xs font-medium text-primary">
+                RIR {entry.rir}
+              </span>
+            )}
+          </div>
+          {entry.notes && (
+            <p className="mt-2 flex gap-1.5 font-sans text-xs leading-relaxed text-muted-foreground">
+              <NotebookPen className="mt-0.5 size-3.5 shrink-0" />
+              {entry.notes}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function WorkoutApp() {
   const [view, setView] = useState<View>('today');
   const [activeWeek, setActiveWeek] = useState(1);
@@ -2734,7 +2804,8 @@ export function WorkoutApp() {
                   </CardTitle>
                   <CardDescription className="mt-1 font-sans">
                     Swipe between Day A, B, and C to review every completed
-                    exercise, set, and note.
+                    exercise, set, and note. The latest three weeks open by
+                    default; earlier weeks stay tucked away.
                   </CardDescription>
                 </div>
               </CardHeader>
@@ -2861,49 +2932,44 @@ export function WorkoutApp() {
                                     </div>
 
                                     {exerciseEntries.length > 0 ? (
-                                      <div className="mt-3 max-h-64 space-y-2 overflow-y-auto pr-1">
-                                        {exerciseEntries.map((entry) => (
-                                          <div
-                                            key={`${entry.week}-${entry.exerciseOrder}`}
-                                            className="rounded-xl bg-muted/55 px-3 py-2.5"
-                                          >
-                                            <div className="flex flex-wrap items-center justify-between gap-1 font-sans text-xs">
-                                              <span className="font-semibold text-foreground">
-                                                Week {entry.week}
-                                              </span>
-                                              <span className="text-muted-foreground">
-                                                {formatWorkoutDate(
-                                                  entry.completedAt ??
-                                                    entry.updatedAt,
-                                                )}
-                                              </span>
+                                      <div className="mt-3 max-h-96 space-y-2 overflow-y-auto pr-1">
+                                        {exerciseEntries
+                                          .slice(0, 3)
+                                          .map((entry) => (
+                                            <HistoryWeekDisclosure
+                                              key={`${entry.id ?? entry.week}-${entry.exerciseOrder}`}
+                                              entry={entry}
+                                              displayName={displayName}
+                                              defaultExpanded
+                                            />
+                                          ))}
+                                        {exerciseEntries.length > 3 && (
+                                          <details className="group overflow-hidden rounded-xl border border-border/80 bg-muted/35">
+                                            <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 font-sans text-xs font-semibold [&::-webkit-details-marker]:hidden">
+                                              <History className="size-4 text-muted-foreground" />
+                                              Earlier weeks
+                                              <Badge
+                                                variant="outline"
+                                                className="ml-auto bg-card font-sans"
+                                              >
+                                                {exerciseEntries.length - 3}
+                                              </Badge>
+                                              <ChevronRight className="size-4 text-muted-foreground transition-transform group-open:rotate-90" />
+                                            </summary>
+                                            <div className="space-y-2 border-t border-border/70 p-2">
+                                              {exerciseEntries
+                                                .slice(3)
+                                                .map((entry) => (
+                                                  <HistoryWeekDisclosure
+                                                    key={`${entry.id ?? entry.week}-${entry.exerciseOrder}`}
+                                                    entry={entry}
+                                                    displayName={displayName}
+                                                    defaultExpanded={false}
+                                                  />
+                                                ))}
                                             </div>
-                                            <div className="mt-2 flex flex-wrap gap-1.5">
-                                              {loggedSets(entry).map((set) => (
-                                                <span
-                                                  key={set.set}
-                                                  className="rounded-lg border border-border/80 bg-card px-2 py-1 font-sans text-xs font-medium"
-                                                >
-                                                  Set {set.set}:{' '}
-                                                  {set.weight == null
-                                                    ? `${set.reps} ${displayName === 'Plank' ? 'sec' : 'reps'}`
-                                                    : `${set.weight} kg × ${set.reps}`}
-                                                </span>
-                                              ))}
-                                              {entry.rir != null && (
-                                                <span className="rounded-lg border border-primary/20 bg-accent px-2 py-1 font-sans text-xs font-medium text-primary">
-                                                  RIR {entry.rir}
-                                                </span>
-                                              )}
-                                            </div>
-                                            {entry.notes && (
-                                              <p className="mt-2 flex gap-1.5 font-sans text-xs leading-relaxed text-muted-foreground">
-                                                <NotebookPen className="mt-0.5 size-3.5 shrink-0" />
-                                                {entry.notes}
-                                              </p>
-                                            )}
-                                          </div>
-                                        ))}
+                                          </details>
+                                        )}
                                       </div>
                                     ) : (
                                       <p className="mt-3 flex flex-1 items-center justify-center rounded-lg bg-muted/45 px-3 py-5 text-center font-sans text-xs text-muted-foreground">

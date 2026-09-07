@@ -44,6 +44,12 @@ The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgp
 
 Minor fixes, visual refinements, and deployment maintenance are grouped into the nearest feature release so this history focuses on meaningful product changes.
 
+### v2.3 — Scannable exercise history (7 September 2026)
+
+- Grouped each exercise’s records into expandable weekly categories.
+- Alternated week colours so adjacent records are easier to distinguish.
+- Kept the latest three weeks expanded while placing older records inside a collapsed Earlier weeks group.
+
 ### v2.2 — Nutrition guide (7 September 2026)
 
 - Added Nutrition as a fourth primary destination on mobile and desktop.
