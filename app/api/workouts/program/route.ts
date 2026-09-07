@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:workers';
 
-import { routine, type TrainingDay } from '@/lib/routine';
+import { routineForWeek, type TrainingDay } from '@/lib/routine';
 import {
   sessionExerciseSelectColumns,
   type SessionExercise,
@@ -31,7 +31,7 @@ function normalizedExercise(
   const candidate = value as Partial<SessionExercise>;
   const exerciseOrder = Number(candidate.exerciseOrder);
   const targetSets = Number(candidate.targetSets);
-  const base = routine.find(
+  const base = routineForWeek(week).find(
     (item) => item.day === day && item.order === exerciseOrder,
   );
   const custom = Boolean(candidate.custom) || exerciseOrder >= 100;
@@ -74,7 +74,7 @@ export async function POST(request: Request) {
     if (
       !Number.isInteger(week) ||
       week < 1 ||
-      week > 12 ||
+      week > 24 ||
       !['A', 'B', 'C'].includes(day)
     ) {
       return Response.json(

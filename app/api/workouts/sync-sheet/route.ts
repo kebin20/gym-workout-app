@@ -10,13 +10,13 @@ export async function POST() {
   try {
     if (!env.DB) throw new Error('Workout database is unavailable.');
     const results = await env.DB.prepare(
-      `SELECT ${workoutSelectColumns} FROM workout_entries WHERE completed = 1 AND exercise_order < 100 ORDER BY week, day, exercise_order`,
+      `SELECT ${workoutSelectColumns} FROM workout_entries WHERE completed = 1 AND exercise_order < 100 AND week <= 12 ORDER BY week, day, exercise_order`,
     ).all<WorkoutSheetEntry>();
     const sync = await syncWorkoutEntries(results.results);
 
     const now = new Date().toISOString();
     await env.DB.prepare(`UPDATE workout_entries SET sync_status = ?, sheet_synced_at = ?, sync_error = ?
-      WHERE completed = 1 AND exercise_order < 100`)
+      WHERE completed = 1 AND exercise_order < 100 AND week <= 12`)
       .bind(
         sync.ok ? 'synced' : 'failed',
         sync.ok ? now : null,

@@ -1,6 +1,6 @@
 # Liftline
 
-Liftline is a mobile-friendly workout tracker for a 12-week, three-day strength program. It turns the original spreadsheet routine into a clean, touch-first web app for logging weight, reps, RIR, notes, volume, and weekly progress.
+Liftline is a mobile-friendly workout tracker for two progressive 12-week, three-day strength phases. It turns the original spreadsheet routine and its specialized follow-up programme into a clean, touch-first web app for logging weight, reps, RIR, notes, volume, and weekly progress.
 
 Made with ChatGPT Codex
 
@@ -12,7 +12,10 @@ The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgp
 
 ## Features
 
-- Complete 12-week plan with Day A, B, and C workouts
+- Two complete 12-week plans with Day A, B, and C workouts
+- Locked Phase 2 transition after all 36 Phase 1 sessions are complete
+- Specialized Phase 2 programming with chest/quad, back/posterior-chain, and shoulders/arms emphasis
+- Phase-specific progress, workout history, guidance, and rotating training tips
 - Large mobile-friendly controls for entering weight, reps, and RIR
 - Per-exercise set controls supporting one to five saved sets
 - Exercise-aware rest timer with pause, resume, reset, and completion vibration where supported
@@ -43,6 +46,14 @@ The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgp
 ## Version history
 
 Minor fixes, visual refinements, and deployment maintenance are grouped into the nearest feature release so this history focuses on meaningful product changes.
+
+### v3.0 — Phase 2 progression (7 September 2026)
+
+- Added a compact phase selector that unlocks Phase 2 after all 36 Phase 1 sessions are complete.
+- Added a second 12-week specialized full-body programme with chest/quad, back/posterior-chain, and shoulders/arms training days based on the Phase 2 guide.
+- Kept Phase 1 and Phase 2 workout records, charts, history, personal records, session edits, tips, and guidance separate while preserving all existing data.
+- Added Phase 2 double-progression, free-weight transition, fatigue, deload, and cardio guidance.
+- Kept the legacy Google Sheet exchange scoped to Phase 1 because its original layout does not contain Phase 2 rows.
 
 ### v2.3 — Scannable exercise history (7 September 2026)
 
@@ -139,7 +150,7 @@ app/
   workout-app.tsx        Main responsive application interface
 db/schema.ts             Drizzle schema
 drizzle/                 Generated SQLite migrations
-lib/routine.ts           12-week routine and exercise definitions
+lib/routine.ts           Phase 1 and Phase 2 routine definitions
 lib/exercise-demos.ts    Animated movement-guide mapping and form cues
 public/                   Liftline icons and sharing artwork
 ```
@@ -150,7 +161,9 @@ Exercise GIFs are loaded only when a movement guide is opened. They are provided
 
 ## Data behavior
 
-Workout entries are keyed by week, day, and exercise. Saving an exercise creates or updates that entry, so a session can be resumed without duplicating records. The dashboard derives completion, session totals, training volume, and progression suggestions from the saved entries.
+Workout entries are keyed by internal programme week, day, and exercise. Phase 1 uses internal weeks 1–12 and Phase 2 uses 13–24 while each phase displays its own Week 1–12 sequence. Saving an exercise creates or updates that entry, so a session can be resumed without duplicating records. The dashboard derives completion, session totals, training volume, and progression suggestions from the saved entries.
+
+Phase 2 remains locked until all three sessions in every Phase 1 week are complete. Unlocking it never resets or replaces Phase 1 data; the phase selector can be used to revisit the original history at any time.
 
 If a workout is saved without a connection, Liftline keeps a temporary device queue and shows the workout immediately. The latest version of each queued exercise is sent to D1 automatically when the connection returns. The server rejects an older queued update when a newer version of the same exercise is already stored.
 
@@ -162,7 +175,7 @@ Session customizations are stored separately by week and day. Reordering, substi
 
 ## Google Sheet sync
 
-Liftline can exchange completed entries with the existing `Workout Log` layout. Each normal save updates its matching Week/Day/Exercise row, and the Progress screen includes a **Send to Google Sheet** button for backfilling all completed Liftline entries.
+Liftline can exchange completed Phase 1 entries with the existing `Workout Log` layout. Each normal Phase 1 save updates its matching Week/Day/Exercise row, and the Phase 1 Progress screen includes a **Send to Google Sheet** button for backfilling completed Liftline entries. Phase 2 stays in Liftline and its downloadable backups because the original Sheet has no Phase 2 rows.
 
 Normal saves return as soon as Liftline's database has stored the workout, while Google Sheet mirroring continues in the background. Because the existing sheet layout contains three set pairs, sets 4–5 remain stored and visible in Liftline while the first three sets are mirrored to Google Sheets.
 

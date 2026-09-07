@@ -47,7 +47,7 @@ function normalizeWorkout(value: unknown): WorkoutEntry | null {
   if (
     !Number.isInteger(week) ||
     week < 1 ||
-    week > 12 ||
+    week > 24 ||
     !validDay(entry.day) ||
     !Number.isInteger(exerciseOrder) ||
     exerciseOrder < 1 ||
@@ -93,7 +93,7 @@ function normalizeSessionExercise(value: unknown): SessionExercise | null {
   if (
     !Number.isInteger(week) ||
     week < 1 ||
-    week > 12 ||
+    week > 24 ||
     !validDay(exercise.day) ||
     !Number.isInteger(exerciseOrder) ||
     exerciseOrder < 1 ||
@@ -132,7 +132,7 @@ function parseBackup(value: unknown) {
   ) {
     throw new Error('This backup is missing Liftline workout data.');
   }
-  if (backup.entries.length > 500 || backup.sessionExercises.length > 360) {
+  if (backup.entries.length > 1000 || backup.sessionExercises.length > 720) {
     throw new Error(
       'This backup contains more records than Liftline supports.',
     );

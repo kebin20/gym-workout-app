@@ -36,6 +36,7 @@ import {
   Home,
   ImageOff,
   Loader2,
+  LockKeyhole,
   Medal,
   Minus,
   NotebookPen,
@@ -51,6 +52,7 @@ import {
   TimerReset,
   Trash2,
   TrendingUp,
+  UnlockKeyhole,
   Upload,
 } from 'lucide-react';
 
@@ -86,7 +88,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { exerciseDemoFor, exerciseDemoSource } from '@/lib/exercise-demos';
 import {
   days,
-  routine,
+  displayWeekNumber,
+  phase2Emphasis,
+  routineForWeek,
   targetLabel,
   workingSetsForWeek,
   type RoutineExercise,
@@ -170,6 +174,7 @@ type SheetImportPreview = {
 const workoutCacheKey = 'liftline.workout-entries.v1';
 const sessionExerciseCacheKey = 'liftline.session-exercises.v1';
 const pendingWorkoutKey = 'liftline.pending-workouts.v1';
+const activeWeekPreferenceKey = 'liftline.active-week.v1';
 const setNumbers = [1, 2, 3, 4, 5] as const;
 
 const emptyDraft: Draft = {
@@ -295,7 +300,8 @@ function optimisticEntry(
     completed: payload.completed,
     completedAt: payload.completedAt,
     updatedAt: payload.clientUpdatedAt,
-    syncStatus: exercise.custom ? 'not_applicable' : 'pending',
+    syncStatus:
+      exercise.custom || payload.week > 12 ? 'not_applicable' : 'pending',
     sheetSyncedAt: null,
     syncError: null,
     offlinePending: true,
@@ -325,6 +331,18 @@ const weekDates = [
   'Oct 28–Nov 3',
   'Nov 4–10',
   'Nov 11–17',
+  'Nov 18–24',
+  'Nov 25–Dec 1',
+  'Dec 2–8',
+  'Dec 9–15',
+  'Dec 16–22',
+  'Dec 23–29',
+  'Dec 30–Jan 5',
+  'Jan 6–12',
+  'Jan 13–19',
+  'Jan 20–26',
+  'Jan 27–Feb 2',
+  'Feb 3–9',
 ];
 
 const trainingTips = [
@@ -371,6 +389,33 @@ const trainingTips = [
   {
     title: 'Use pain as a stop signal',
     body: 'Muscle effort is expected, but sharp or unusual joint pain is not. Stop the movement and reassess your setup.',
+  },
+] as const;
+
+const phase2TrainingTips = [
+  {
+    title: 'Use double progression',
+    body: 'Keep the load while building reps inside the range. Add the smallest practical increment once every set reaches the top with stable technique and target RIR.',
+  },
+  {
+    title: 'Build free-weight skill gradually',
+    body: 'Start with about one major free-weight movement per session, conservative loads, and repeatable technique before adding more exposure.',
+  },
+  {
+    title: 'Warm up for the first compound',
+    body: 'Use 2–4 ramp sets before the first major lift. Later exercises usually need only 0–2 quick warm-up sets.',
+  },
+  {
+    title: 'Keep compounds shy of failure',
+    body: 'Most primary compounds belong around 1–3 RIR. End the set when technique changes significantly, even if another rough rep is possible.',
+  },
+  {
+    title: 'Watch accumulated fatigue',
+    body: 'If performance drops for two sessions alongside poor sleep, soreness, or joint discomfort, reduce accessory work first and consider a deload if it persists.',
+  },
+  {
+    title: 'Fit cardio around recovery',
+    body: 'Use 1–2 conversational incline sessions of 20–40 minutes and avoid hard hill work immediately before a lower-body-heavy day.',
   },
 ] as const;
 
@@ -456,6 +501,47 @@ function loggedSets(entry: WorkoutEntry) {
     const reps = entry[`set${set}Reps`];
     if (reps == null) return [];
     return [{ set, weight, reps }];
+  });
+}
+
+function weeklySummariesForPhase(
+  entries: WorkoutEntry[],
+  sessionExercises: SessionExercise[],
+  startWeek: number,
+) {
+  return Array.from({ length: 12 }, (_, index) => {
+    const storageWeek = startWeek + index;
+    const weekEntries = entries.filter(
+      (entry) => entry.week === storageWeek && entry.completed,
+    );
+    const sessions = days.filter((day) => {
+      const required = planForSession(
+        sessionExercises,
+        storageWeek,
+        day,
+      ).filter((item) => !item.skipped);
+      return (
+        required.length > 0 &&
+        required.every((item) =>
+          weekEntries.some(
+            (entry) => entry.day === day && entry.exerciseOrder === item.order,
+          ),
+        )
+      );
+    }).length;
+    return {
+      week: index + 1,
+      storageWeek,
+      rows: weekEntries.length,
+      sessions,
+      volume:
+        Math.round(
+          weekEntries.reduce((sum, entry) => sum + entryVolume(entry), 0) * 10,
+        ) / 10,
+      dayA: weekEntries.filter((entry) => entry.day === 'A').length,
+      dayB: weekEntries.filter((entry) => entry.day === 'B').length,
+      dayC: weekEntries.filter((entry) => entry.day === 'C').length,
+    };
   });
 }
 
@@ -606,7 +692,7 @@ function HistoryWeekDisclosure({
         <span
           className={`rounded-lg px-2 py-1 text-xs font-semibold ${weekClass}`}
         >
-          Week {entry.week}
+          Week {displayWeekNumber(entry.week)}
         </span>
         <span className="ml-auto text-xs text-muted-foreground">
           {formatWorkoutDate(entry.completedAt ?? entry.updatedAt)}
@@ -694,8 +780,18 @@ export function WorkoutApp() {
   const [exerciseDemoOpen, setExerciseDemoOpen] = useState(false);
   const [exerciseDemoVariantIndex, setExerciseDemoVariantIndex] = useState(0);
   const [exerciseDemoImageFailed, setExerciseDemoImageFailed] = useState(false);
+  const [phaseUnlockOpen, setPhaseUnlockOpen] = useState(false);
   const [progressExerciseKey, setProgressExerciseKey] = useState('A|1');
   const restTimerEndsAt = useRef<number | null>(null);
+  const activeWeekPreferenceApplied = useRef(false);
+
+  const activePhase = activeWeek > 12 ? 2 : 1;
+  const phaseStartWeek = activePhase === 1 ? 1 : 13;
+  const phaseEndWeek = phaseStartWeek + 11;
+  const activeDisplayWeek = displayWeekNumber(activeWeek);
+  const activeRoutine = routineForWeek(activeWeek);
+  const activeTrainingTips =
+    activePhase === 1 ? trainingTips : phase2TrainingTips;
 
   const dayExercises = useMemo(
     () => planForSession(sessionExercises, activeWeek, activeDay),
@@ -716,6 +812,7 @@ export function WorkoutApp() {
         exercise &&
         entry.completed &&
         entry.week < activeWeek &&
+        entry.week >= phaseStartWeek &&
         entry.day === activeDay &&
         entry.exerciseOrder === exercise.order,
     )
@@ -870,8 +967,8 @@ export function WorkoutApp() {
         if (cancelled) return;
         setActiveTipIndex((current) => {
           const offset =
-            1 + Math.floor(Math.random() * (trainingTips.length - 1));
-          return (current + offset) % trainingTips.length;
+            1 + Math.floor(Math.random() * (activeTrainingTips.length - 1));
+          return (current + offset) % activeTrainingTips.length;
         });
         scheduleNextTip();
       }, delay);
@@ -882,7 +979,7 @@ export function WorkoutApp() {
       cancelled = true;
       if (tipTimer != null) window.clearTimeout(tipTimer);
     };
-  }, []);
+  }, [activeTrainingTips.length]);
 
   useEffect(() => {
     const current = entries.find(
@@ -947,45 +1044,40 @@ export function WorkoutApp() {
     return () => window.clearInterval(timer);
   }, [exercise.name, restTimerRunning]);
 
-  const weeklySummaries = useMemo(
-    () =>
-      Array.from({ length: 12 }, (_, index) => {
-        const week = index + 1;
-        const weekEntries = entries.filter(
-          (entry) => entry.week === week && entry.completed,
-        );
-        const sessions = days.filter((day) => {
-          const required = planForSession(sessionExercises, week, day).filter(
-            (item) => !item.skipped,
-          );
-          return (
-            required.length > 0 &&
-            required.every((item) =>
-              weekEntries.some(
-                (entry) =>
-                  entry.day === day && entry.exerciseOrder === item.order,
-              ),
-            )
-          );
-        }).length;
-        return {
-          week,
-          rows: weekEntries.length,
-          sessions,
-          volume:
-            Math.round(
-              weekEntries.reduce((sum, entry) => sum + entryVolume(entry), 0) *
-                10,
-            ) / 10,
-          dayA: weekEntries.filter((entry) => entry.day === 'A').length,
-          dayB: weekEntries.filter((entry) => entry.day === 'B').length,
-          dayC: weekEntries.filter((entry) => entry.day === 'C').length,
-        };
-      }),
+  const phaseOneWeeklySummaries = useMemo(
+    () => weeklySummariesForPhase(entries, sessionExercises, 1),
     [entries, sessionExercises],
   );
+  const phaseTwoWeeklySummaries = useMemo(
+    () => weeklySummariesForPhase(entries, sessionExercises, 13),
+    [entries, sessionExercises],
+  );
+  const weeklySummaries =
+    activePhase === 1 ? phaseOneWeeklySummaries : phaseTwoWeeklySummaries;
+  const phaseOneSessions = phaseOneWeeklySummaries.reduce(
+    (sum, week) => sum + week.sessions,
+    0,
+  );
+  const phaseTwoUnlocked = phaseOneSessions === 36;
 
-  const currentSummary = weeklySummaries[activeWeek - 1];
+  useEffect(() => {
+    if (loading || activeWeekPreferenceApplied.current) return;
+    activeWeekPreferenceApplied.current = true;
+    const savedWeek = Number(
+      window.localStorage.getItem(activeWeekPreferenceKey),
+    );
+    if (
+      Number.isInteger(savedWeek) &&
+      savedWeek >= 1 &&
+      savedWeek <= 24 &&
+      (savedWeek <= 12 || phaseTwoUnlocked)
+    ) {
+      const restore = window.setTimeout(() => setActiveWeek(savedWeek), 0);
+      return () => window.clearTimeout(restore);
+    }
+  }, [loading, phaseTwoUnlocked]);
+
+  const currentSummary = weeklySummaries[activeDisplayWeek - 1];
   const sessionsDone = currentSummary.sessions;
   const weeklyPercent = Math.round((sessionsDone / 3) * 100);
   const totalVolume = weeklySummaries.reduce(
@@ -997,7 +1089,17 @@ export function WorkoutApp() {
     (sum, week) => sum + week.sessions,
     0,
   );
-  const totalRecords = useMemo(() => totalPersonalRecords(entries), [entries]);
+  const phaseEntries = useMemo(
+    () =>
+      entries.filter(
+        (entry) => entry.week >= phaseStartWeek && entry.week <= phaseEndWeek,
+      ),
+    [entries, phaseEndWeek, phaseStartWeek],
+  );
+  const totalRecords = useMemo(
+    () => totalPersonalRecords(phaseEntries),
+    [phaseEntries],
+  );
   const advice = progressionAdvice(exercise, draft, visibleSetCount);
   const readyToSave = draft.sets
     .slice(0, visibleSetCount)
@@ -1021,17 +1123,20 @@ export function WorkoutApp() {
     0,
   );
   const currentSessionRecords = currentSessionEntries.reduce(
-    (sum, entry) => sum + personalRecordsFor(entry, entries).length,
+    (sum, entry) => sum + personalRecordsFor(entry, phaseEntries).length,
     0,
   );
-  const previousSessionVolume = entries
-    .filter(
-      (entry) =>
-        entry.completed &&
-        entry.week === activeWeek - 1 &&
-        entry.day === activeDay,
-    )
-    .reduce((sum, entry) => sum + entryVolume(entry), 0);
+  const previousSessionVolume =
+    activeWeek > phaseStartWeek
+      ? entries
+          .filter(
+            (entry) =>
+              entry.completed &&
+              entry.week === activeWeek - 1 &&
+              entry.day === activeDay,
+          )
+          .reduce((sum, entry) => sum + entryVolume(entry), 0)
+      : 0;
   const sessionTimes = currentSessionEntries
     .map((entry) => Date.parse(entry.completedAt ?? ''))
     .filter(Number.isFinite)
@@ -1045,7 +1150,7 @@ export function WorkoutApp() {
       : null;
   const progressExerciseOptions = useMemo(() => {
     const customByKey = new Map<string, RoutineExercise>();
-    entries
+    phaseEntries
       .filter((entry) => entry.exerciseOrder >= 100)
       .forEach((entry) => {
         const key = `${entry.day}|${entry.exerciseOrder}`;
@@ -1061,8 +1166,8 @@ export function WorkoutApp() {
             alternative: 'None',
           });
       });
-    return [...routine, ...customByKey.values()];
-  }, [entries]);
+    return [...activeRoutine, ...customByKey.values()];
+  }, [activeRoutine, phaseEntries]);
   const selectedProgressExercise =
     progressExerciseOptions.find(
       (item) => `${item.day}|${item.order}` === progressExerciseKey,
@@ -1071,11 +1176,16 @@ export function WorkoutApp() {
     .filter(
       (entry) =>
         entry.completed &&
+        entry.week >= phaseStartWeek &&
+        entry.week <= phaseEndWeek &&
         entry.day === selectedProgressExercise.day &&
         entry.exerciseOrder === selectedProgressExercise.order,
     )
     .sort((left, right) => left.week - right.week)
-    .map((entry) => ({ week: entry.week, ...workoutMetrics(entry) }));
+    .map((entry) => ({
+      week: displayWeekNumber(entry.week),
+      ...workoutMetrics(entry),
+    }));
   const latestSheetSyncedAt = entries
     .map((entry) => (entry.sheetSyncedAt ? Date.parse(entry.sheetSyncedAt) : 0))
     .reduce((latest, value) => Math.max(latest, value), 0);
@@ -1090,6 +1200,31 @@ export function WorkoutApp() {
     .every((item) =>
       currentSessionEntries.some((entry) => entry.exerciseOrder === item.order),
     );
+
+  function selectPhase(phase: 1 | 2) {
+    if (phase === 2 && !phaseTwoUnlocked) {
+      setPhaseUnlockOpen(true);
+      return;
+    }
+    const nextWeek = phase === 1 ? 12 : 13;
+    setActiveWeek(nextWeek);
+    window.localStorage.setItem(activeWeekPreferenceKey, String(nextWeek));
+    setActiveDay('A');
+    setActiveIndex(0);
+    setActiveTipIndex(0);
+    setProgressExerciseKey('A|1');
+    setView('today');
+    setNotice(
+      phase === 1
+        ? 'Phase 1 opened. Your original 12-week history is unchanged.'
+        : 'Phase 2 unlocked. Your specialized full-body block is ready.',
+    );
+  }
+
+  function selectWeek(week: number) {
+    setActiveWeek(week);
+    window.localStorage.setItem(activeWeekPreferenceKey, String(week));
+  }
 
   function chooseDay(day: TrainingDay) {
     setActiveDay(day);
@@ -1224,7 +1359,7 @@ export function WorkoutApp() {
       clientUpdatedAt: now,
     };
     const localEntry = optimisticEntry(payload, exercise);
-    const records = personalRecordsFor(localEntry, entries);
+    const records = personalRecordsFor(localEntry, phaseEntries);
     const nextEntries = replaceWorkoutEntry(entries, localEntry);
     setEntries(nextEntries);
     cacheWorkoutEntries(nextEntries);
@@ -1533,7 +1668,9 @@ export function WorkoutApp() {
       });
       setActiveIndex(0);
       setProgramOpen(false);
-      setNotice(`Week ${activeWeek} · Day ${activeDay} updated.`);
+      setNotice(
+        `Phase ${activePhase} · Week ${activeDisplayWeek} · Day ${activeDay} updated.`,
+      );
     } catch (programError) {
       setError(
         programError instanceof Error
@@ -1656,7 +1793,7 @@ export function WorkoutApp() {
                 Liftline
               </span>
               <span className="block font-sans text-xs text-muted-foreground">
-                12-week strength plan
+                Phase {activePhase} · 12-week strength plan
               </span>
             </span>
           </button>
@@ -1771,6 +1908,45 @@ export function WorkoutApp() {
           )}
         </div>
 
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/80 bg-card px-3 py-2.5 shadow-sm shadow-slate-900/5">
+          <div className="min-w-0">
+            <p className="font-sans text-xs font-semibold text-foreground">
+              Training programme
+            </p>
+            <p className="font-sans text-xs text-muted-foreground">
+              {activePhase === 1
+                ? `${phaseOneSessions} of 36 Phase 1 sessions complete`
+                : 'Specialized full-body + free-weight progression'}
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-1 rounded-xl bg-muted p-1">
+            <Button
+              type="button"
+              size="sm"
+              variant={activePhase === 1 ? 'secondary' : 'ghost'}
+              className="font-sans"
+              onClick={() => selectPhase(1)}
+            >
+              Phase 1
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={activePhase === 2 ? 'secondary' : 'ghost'}
+              className="font-sans"
+              onClick={() => selectPhase(2)}
+              aria-label={
+                phaseTwoUnlocked
+                  ? 'Open Phase 2'
+                  : `Phase 2 locked, ${phaseOneSessions} of 36 sessions complete`
+              }
+            >
+              {phaseTwoUnlocked ? <UnlockKeyhole /> : <LockKeyhole />}
+              Phase 2
+            </Button>
+          </div>
+        </div>
+
         {view === 'today' && (
           <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_320px]">
             <section className="min-w-0 space-y-5">
@@ -1787,12 +1963,15 @@ export function WorkoutApp() {
                       id="week"
                       value={activeWeek}
                       onChange={(event) =>
-                        setActiveWeek(Number(event.target.value))
+                        selectWeek(Number(event.target.value))
                       }
                       className="h-9 rounded-lg border bg-card px-3 text-sm font-semibold outline-none focus:ring-3 focus:ring-ring/30"
                     >
                       {Array.from({ length: 12 }, (_, index) => (
-                        <option key={index + 1} value={index + 1}>
+                        <option
+                          key={phaseStartWeek + index}
+                          value={phaseStartWeek + index}
+                        >
                           Week {index + 1}
                         </option>
                       ))}
@@ -1819,7 +1998,7 @@ export function WorkoutApp() {
               <Card className="border-0 text-primary-foreground ring-0 shadow-xl shadow-primary/10 [background:var(--hero)]">
                 <CardHeader className="pb-1">
                   <CardTitle className="font-sans text-lg font-semibold text-primary-foreground">
-                    Week {activeWeek} progress
+                    Phase {activePhase} · Week {activeDisplayWeek} progress
                   </CardTitle>
                   <CardDescription className="font-sans text-primary-foreground/90">
                     {sessionsDone === 3
@@ -2027,7 +2206,7 @@ export function WorkoutApp() {
                                 previousEntry.completedAt ??
                                   previousEntry.updatedAt,
                               )}{' '}
-                              · Week {previousEntry.week}
+                              · Week {displayWeekNumber(previousEntry.week)}
                             </p>
                           )}
                         </div>
@@ -2076,7 +2255,7 @@ export function WorkoutApp() {
                           <Minus className="size-5" />
                         </span>
                         <h3 className="mt-3 font-sans text-lg font-semibold">
-                          Skipped for Week {activeWeek}
+                          Skipped for Week {activeDisplayWeek}
                         </h3>
                         <p className="mt-1 font-sans text-sm leading-relaxed text-muted-foreground">
                           This exercise does not count against Day {activeDay}{' '}
@@ -2348,7 +2527,9 @@ export function WorkoutApp() {
             <aside className="space-y-5">
               <Card>
                 <CardHeader>
-                  <CardTitle className="font-sans">Week {activeWeek}</CardTitle>
+                  <CardTitle className="font-sans">
+                    Phase {activePhase} · Week {activeDisplayWeek}
+                  </CardTitle>
                   <CardDescription className="font-sans">
                     {weekDates[activeWeek - 1]}
                   </CardDescription>
@@ -2433,13 +2614,13 @@ export function WorkoutApp() {
                 aria-live="polite"
                 aria-atomic="true"
               >
-                <CardHeader key={trainingTips[activeTipIndex].title}>
+                <CardHeader key={activeTrainingTips[activeTipIndex].title}>
                   <CardTitle className="flex items-center gap-2 font-sans text-warning-foreground">
                     <Target className="size-4" />{' '}
-                    {trainingTips[activeTipIndex].title}
+                    {activeTrainingTips[activeTipIndex].title}
                   </CardTitle>
                   <CardDescription className="font-sans leading-relaxed text-warning-foreground/80">
-                    {trainingTips[activeTipIndex].body}
+                    {activeTrainingTips[activeTipIndex].body}
                   </CardDescription>
                 </CardHeader>
               </Card>
@@ -2451,13 +2632,15 @@ export function WorkoutApp() {
           <section>
             <div className="mb-6">
               <p className="font-sans text-sm font-semibold text-primary">
-                YOUR ROUTINE
+                PHASE {activePhase} ROUTINE
               </p>
               <h1 className="font-sans text-3xl font-bold tracking-tight">
-                Three balanced full-body days.
+                {activePhase === 1
+                  ? 'Three balanced full-body days.'
+                  : 'Specialized full-body progression.'}
               </h1>
               <p className="mt-1 font-sans text-muted-foreground">
-                Tap any day to start logging it for week {activeWeek}.
+                Tap any day to start logging it for week {activeDisplayWeek}.
               </p>
             </div>
             <div className="grid gap-5 lg:grid-cols-3">
@@ -2489,7 +2672,13 @@ export function WorkoutApp() {
                         active exercises
                       </CardTitle>
                       <CardDescription className="font-sans">
-                        Week {activeWeek} · changes apply only to this session
+                        {activePhase === 2 && (
+                          <span className="mb-1 block font-semibold text-foreground">
+                            {phase2Emphasis[day]}
+                          </span>
+                        )}
+                        Week {activeDisplayWeek} · changes apply only to this
+                        session
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-2">
@@ -2536,7 +2725,7 @@ export function WorkoutApp() {
                           openProgramEditor(day);
                         }}
                       >
-                        <Settings2 /> Edit Week {activeWeek}
+                        <Settings2 /> Edit Week {activeDisplayWeek}
                       </Button>
                     </CardContent>
                   </Card>
@@ -2554,7 +2743,7 @@ export function WorkoutApp() {
                   TRAINING SUMMARY
                 </p>
                 <h1 className="font-sans text-3xl font-bold tracking-tight">
-                  Progress across 12 weeks.
+                  Phase {activePhase} progress across 12 weeks.
                 </h1>
                 <p className="mt-1 font-sans text-muted-foreground">
                   The same core KPIs and weekly totals as your spreadsheet,
@@ -2562,32 +2751,36 @@ export function WorkoutApp() {
                 </p>
               </div>
               <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
-                <Button
-                  variant="outline"
-                  className="font-sans"
-                  disabled={loadingImport || importingSheet || loading}
-                  onClick={previewGoogleSheetImport}
-                >
-                  {loadingImport ? (
-                    <Loader2 className="animate-spin" />
-                  ) : (
-                    <Download />
-                  )}{' '}
-                  {loadingImport ? 'Checking…' : 'Import from Google Sheet'}
-                </Button>
-                <Button
-                  variant="outline"
-                  className="font-sans"
-                  disabled={syncingSheet || loading}
-                  onClick={syncGoogleSheet}
-                >
-                  {syncingSheet ? (
-                    <Loader2 className="animate-spin" />
-                  ) : (
-                    <FileSpreadsheet />
-                  )}{' '}
-                  {syncingSheet ? 'Sending…' : 'Send to Google Sheet'}
-                </Button>
+                {activePhase === 1 && (
+                  <>
+                    <Button
+                      variant="outline"
+                      className="font-sans"
+                      disabled={loadingImport || importingSheet || loading}
+                      onClick={previewGoogleSheetImport}
+                    >
+                      {loadingImport ? (
+                        <Loader2 className="animate-spin" />
+                      ) : (
+                        <Download />
+                      )}{' '}
+                      {loadingImport ? 'Checking…' : 'Import from Google Sheet'}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="font-sans"
+                      disabled={syncingSheet || loading}
+                      onClick={syncGoogleSheet}
+                    >
+                      {syncingSheet ? (
+                        <Loader2 className="animate-spin" />
+                      ) : (
+                        <FileSpreadsheet />
+                      )}{' '}
+                      {syncingSheet ? 'Sending…' : 'Send to Google Sheet'}
+                    </Button>
+                  </>
+                )}
                 <Button
                   variant="outline"
                   className="font-sans"
@@ -2683,7 +2876,7 @@ export function WorkoutApp() {
                       type="button"
                       key={week.week}
                       onClick={() => {
-                        setActiveWeek(week.week);
+                        selectWeek(week.storageWeek);
                         setView('today');
                       }}
                       className="flex w-full items-center gap-3 rounded-xl p-2 text-left hover:bg-muted"
@@ -2817,7 +3010,11 @@ export function WorkoutApp() {
                   <CarouselContent>
                     {days.map((day) => {
                       const dayEntries = entries.filter(
-                        (entry) => entry.completed && entry.day === day,
+                        (entry) =>
+                          entry.completed &&
+                          entry.week >= phaseStartWeek &&
+                          entry.week <= phaseEndWeek &&
+                          entry.day === day,
                       );
                       const sessionCount = new Set(
                         dayEntries.map((entry) => entry.week),
@@ -2845,7 +3042,7 @@ export function WorkoutApp() {
                             });
                         });
                       const dayExercises = [
-                        ...routine.filter((item) => item.day === day),
+                        ...activeRoutine.filter((item) => item.day === day),
                         ...customHistory.values(),
                       ];
                       const dayColor =
@@ -3309,7 +3506,120 @@ export function WorkoutApp() {
           </section>
         )}
 
-        {view === 'guide' && (
+        {view === 'guide' && activePhase === 2 && (
+          <section>
+            <div className="mb-6">
+              <p className="font-sans text-sm font-semibold text-primary">
+                PHASE 2 GUIDE
+              </p>
+              <h1 className="font-sans text-3xl font-bold tracking-tight">
+                Specialize without losing balance.
+              </h1>
+              <p className="mt-1 max-w-3xl font-sans text-muted-foreground">
+                Keep the proven three-day habit, add targeted volume, and build
+                free-weight skill gradually while every major muscle still gets
+                trained at least twice each week.
+              </p>
+            </div>
+            <div className="grid gap-5 lg:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="font-sans">How to progress</CardTitle>
+                  <CardDescription className="font-sans">
+                    Double progression · most compounds at 1–3 RIR
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {[
+                    [
+                      'Build reps first',
+                      'Keep the same load while repetitions improve inside the prescribed range.',
+                    ],
+                    [
+                      'Earn the load increase',
+                      'Add the smallest practical increment when all sets reach the top with stable technique and target RIR.',
+                    ],
+                    [
+                      'Never require failure',
+                      'A set ends when technique changes significantly, even if another rough repetition is possible.',
+                    ],
+                    [
+                      'Use appropriate jumps',
+                      'Upper-body compounds often rise by 1–2.5 kg total; lower-body compounds by 2.5–5 kg when equipment allows.',
+                    ],
+                  ].map(([title, description], index) => (
+                    <div
+                      key={title}
+                      className="flex gap-3 rounded-xl border border-border/70 p-3"
+                    >
+                      <span className="grid size-8 shrink-0 place-items-center rounded-full bg-accent font-sans text-sm font-bold text-primary">
+                        {index + 1}
+                      </span>
+                      <div>
+                        <p className="font-sans font-semibold">{title}</p>
+                        <p className="mt-1 font-sans text-sm leading-relaxed text-muted-foreground">
+                          {description}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+
+              <div className="space-y-5">
+                <Card className="bg-accent/35 ring-primary/15">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 font-sans">
+                      <Dumbbell className="size-5 text-primary" /> Free-weight
+                      transition
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2 font-sans text-sm leading-relaxed text-muted-foreground">
+                    <p>
+                      Weeks 1–2: use about one major free-weight movement per
+                      session with conservative loads and 2–4 ramp sets.
+                    </p>
+                    <p>
+                      Weeks 3–4: move toward two major free-weight movements
+                      when technique and recovery are good. Keep machines and
+                      cables for controlled accessory work.
+                    </p>
+                    <p className="font-medium text-foreground">
+                      Machine, barbell and dumbbell loads are not directly
+                      interchangeable.
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-warning-soft ring-warning/20">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 font-sans text-warning-foreground">
+                      <ShieldCheck className="size-5" /> Recovery guardrails
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2 font-sans text-sm leading-relaxed text-warning-foreground/85">
+                    <p>
+                      Separate lifting days when practical. If performance falls
+                      across two sessions alongside poor sleep, soreness or
+                      joint discomfort, reduce accessory work first.
+                    </p>
+                    <p>
+                      If fatigue persists, deload by cutting working sets about
+                      30–50%, using moderate loads, and finishing around 3–4
+                      RIR.
+                    </p>
+                    <p>
+                      Keep incline cardio conversational for 20–40 minutes and
+                      avoid hard hill work before a lower-body-heavy day.
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {view === 'guide' && activePhase === 1 && (
           <section>
             <div className="mb-6">
               <p className="font-sans text-sm font-semibold text-primary">
@@ -3434,6 +3744,71 @@ export function WorkoutApp() {
           </section>
         )}
       </div>
+
+      <Dialog open={phaseUnlockOpen} onOpenChange={setPhaseUnlockOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 font-sans text-xl">
+              <span className="grid size-9 place-items-center rounded-xl bg-accent text-primary">
+                <LockKeyhole className="size-5" />
+              </span>
+              Phase 2 unlocks after Phase 1
+            </DialogTitle>
+            <DialogDescription className="font-sans leading-relaxed">
+              Finish all three sessions in each of the 12 Phase 1 weeks. Your
+              existing workout history will remain available when the next
+              programme opens.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-2xl bg-secondary/65 p-4">
+              <div className="flex items-end justify-between gap-3 font-sans">
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Phase 1 progress
+                  </p>
+                  <p className="mt-1 text-2xl font-bold">
+                    {phaseOneSessions} of 36 sessions
+                  </p>
+                </div>
+                <p className="text-sm font-semibold text-primary">
+                  {Math.round((phaseOneSessions / 36) * 100)}%
+                </p>
+              </div>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-primary transition-[width]"
+                  style={{ width: `${(phaseOneSessions / 36) * 100}%` }}
+                />
+              </div>
+            </div>
+            <div className="space-y-2 font-sans text-sm">
+              <p className="font-semibold">Waiting in Phase 2</p>
+              {[
+                'Day A · Chest + quad emphasis · 7 exercises',
+                'Day B · Back + posterior-chain emphasis · 7 exercises',
+                'Day C · Shoulders + arms emphasis · 9 exercises',
+              ].map((item) => (
+                <p
+                  key={item}
+                  className="rounded-xl border border-border/70 px-3 py-2 text-muted-foreground"
+                >
+                  {item}
+                </p>
+              ))}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              className="w-full sm:w-auto"
+              onClick={() => setPhaseUnlockOpen(false)}
+            >
+              Keep training Phase 1
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={exerciseDemoOpen}
@@ -3574,7 +3949,7 @@ export function WorkoutApp() {
           <DialogHeader className="px-5 pt-5">
             <DialogTitle className="flex items-center gap-2 font-sans text-lg font-semibold">
               <Settings2 className="size-5 text-primary" /> Edit Week{' '}
-              {activeWeek} · Day {activeDay}
+              {activeDisplayWeek} · Day {activeDay}
             </DialogTitle>
             <DialogDescription className="font-sans">
               Reorder, substitute, skip, or add exercises for this session only.
@@ -3796,8 +4171,8 @@ export function WorkoutApp() {
         <DialogContent className="max-h-[calc(100dvh-1.5rem)] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 font-sans text-xl">
-              <Sparkles className="size-5 text-primary" /> Week {activeWeek} ·
-              Day {activeDay}
+              <Sparkles className="size-5 text-primary" /> Phase {activePhase} ·
+              Week {activeDisplayWeek} · Day {activeDay}
             </DialogTitle>
             <DialogDescription className="font-sans">
               Your completed session at a glance.

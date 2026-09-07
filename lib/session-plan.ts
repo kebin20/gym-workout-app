@@ -1,4 +1,8 @@
-import { routine, type RoutineExercise, type TrainingDay } from '@/lib/routine';
+import {
+  routineForWeek,
+  type RoutineExercise,
+  type TrainingDay,
+} from '@/lib/routine';
 import type { SessionExercise } from '@/lib/workout-types';
 
 export type PlannedExercise = RoutineExercise & {
@@ -11,7 +15,7 @@ export function defaultSessionPlan(
   week: number,
   day: TrainingDay,
 ): SessionExercise[] {
-  return routine
+  return routineForWeek(week)
     .filter((exercise) => exercise.day === day)
     .map((exercise, index) => ({
       week,

@@ -2,7 +2,7 @@ import { env, waitUntil } from 'cloudflare:workers';
 
 import { syncWorkoutEntries } from '@/lib/google-sheet-sync';
 import {
-  routine,
+  routineForWeek,
   targetLabel,
   type RoutineExercise,
   type TrainingDay,
@@ -89,7 +89,7 @@ async function resolveExercise(
       custom: Boolean(sessionExercise.custom),
     };
 
-  const exercise = routine.find(
+  const exercise = routineForWeek(week).find(
     (item) => item.day === day && item.order === exerciseOrder,
   );
   return exercise ? { exercise, custom: false } : null;
@@ -154,7 +154,7 @@ export async function POST(request: Request) {
     if (
       !Number.isInteger(week) ||
       week < 1 ||
-      week > 12 ||
+      week > 24 ||
       !['A', 'B', 'C'].includes(String(day)) ||
       !Number.isInteger(exerciseOrder) ||
       exerciseOrder < 1 ||
@@ -190,7 +190,9 @@ export async function POST(request: Request) {
       ? safeIsoDate(body.completedAt, serverNow)
       : null;
     const syncStatus =
-      custom || exerciseOrder >= 100 ? 'not_applicable' : 'pending';
+      custom || exerciseOrder >= 100 || week > 12
+        ? 'not_applicable'
+        : 'pending';
 
     await db
       .prepare(`INSERT INTO workout_entries (
