@@ -36,11 +36,18 @@ The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgp
 - Session-only exercise substitution, reordering, skipping, and custom exercise additions
 - Downloadable JSON backups with preview-first, non-destructive restore
 - Fast installed-app startup with a cached interface and immediate device-local display of the latest synced workouts
+- In-app animated movement guides with exercise-specific form cues and alternate movement choices
 - Responsive Material-inspired interface using Geist typography
 
 ## Version history
 
 Minor fixes, visual refinements, and deployment maintenance are grouped into the nearest feature release so this history focuses on meaningful product changes.
+
+### v2.1 — In-app movement guides (7 September 2026)
+
+- Replaced external YouTube searches with an in-app animated exercise demonstration modal.
+- Added movement choices for combined exercises, such as Bulgarian split squats and hack squats.
+- Added concise form cues, mobile-friendly scrolling, source attribution, and connection-error handling.
 
 ### v2.0 series — Offline-ready training and deeper insights (6 September 2026)
 
@@ -120,8 +127,13 @@ app/
 db/schema.ts             Drizzle schema
 drizzle/                 Generated SQLite migrations
 lib/routine.ts           12-week routine and exercise definitions
+lib/exercise-demos.ts    Animated movement-guide mapping and form cues
 public/                   Liftline icons and sharing artwork
 ```
+
+## Exercise demonstrations
+
+Exercise GIFs are loaded only when a movement guide is opened. They are provided by the MIT-licensed [Exercise Library](https://github.com/mohamedatef90/exercise-library), which is credited inside each guide. Liftline keeps the exercise-specific cue text locally and sends no workout data to the media host.
 
 ## Data behavior
 

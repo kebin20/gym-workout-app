@@ -32,6 +32,7 @@ import {
   FileSpreadsheet,
   History,
   Home,
+  ImageOff,
   Loader2,
   Medal,
   Minus,
@@ -80,6 +81,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { exerciseDemoFor, exerciseDemoSource } from '@/lib/exercise-demos';
 import {
   days,
   routine,
@@ -423,13 +425,6 @@ function progressionAdvice(
   return exercise.name === 'Plank' ? 'Keep building' : 'Keep this load';
 }
 
-function exerciseVideoUrl(exercise: RoutineExercise) {
-  const primaryExercise = exercise.name
-    .split(' or ')[0]
-    .replace(/\s*\([^)]*\)\s*$/, '');
-  return `https://www.youtube.com/results?search_query=${encodeURIComponent(`${primaryExercise} short exercise demonstration`)}`;
-}
-
 function sheetEntrySummary(entry: WorkoutEntry) {
   const unit = entry.exercise === 'Plank' ? 'sec' : 'reps';
   return ([1, 2, 3] as const)
@@ -574,6 +569,9 @@ export function WorkoutApp() {
   const [backupSummary, setBackupSummary] = useState<BackupSummary | null>(
     null,
   );
+  const [exerciseDemoOpen, setExerciseDemoOpen] = useState(false);
+  const [exerciseDemoVariantIndex, setExerciseDemoVariantIndex] = useState(0);
+  const [exerciseDemoImageFailed, setExerciseDemoImageFailed] = useState(false);
   const [progressExerciseKey, setProgressExerciseKey] = useState('A|1');
   const restTimerEndsAt = useRef<number | null>(null);
 
@@ -604,6 +602,12 @@ export function WorkoutApp() {
   const suggestedRestSeconds = exercise
     ? recommendedRestSeconds(exercise.rest)
     : 60;
+  const exerciseDemo = exercise ? exerciseDemoFor(exercise.name) : null;
+  const exerciseDemoVariant = exerciseDemo
+    ? exerciseDemo.variants[
+        Math.min(exerciseDemoVariantIndex, exerciseDemo.variants.length - 1)
+      ]
+    : null;
 
   const refreshWorkoutData = useCallback(async () => {
     const response = await fetch('/api/workouts', { cache: 'no-store' });
@@ -1807,15 +1811,20 @@ export function WorkoutApp() {
                     <CardDescription className="font-sans">
                       {exercise.muscles} · Alternative: {exercise.alternative}
                     </CardDescription>
-                    <a
-                      href={exerciseVideoUrl(exercise)}
-                      target="_blank"
-                      rel="noreferrer"
-                      aria-label={`Find a short video demonstration for ${exercise.name}`}
-                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-primary/20 bg-background px-2.5 font-sans text-xs font-semibold text-primary transition-colors hover:bg-accent"
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      aria-label={`Show an animated movement guide for ${exercise.name}`}
+                      onClick={() => {
+                        setExerciseDemoVariantIndex(0);
+                        setExerciseDemoImageFailed(false);
+                        setExerciseDemoOpen(true);
+                      }}
+                      className="border-primary/20 bg-background font-sans text-xs font-semibold text-primary hover:bg-accent hover:text-primary"
                     >
-                      <CirclePlay className="size-4" /> Watch demo
-                    </a>
+                      <CirclePlay className="size-4" /> See movement
+                    </Button>
                   </div>
                   <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/15 bg-background/90 p-3 shadow-sm shadow-slate-900/5">
                     <div className="flex items-center gap-3">
@@ -2991,6 +3000,135 @@ export function WorkoutApp() {
           </section>
         )}
       </div>
+
+      <Dialog
+        open={exerciseDemoOpen}
+        onOpenChange={(open) => {
+          setExerciseDemoOpen(open);
+          if (!open) setExerciseDemoImageFailed(false);
+        }}
+      >
+        <DialogContent className="max-h-[calc(100dvh-1.5rem)] overflow-y-auto sm:max-w-lg">
+          <DialogHeader className="pr-8">
+            <DialogTitle className="flex items-center gap-2 font-sans text-xl">
+              <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-accent text-primary">
+                <CirclePlay className="size-5" />
+              </span>
+              {exerciseDemoVariant?.label ?? exercise.name}
+            </DialogTitle>
+            <DialogDescription className="font-sans">
+              Animated movement guide for {exercise.name}
+            </DialogDescription>
+          </DialogHeader>
+
+          {exerciseDemo && exerciseDemoVariant ? (
+            <div className="space-y-4">
+              {exerciseDemo.variants.length > 1 && (
+                <fieldset className="flex gap-2 overflow-x-auto pb-1">
+                  <legend className="sr-only">Choose a movement</legend>
+                  {exerciseDemo.variants.map((variant, index) => (
+                    <Button
+                      key={variant.label}
+                      type="button"
+                      size="sm"
+                      variant={
+                        exerciseDemoVariantIndex === index
+                          ? 'default'
+                          : 'outline'
+                      }
+                      className="shrink-0 font-sans"
+                      aria-pressed={exerciseDemoVariantIndex === index}
+                      onClick={() => {
+                        setExerciseDemoVariantIndex(index);
+                        setExerciseDemoImageFailed(false);
+                      }}
+                    >
+                      {variant.label}
+                    </Button>
+                  ))}
+                </fieldset>
+              )}
+
+              <div className="grid min-h-64 place-items-center overflow-hidden rounded-2xl border border-primary/15 bg-white shadow-inner">
+                {exerciseDemoImageFailed ? (
+                  <div className="px-6 py-12 text-center">
+                    <ImageOff className="mx-auto size-8 text-muted-foreground" />
+                    <p className="mt-3 font-sans font-semibold">
+                      Movement guide unavailable
+                    </p>
+                    <p className="mt-1 font-sans text-sm text-muted-foreground">
+                      Check your connection and try opening the guide again.
+                    </p>
+                  </div>
+                ) : (
+                  // oxlint-disable-next-line next/no-img-element -- The on-demand modal uses animated GIFs, which should not be transformed by an image optimizer.
+                  <img
+                    key={exerciseDemoVariant.gif}
+                    src={exerciseDemoVariant.gif}
+                    alt={`${exerciseDemoVariant.label} animated exercise demonstration`}
+                    className="aspect-square max-h-[42dvh] w-full object-contain"
+                    loading="eager"
+                    decoding="async"
+                    referrerPolicy="no-referrer"
+                    onError={() => setExerciseDemoImageFailed(true)}
+                  />
+                )}
+              </div>
+
+              {exerciseDemoVariant.note && (
+                <p className="rounded-xl border border-warning/20 bg-warning-soft px-3 py-2 font-sans text-xs leading-relaxed text-warning-foreground">
+                  {exerciseDemoVariant.note}
+                </p>
+              )}
+
+              <div className="rounded-2xl bg-accent/45 p-4">
+                <p className="font-sans text-sm font-semibold">Form cues</p>
+                <ul className="mt-2 space-y-2 pl-5 font-sans text-sm leading-relaxed text-muted-foreground marker:text-primary">
+                  {exerciseDemoVariant.cues.map((cue) => (
+                    <li key={cue} className="list-disc pl-1">
+                      {cue}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <p className="font-sans text-xs leading-relaxed text-muted-foreground">
+                Use this as a movement reference, not a substitute for in-person
+                coaching. Animation from the{' '}
+                <a
+                  href={exerciseDemoSource}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-semibold text-primary underline-offset-2 hover:underline"
+                >
+                  open exercise library
+                </a>
+                .
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-border px-6 py-10 text-center">
+              <ImageOff className="mx-auto size-8 text-muted-foreground" />
+              <p className="mt-3 font-sans font-semibold">
+                No animation matched yet
+              </p>
+              <p className="mt-1 font-sans text-sm text-muted-foreground">
+                This can happen for a custom or renamed exercise.
+              </p>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              type="button"
+              className="w-full sm:w-auto"
+              onClick={() => setExerciseDemoOpen(false)}
+            >
+              Got it
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={programOpen}
