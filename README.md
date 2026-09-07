@@ -37,11 +37,18 @@ The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgp
 - Downloadable JSON backups with preview-first, non-destructive restore
 - Fast installed-app startup with a cached interface and immediate device-local display of the latest synced workouts
 - In-app animated movement guides with exercise-specific form cues and alternate movement choices
+- A mobile-friendly nutrition guide with daily targets, meal templates, practical restaurant choices, and progress rules
 - Responsive Material-inspired interface using Geist typography
 
 ## Version history
 
 Minor fixes, visual refinements, and deployment maintenance are grouped into the nearest feature release so this history focuses on meaningful product changes.
+
+### v2.2 — Nutrition guide (7 September 2026)
+
+- Added Nutrition as a fourth primary destination on mobile and desktop.
+- Adapted the personal dietary guide into quick daily targets, breakfast and two-meal templates, protein guidance, restaurant choices, progress checks, and example days.
+- Used collapsible, responsive sections so the full guide remains easy to scan on a phone.
 
 ### v2.1 — In-app movement guides (7 September 2026)
 
