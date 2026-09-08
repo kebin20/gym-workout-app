@@ -47,6 +47,15 @@ The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgp
 
 Minor fixes, visual refinements, and deployment maintenance are grouped into the nearest feature release so this history focuses on meaningful product changes.
 
+### v3.2 — Training tools and programme insights (8 September 2026)
+
+- Added editable Phase 1 and Phase 2 start dates so weekly schedule labels can follow real training dates without changing recorded history.
+- Added a quick readiness check using sleep, energy, soreness, and joint comfort, with conservative train-as-planned, modified-session, or recovery-day guidance.
+- Added working-weight warm-up suggestions and a per-side plate calculator.
+- Added persistent weight, waist, body-fat, and lean-mass tracking with manual, Withings, InBody, and CSV source labels plus CSV import.
+- Added a compact, collapsed programme-insights panel for strength trends, muscle-group set distribution, hard-effort signals, and possible recovery concerns.
+- Extended JSON backups to include programme dates, body measurements, and readiness checks while retaining compatibility with earlier backups.
+
 ### v3.1 — Faster startup and quieter navigation (8 September 2026)
 
 - Made the installed app reopen from its cached interface immediately, then refresh safely in the background.
@@ -146,6 +155,10 @@ npm run format       # Format the project with oxfmt
 npm run db:generate  # Generate a Drizzle migration after schema changes
 ```
 
+## Release workflow
+
+Production stays on `main`. New fixes and features are developed on `codex/staging`, where they are formatted, linted, built, and functionally checked. Only a completed staging batch is merged into `main` and deployed, keeping the live tracker available while work is in progress.
+
 ## Project structure
 
 ```text
@@ -155,6 +168,9 @@ app/
   api/workouts/import-sheet/route.ts  Protected Google Sheet import preview and apply endpoint
   api/workouts/backup/route.ts  JSON backup and preview-first restore endpoint
   api/workouts/program/route.ts  Session-only programme customization endpoint
+  api/settings/route.ts  Programme schedule settings
+  api/readiness/route.ts  Recovery readiness records and guidance
+  api/body-metrics/route.ts  Body measurements and CSV-import storage
   workout-app.tsx        Main responsive application interface
 db/schema.ts             Drizzle schema
 drizzle/                 Generated SQLite migrations

@@ -163,6 +163,8 @@ type BackupSummary = {
   replacedWorkoutRecords: number;
   sessionChanges: number;
   newSessionChanges: number;
+  bodyMeasurements?: number;
+  readinessChecks?: number;
 };
 
 type SheetImportItem = {
@@ -185,7 +187,7 @@ const sessionExerciseCacheKey = 'liftline.session-exercises.v1';
 const pendingWorkoutKey = 'liftline.pending-workouts.v1';
 const activeWeekPreferenceKey = 'liftline.active-week.v1';
 const setNumbers = [1, 2, 3, 4, 5] as const;
-const newTrainingToolsEnabled = false;
+const newTrainingToolsEnabled = true;
 
 const emptyDraft: Draft = {
   sets: Array.from({ length: 5 }, () => ({
@@ -4301,6 +4303,10 @@ export function WorkoutApp() {
               <div className="col-span-2 rounded-xl bg-secondary p-3">
                 <p className="font-sans text-sm font-semibold">
                   {backupSummary.sessionChanges} session customizations
+                  {(backupSummary.bodyMeasurements ?? 0) > 0 &&
+                    ` · ${backupSummary.bodyMeasurements} body measurements`}
+                  {(backupSummary.readinessChecks ?? 0) > 0 &&
+                    ` · ${backupSummary.readinessChecks} readiness checks`}
                 </p>
                 <p className="font-sans text-xs text-muted-foreground">
                   Records not contained in the backup will be kept.

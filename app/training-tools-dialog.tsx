@@ -234,6 +234,9 @@ export default function TrainingToolsDialog({
     Number(workingWeight) || 0,
     Number(barWeight) || 0,
   );
+  const latestWeightMetrics = metrics.filter((metric) => metric.weight != null);
+  const latestWeight = latestWeightMetrics[0]?.weight ?? null;
+  const previousWeight = latestWeightMetrics[1]?.weight ?? null;
 
   async function saveSchedule() {
     setBusy(true);
@@ -735,6 +738,28 @@ export default function TrainingToolsDialog({
               account connections can be added later when their API access is
               authorised.
             </p>
+            {latestWeight != null && (
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-xl bg-secondary/65 p-3">
+                  <p className="font-sans text-xs text-muted-foreground">
+                    Latest weight
+                  </p>
+                  <p className="mt-1 font-sans text-xl font-bold">
+                    {latestWeight} kg
+                  </p>
+                </div>
+                <div className="rounded-xl bg-secondary/65 p-3">
+                  <p className="font-sans text-xs text-muted-foreground">
+                    Change
+                  </p>
+                  <p className="mt-1 font-sans text-xl font-bold">
+                    {previousWeight == null
+                      ? 'First entry'
+                      : `${latestWeight - previousWeight > 0 ? '+' : ''}${Math.round((latestWeight - previousWeight) * 10) / 10} kg`}
+                  </p>
+                </div>
+              </div>
+            )}
             {metrics.length > 0 && (
               <div className="max-h-52 space-y-2 overflow-y-auto rounded-xl border p-2">
                 {metrics.slice(0, 12).map((metric, index) => (

@@ -233,6 +233,11 @@ function parseBackup(value: unknown) {
   const rawReadinessChecks = Array.isArray(backup.readinessChecks)
     ? backup.readinessChecks
     : [];
+  if (rawBodyMetrics.length > 1000 || rawReadinessChecks.length > 1000) {
+    throw new Error(
+      'This backup contains more health records than Liftline supports.',
+    );
+  }
   const bodyMetrics = rawBodyMetrics.map(normalizeBodyMetric);
   const readinessChecks = rawReadinessChecks.map(normalizeReadiness);
   if (
@@ -266,25 +271,41 @@ function keyOf(value: {
 export async function GET() {
   try {
     if (!env.DB) throw new Error('Workout database is unavailable.');
-    const [entries, sessionExercises] = await Promise.all([
-      env.DB.prepare(
-        `SELECT ${workoutSelectColumns} FROM workout_entries ORDER BY week, day, exercise_order`,
-      ).all<WorkoutEntry>(),
-      env.DB.prepare(
-        `SELECT ${sessionExerciseSelectColumns} FROM session_exercises ORDER BY week, day, display_order`,
-      ).all<SessionExercise>(),
-    ]);
+    const [entries, sessionExercises, bodyMetrics, readinessChecks, settings] =
+      await Promise.all([
+        env.DB.prepare(
+          `SELECT ${workoutSelectColumns} FROM workout_entries ORDER BY week, day, exercise_order`,
+        ).all<WorkoutEntry>(),
+        env.DB.prepare(
+          `SELECT ${sessionExerciseSelectColumns} FROM session_exercises ORDER BY week, day, display_order`,
+        ).all<SessionExercise>(),
+        env.DB.prepare(
+          'SELECT date, weight, waist, body_fat AS bodyFat, lean_mass AS leanMass, source, notes FROM body_metrics ORDER BY date',
+        ).all<BodyMetricBackup>(),
+        env.DB.prepare(
+          'SELECT checked_at AS checkedAt, week, day, sleep, energy, soreness, joint_comfort AS jointComfort, recommendation FROM readiness_checks ORDER BY checked_at',
+        ).all<ReadinessBackup>(),
+        env.DB.prepare('SELECT key, value FROM app_settings').all<{
+          key: string;
+          value: string;
+        }>(),
+      ]);
     const createdAt = new Date().toISOString();
     const date = createdAt.slice(0, 10);
     return new Response(
       JSON.stringify(
         {
           source: 'Liftline',
-          version: 1,
+          version: 2,
           createdAt,
           timeZone: 'Asia/Tokyo',
           entries: entries.results,
           sessionExercises: sessionExercises.results,
+          bodyMetrics: bodyMetrics.results,
+          readinessChecks: readinessChecks.results,
+          settings: Object.fromEntries(
+            settings.results.map((setting) => [setting.key, setting.value]),
+          ),
         },
         null,
         2,
@@ -318,7 +339,13 @@ export async function POST(request: Request) {
         { status: 413 },
       );
     const body = (await request.json()) as { mode?: unknown; backup?: unknown };
-    const { entries, sessionExercises } = parseBackup(body.backup);
+    const {
+      entries,
+      sessionExercises,
+      bodyMetrics,
+      readinessChecks,
+      settings,
+    } = parseBackup(body.backup);
 
     const [existingEntries, existingSessionExercises] = await Promise.all([
       env.DB.prepare(
@@ -344,6 +371,8 @@ export async function POST(request: Request) {
       newSessionChanges: sessionExercises.filter(
         (exercise) => !existingSessionKeys.has(keyOf(exercise)),
       ).length,
+      bodyMeasurements: bodyMetrics.length,
+      readinessChecks: readinessChecks.length,
     };
     if (body.mode !== 'restore') return Response.json({ ok: true, summary });
 
@@ -419,6 +448,58 @@ export async function POST(request: Request) {
             now,
           ),
       ),
+      ...bodyMetrics.map((metric) =>
+        env
+          .DB!.prepare(
+            `INSERT INTO body_metrics (date, weight, waist, body_fat, lean_mass, source, notes, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(date, source) DO UPDATE SET weight = excluded.weight, waist = excluded.waist,
+          body_fat = excluded.body_fat, lean_mass = excluded.lean_mass, notes = excluded.notes,
+          updated_at = excluded.updated_at`,
+          )
+          .bind(
+            metric.date,
+            metric.weight,
+            metric.waist,
+            metric.bodyFat,
+            metric.leanMass,
+            metric.source,
+            metric.notes,
+            now,
+          ),
+      ),
+      ...readinessChecks.map((check) =>
+        env
+          .DB!.prepare(
+            `INSERT INTO readiness_checks (checked_at, week, day, sleep, energy, soreness, joint_comfort, recommendation)
+          SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (
+            SELECT 1 FROM readiness_checks WHERE checked_at = ?
+          )`,
+          )
+          .bind(
+            check.checkedAt,
+            check.week,
+            check.day,
+            check.sleep,
+            check.energy,
+            check.soreness,
+            check.jointComfort,
+            check.recommendation,
+            check.checkedAt,
+          ),
+      ),
+      ...(['phase1StartDate', 'phase2StartDate'] as const).flatMap((key) => {
+        const value = calendarDate(settings[key]);
+        return value
+          ? [
+              env
+                .DB!.prepare(
+                  'INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at',
+                )
+                .bind(key, value, now),
+            ]
+          : [];
+      }),
     ];
     if (statements.length > 0) await env.DB.batch(statements);
     return Response.json({ ok: true, restored: true, summary });
