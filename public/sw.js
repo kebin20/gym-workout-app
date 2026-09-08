@@ -1,8 +1,9 @@
-const cacheVersion = 'liftline-2026-09-07-1';
+const cacheVersion = 'liftline-2026-09-08-1';
 const shellCache = `${cacheVersion}-shell`;
 const assetCache = `${cacheVersion}-assets`;
 
 const coreShell = [
+  '/',
   '/manifest.webmanifest',
   '/manifest-v2.webmanifest',
   '/favicon.svg',
@@ -114,21 +115,35 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       (async () => {
         const cache = await caches.open(shellCache);
-        try {
-          const response =
-            (await event.preloadResponse) ??
-            (await fetch(request, {
-              cache: 'no-store',
-              credentials: 'same-origin',
-            }));
-          const contentType = response.headers.get('content-type') ?? '';
-          if (isCacheable(response) && contentType.includes('text/html')) {
-            await cache.put('/', response.clone());
+        const cached = await cache.match('/');
+        const refresh = (async () => {
+          try {
+            const response =
+              (await event.preloadResponse) ??
+              (await fetch(request, {
+                cache: 'no-store',
+                credentials: 'same-origin',
+              }));
+            const contentType = response.headers.get('content-type') ?? '';
+            if (isCacheable(response) && contentType.includes('text/html')) {
+              await cache.put('/', response.clone());
+            }
+            return response;
+          } catch {
+            return null;
           }
-          return response;
-        } catch {
-          return (await cache.match('/')) ?? Response.error();
+        })();
+
+        if (cached) {
+          event.waitUntil(refresh);
+          return cached;
         }
+
+        const response = await refresh;
+        if (response) {
+          return response;
+        }
+        return Response.error();
       })(),
     );
     return;

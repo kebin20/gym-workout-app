@@ -12,6 +12,30 @@ type BackupEnvelope = {
   version?: unknown;
   entries?: unknown;
   sessionExercises?: unknown;
+  bodyMetrics?: unknown;
+  readinessChecks?: unknown;
+  settings?: unknown;
+};
+
+type BodyMetricBackup = {
+  date: string;
+  weight: number | null;
+  waist: number | null;
+  bodyFat: number | null;
+  leanMass: number | null;
+  source: string;
+  notes: string;
+};
+
+type ReadinessBackup = {
+  checkedAt: string;
+  week: number;
+  day: TrainingDay;
+  sleep: number;
+  energy: number;
+  soreness: number;
+  jointComfort: number;
+  recommendation: string;
 };
 
 function validDay(value: unknown): value is TrainingDay {
@@ -37,6 +61,68 @@ function isoDateOrNull(value: unknown) {
   if (typeof value !== 'string') return null;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function calendarDate(value: unknown) {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? value
+    : null;
+}
+
+function normalizeBodyMetric(value: unknown): BodyMetricBackup | null {
+  if (!value || typeof value !== 'object') return null;
+  const metric = value as Record<string, unknown>;
+  const date = calendarDate(metric.date);
+  const source = cleanText(metric.source, 30, 'manual').toLowerCase();
+  const numbers = {
+    weight: nullableNumber(metric.weight),
+    waist: nullableNumber(metric.waist),
+    bodyFat: nullableNumber(metric.bodyFat),
+    leanMass: nullableNumber(metric.leanMass),
+  };
+  if (
+    !date ||
+    !['manual', 'withings', 'inbody', 'csv'].includes(source) ||
+    Object.values(numbers).every((number) => number == null)
+  )
+    return null;
+  return { date, source, notes: cleanText(metric.notes, 500), ...numbers };
+}
+
+function normalizeReadiness(value: unknown): ReadinessBackup | null {
+  if (!value || typeof value !== 'object') return null;
+  const check = value as Record<string, unknown>;
+  const checkedAt = isoDateOrNull(check.checkedAt);
+  const week = Number(check.week);
+  const scores = [
+    check.sleep,
+    check.energy,
+    check.soreness,
+    check.jointComfort,
+  ].map(Number);
+  if (
+    !checkedAt ||
+    !Number.isInteger(week) ||
+    week < 1 ||
+    week > 24 ||
+    !validDay(check.day) ||
+    scores.some((score) => !Number.isInteger(score) || score < 1 || score > 5)
+  )
+    return null;
+  return {
+    checkedAt,
+    week,
+    day: check.day,
+    sleep: scores[0],
+    energy: scores[1],
+    soreness: scores[2],
+    jointComfort: scores[3],
+    recommendation: cleanText(
+      check.recommendation,
+      500,
+      'Readiness check saved.',
+    ),
+  };
 }
 
 function normalizeWorkout(value: unknown): WorkoutEntry | null {
@@ -141,15 +227,31 @@ function parseBackup(value: unknown) {
   const sessionExercises = backup.sessionExercises.map(
     normalizeSessionExercise,
   );
+  const rawBodyMetrics = Array.isArray(backup.bodyMetrics)
+    ? backup.bodyMetrics
+    : [];
+  const rawReadinessChecks = Array.isArray(backup.readinessChecks)
+    ? backup.readinessChecks
+    : [];
+  const bodyMetrics = rawBodyMetrics.map(normalizeBodyMetric);
+  const readinessChecks = rawReadinessChecks.map(normalizeReadiness);
   if (
     entries.some((entry) => !entry) ||
-    sessionExercises.some((exercise) => !exercise)
+    sessionExercises.some((exercise) => !exercise) ||
+    bodyMetrics.some((metric) => !metric) ||
+    readinessChecks.some((check) => !check)
   ) {
     throw new Error('One or more backup records are invalid.');
   }
   return {
     entries: entries as WorkoutEntry[],
     sessionExercises: sessionExercises as SessionExercise[],
+    bodyMetrics: bodyMetrics as BodyMetricBackup[],
+    readinessChecks: readinessChecks as ReadinessBackup[],
+    settings:
+      backup.settings && typeof backup.settings === 'object'
+        ? (backup.settings as Record<string, unknown>)
+        : {},
   };
 }
 

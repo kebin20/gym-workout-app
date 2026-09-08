@@ -115,23 +115,59 @@ async function finishSheetSync(saved: WorkoutEntry) {
     .run();
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const db = workoutDatabase();
-    const [entries, sessionExercises] = await Promise.all([
-      db
-        .prepare(
-          `SELECT ${workoutSelectColumns} FROM workout_entries ORDER BY week, day, exercise_order`,
-        )
-        .all<WorkoutEntry>(),
+    const sinceValue = new URL(request.url).searchParams.get('since');
+    const sinceDate = sinceValue ? new Date(sinceValue) : null;
+    const since =
+      sinceDate && !Number.isNaN(sinceDate.getTime())
+        ? sinceDate.toISOString()
+        : null;
+    const serverTime = new Date().toISOString();
+    const [entries, sessionExercises, settings] = await Promise.all([
+      since
+        ? db
+            .prepare(
+              `SELECT ${workoutSelectColumns} FROM workout_entries WHERE updated_at > ? ORDER BY week, day, exercise_order`,
+            )
+            .bind(since)
+            .all<WorkoutEntry>()
+        : db
+            .prepare(
+              `SELECT ${workoutSelectColumns} FROM workout_entries ORDER BY week, day, exercise_order`,
+            )
+            .all<WorkoutEntry>(),
       db
         .prepare(
           `SELECT ${sessionExerciseSelectColumns} FROM session_exercises ORDER BY week, day, display_order`,
         )
         .all<SessionExercise>(),
+      db
+        .prepare(
+          "SELECT key, value FROM app_settings WHERE key IN ('phase1StartDate', 'phase2StartDate')",
+        )
+        .all<{ key: string; value: string }>(),
     ]);
+    const schedule = {
+      phase1StartDate: '2026-08-26',
+      phase2StartDate: '2026-11-18',
+    };
+    settings.results.forEach((setting) => {
+      if (
+        setting.key === 'phase1StartDate' ||
+        setting.key === 'phase2StartDate'
+      )
+        schedule[setting.key] = setting.value;
+    });
     return Response.json(
-      { entries: entries.results, sessionExercises: sessionExercises.results },
+      {
+        entries: entries.results,
+        sessionExercises: sessionExercises.results,
+        schedule,
+        partial: Boolean(since),
+        serverTime,
+      },
       { headers: { 'Cache-Control': 'no-store' } },
     );
   } catch (error) {

@@ -47,6 +47,14 @@ The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgp
 
 Minor fixes, visual refinements, and deployment maintenance are grouped into the nearest feature release so this history focuses on meaningful product changes.
 
+### v3.1 — Faster startup and quieter navigation (8 September 2026)
+
+- Made the installed app reopen from its cached interface immediately, then refresh safely in the background.
+- Added incremental workout refreshes and a database index so returning visits transfer and query only records that changed.
+- Deferred movement-guide code and media until a guide is opened, reducing the main workout bundle by roughly one third.
+- Consolidated programme progress, phase selection, and the training guide into a compact header menu.
+- Replaced the large connection-status panel with a concise online and saved indicator in the header.
+
 ### v3.0 — Phase 2 progression (7 September 2026)
 
 - Added a compact phase selector that unlocks Phase 2 after all 36 Phase 1 sessions are complete.

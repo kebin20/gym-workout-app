@@ -13,6 +13,7 @@ import {
 } from 'react';
 import {
   AlertCircle,
+  Activity,
   Apple,
   ArrowDown,
   ArrowUp,
@@ -20,21 +21,20 @@ import {
   Bell,
   BookOpen,
   CalendarDays,
+  Calculator,
   Check,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   CirclePlay,
   Clock3,
-  Cloud,
-  CloudOff,
   Copy,
   Download,
   Dumbbell,
   FileSpreadsheet,
   History,
   Home,
-  ImageOff,
   Loader2,
   LockKeyhole,
   Medal,
@@ -43,8 +43,8 @@ import {
   Pause,
   Play,
   Plus,
-  RefreshCw,
   RotateCcw,
+  Scale,
   Settings2,
   ShieldCheck,
   Sparkles,
@@ -83,9 +83,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { exerciseDemoFor, exerciseDemoSource } from '@/lib/exercise-demos';
 import {
   days,
   displayWeekNumber,
@@ -107,8 +114,10 @@ import {
   workoutMetrics,
 } from '@/lib/workout-metrics';
 import type { SessionExercise, WorkoutEntry } from '@/lib/workout-types';
+import type { ProgramSchedule } from './training-tools-dialog';
 
 type View = 'today' | 'plan' | 'progress' | 'nutrition' | 'guide';
+type TrainingTool = 'schedule' | 'readiness' | 'calculator' | 'metrics';
 
 type Draft = {
   sets: { weight: string; reps: string; done: boolean }[];
@@ -176,6 +185,7 @@ const sessionExerciseCacheKey = 'liftline.session-exercises.v1';
 const pendingWorkoutKey = 'liftline.pending-workouts.v1';
 const activeWeekPreferenceKey = 'liftline.active-week.v1';
 const setNumbers = [1, 2, 3, 4, 5] as const;
+const newTrainingToolsEnabled = false;
 
 const emptyDraft: Draft = {
   sets: Array.from({ length: 5 }, () => ({
@@ -202,24 +212,42 @@ function normaliseSessionExercises(exercises: SessionExercise[]) {
   }));
 }
 
-function readCachedWorkoutEntries(): WorkoutEntry[] | null {
+function readCachedWorkoutEntries(): {
+  entries: WorkoutEntry[];
+  syncedAt: string | null;
+} | null {
   try {
     const cached = window.localStorage.getItem(workoutCacheKey);
     if (!cached) return null;
-    const parsed = JSON.parse(cached) as { entries?: WorkoutEntry[] };
+    const parsed = JSON.parse(cached) as {
+      entries?: WorkoutEntry[];
+      syncedAt?: string;
+    };
     return Array.isArray(parsed.entries)
-      ? normaliseWorkoutEntries(parsed.entries)
+      ? {
+          entries: normaliseWorkoutEntries(parsed.entries),
+          syncedAt:
+            typeof parsed.syncedAt === 'string' ? parsed.syncedAt : null,
+        }
       : null;
   } catch {
     return null;
   }
 }
 
-function cacheWorkoutEntries(entries: WorkoutEntry[]) {
+function cacheWorkoutEntries(entries: WorkoutEntry[], syncedAt?: string) {
   try {
+    const current = window.localStorage.getItem(workoutCacheKey);
+    const currentSyncedAt = current
+      ? (JSON.parse(current) as { syncedAt?: string }).syncedAt
+      : undefined;
     window.localStorage.setItem(
       workoutCacheKey,
-      JSON.stringify({ entries, cachedAt: Date.now() }),
+      JSON.stringify({
+        entries,
+        cachedAt: Date.now(),
+        syncedAt: syncedAt ?? currentSyncedAt ?? null,
+      }),
     );
   } catch {
     // Device storage can be unavailable in private browsing. The server remains authoritative.
@@ -315,35 +343,42 @@ function replaceWorkoutEntry(entries: WorkoutEntry[], saved: WorkoutEntry) {
   ];
 }
 
+function mergeWorkoutEntries(
+  current: WorkoutEntry[],
+  incoming: WorkoutEntry[],
+) {
+  const merged = new Map(current.map((entry) => [workoutKey(entry), entry]));
+  incoming.forEach((entry) => merged.set(workoutKey(entry), entry));
+  return [...merged.values()].sort(
+    (left, right) =>
+      left.week - right.week ||
+      left.day.localeCompare(right.day) ||
+      left.exerciseOrder - right.exerciseOrder,
+  );
+}
+
 const ProgressChart = lazy(() => import('./progress-chart'));
 const ExerciseProgressChart = lazy(() => import('./exercise-progress-chart'));
+const ExerciseDemoDialog = lazy(() => import('./exercise-demo-dialog'));
+const TrainingToolsDialog = lazy(() => import('./training-tools-dialog'));
+const AdvancedInsights = lazy(() => import('./advanced-insights'));
 
-const weekDates = [
-  'Aug 26–Sep 1',
-  'Sep 2–8',
-  'Sep 9–15',
-  'Sep 16–22',
-  'Sep 23–29',
-  'Sep 30–Oct 6',
-  'Oct 7–13',
-  'Oct 14–20',
-  'Oct 21–27',
-  'Oct 28–Nov 3',
-  'Nov 4–10',
-  'Nov 11–17',
-  'Nov 18–24',
-  'Nov 25–Dec 1',
-  'Dec 2–8',
-  'Dec 9–15',
-  'Dec 16–22',
-  'Dec 23–29',
-  'Dec 30–Jan 5',
-  'Jan 6–12',
-  'Jan 13–19',
-  'Jan 20–26',
-  'Jan 27–Feb 2',
-  'Feb 3–9',
-];
+const defaultSchedule: ProgramSchedule = {
+  phase1StartDate: '2026-08-26',
+  phase2StartDate: '2026-11-18',
+};
+
+function weekRange(startDate: string, offset: number) {
+  const start = new Date(`${startDate}T00:00:00Z`);
+  start.setUTCDate(start.getUTCDate() + offset * 7);
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 6);
+  const month = new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    timeZone: 'UTC',
+  });
+  return `${month.format(start)} ${start.getUTCDate()}–${month.format(end)} ${end.getUTCDate()}`;
+}
 
 const trainingTips = [
   {
@@ -778,9 +813,10 @@ export function WorkoutApp() {
     null,
   );
   const [exerciseDemoOpen, setExerciseDemoOpen] = useState(false);
-  const [exerciseDemoVariantIndex, setExerciseDemoVariantIndex] = useState(0);
-  const [exerciseDemoImageFailed, setExerciseDemoImageFailed] = useState(false);
   const [phaseUnlockOpen, setPhaseUnlockOpen] = useState(false);
+  const [activeTrainingTool, setActiveTrainingTool] =
+    useState<TrainingTool | null>(null);
+  const [schedule, setSchedule] = useState<ProgramSchedule>(defaultSchedule);
   const [progressExerciseKey, setProgressExerciseKey] = useState('A|1');
   const restTimerEndsAt = useRef<number | null>(null);
   const activeWeekPreferenceApplied = useRef(false);
@@ -792,6 +828,17 @@ export function WorkoutApp() {
   const activeRoutine = routineForWeek(activeWeek);
   const activeTrainingTips =
     activePhase === 1 ? trainingTips : phase2TrainingTips;
+  const weekDates = useMemo(
+    () => [
+      ...Array.from({ length: 12 }, (_, index) =>
+        weekRange(schedule.phase1StartDate, index),
+      ),
+      ...Array.from({ length: 12 }, (_, index) =>
+        weekRange(schedule.phase2StartDate, index),
+      ),
+    ],
+    [schedule],
+  );
 
   const dayExercises = useMemo(
     () => planForSession(sessionExercises, activeWeek, activeDay),
@@ -821,31 +868,43 @@ export function WorkoutApp() {
   const suggestedRestSeconds = exercise
     ? recommendedRestSeconds(exercise.rest)
     : 60;
-  const exerciseDemo = exercise ? exerciseDemoFor(exercise.name) : null;
-  const exerciseDemoVariant = exerciseDemo
-    ? exerciseDemo.variants[
-        Math.min(exerciseDemoVariantIndex, exerciseDemo.variants.length - 1)
-      ]
-    : null;
 
-  const refreshWorkoutData = useCallback(async () => {
-    const response = await fetch('/api/workouts', { cache: 'no-store' });
-    const data = (await response.json()) as {
-      entries?: WorkoutEntry[];
-      sessionExercises?: SessionExercise[];
-      error?: string;
-    };
-    if (!response.ok) throw new Error(data.error ?? 'Unable to load workouts.');
-    const freshEntries = normaliseWorkoutEntries(data.entries ?? []);
-    const freshSessionExercises = normaliseSessionExercises(
-      data.sessionExercises ?? [],
-    );
-    setEntries(freshEntries);
-    setSessionExercises(freshSessionExercises);
-    cacheWorkoutEntries(freshEntries);
-    cacheSessionExercises(freshSessionExercises);
-    return freshEntries;
-  }, []);
+  const refreshWorkoutData = useCallback(
+    async (cachedEntries?: WorkoutEntry[], syncedAt?: string | null) => {
+      const query =
+        cachedEntries && syncedAt
+          ? `?since=${encodeURIComponent(syncedAt)}`
+          : '';
+      const response = await fetch(`/api/workouts${query}`, {
+        cache: 'no-store',
+      });
+      const data = (await response.json()) as {
+        entries?: WorkoutEntry[];
+        sessionExercises?: SessionExercise[];
+        partial?: boolean;
+        serverTime?: string;
+        schedule?: ProgramSchedule;
+        error?: string;
+      };
+      if (!response.ok)
+        throw new Error(data.error ?? 'Unable to load workouts.');
+      const incomingEntries = normaliseWorkoutEntries(data.entries ?? []);
+      const freshEntries =
+        data.partial && cachedEntries
+          ? mergeWorkoutEntries(cachedEntries, incomingEntries)
+          : incomingEntries;
+      const freshSessionExercises = normaliseSessionExercises(
+        data.sessionExercises ?? [],
+      );
+      setEntries(freshEntries);
+      setSessionExercises(freshSessionExercises);
+      if (data.schedule) setSchedule(data.schedule);
+      cacheWorkoutEntries(freshEntries, data.serverTime);
+      cacheSessionExercises(freshSessionExercises);
+      return freshEntries;
+    },
+    [],
+  );
 
   const flushPendingWorkouts = useCallback(async () => {
     const queue = readPendingWorkouts();
@@ -877,7 +936,8 @@ export function WorkoutApp() {
 
   useEffect(() => {
     let cancelled = false;
-    const cachedEntries = readCachedWorkoutEntries();
+    const cachedSnapshot = readCachedWorkoutEntries();
+    const cachedEntries = cachedSnapshot?.entries ?? null;
     const cachedSessionExercises = readCachedSessionExercises();
     queueMicrotask(() => {
       if (cancelled) return;
@@ -889,7 +949,7 @@ export function WorkoutApp() {
       setRestAlertsEnabled(
         'Notification' in window && Notification.permission === 'granted',
       );
-      refreshWorkoutData()
+      refreshWorkoutData(cachedEntries ?? undefined, cachedSnapshot?.syncedAt)
         .then(() => {
           if (!cancelled) setError('');
         })
@@ -1186,15 +1246,6 @@ export function WorkoutApp() {
       week: displayWeekNumber(entry.week),
       ...workoutMetrics(entry),
     }));
-  const latestSheetSyncedAt = entries
-    .map((entry) => (entry.sheetSyncedAt ? Date.parse(entry.sheetSyncedAt) : 0))
-    .reduce((latest, value) => Math.max(latest, value), 0);
-  const failedSheetEntries = entries.filter(
-    (entry) => entry.syncStatus === 'failed',
-  ).length;
-  const queuedSheetEntries = entries.filter(
-    (entry) => entry.syncStatus === 'pending' && entry.completed,
-  ).length;
   const currentSessionComplete = dayExercises
     .filter((item) => !item.skipped)
     .every((item) =>
@@ -1779,7 +1830,7 @@ export function WorkoutApp() {
   return (
     <main className="min-h-screen bg-background pb-24 font-sans text-foreground md:pb-10">
       <header className="sticky top-0 z-30 border-b border-border/80 bg-card/95 backdrop-blur">
-        <div className="mx-auto flex h-18 max-w-6xl items-center justify-between px-4 sm:px-6">
+        <div className="mx-auto flex min-h-18 max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <button
             type="button"
             onClick={() => setView('today')}
@@ -1792,8 +1843,16 @@ export function WorkoutApp() {
               <span className="block font-sans text-lg font-bold tracking-tight">
                 Liftline
               </span>
-              <span className="block font-sans text-xs text-muted-foreground">
-                Phase {activePhase} · 12-week strength plan
+              <span
+                className={`flex items-center gap-1.5 font-sans text-xs ${isOnline ? 'text-success' : 'text-warning-foreground'}`}
+              >
+                <span
+                  className={`size-1.5 rounded-full ${isOnline ? 'bg-success' : 'bg-warning'}`}
+                />
+                {isOnline ? 'Liftline online' : 'Offline'} ·{' '}
+                {pendingWorkoutCount > 0
+                  ? `${pendingWorkoutCount} pending`
+                  : 'Changes saved'}
               </span>
             </span>
           </button>
@@ -1827,14 +1886,93 @@ export function WorkoutApp() {
               onChange={setView}
             />
           </div>
-          <Button
-            variant={view === 'guide' ? 'secondary' : 'outline'}
-            size="icon-lg"
-            aria-label="Open guide"
-            onClick={() => setView('guide')}
-          >
-            <BookOpen />
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="shrink-0 font-sans"
+                  aria-label="Open programme and tools menu"
+                />
+              }
+            >
+              Phase {activePhase} <ChevronDown />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-72 p-2">
+              <DropdownMenuLabel className="space-y-1 px-2 py-2">
+                <span className="block font-sans text-sm font-semibold text-foreground">
+                  Training programme
+                </span>
+                <span className="block font-sans text-xs font-normal text-muted-foreground">
+                  {activePhase === 1
+                    ? `${phaseOneSessions} of 36 Phase 1 sessions complete`
+                    : 'Specialized full-body progression'}
+                </span>
+                <span className="block h-1.5 overflow-hidden rounded-full bg-muted">
+                  <span
+                    className="block h-full rounded-full bg-primary"
+                    style={{ width: `${(phaseOneSessions / 36) * 100}%` }}
+                  />
+                </span>
+              </DropdownMenuLabel>
+              <DropdownMenuItem
+                className="px-2 py-2 font-sans"
+                onClick={() => selectPhase(1)}
+              >
+                {activePhase === 1 ? <Check /> : <Dumbbell />} Phase 1
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="px-2 py-2 font-sans"
+                onClick={() => selectPhase(2)}
+              >
+                {phaseTwoUnlocked ? <UnlockKeyhole /> : <LockKeyhole />}
+                Phase 2
+                {!phaseTwoUnlocked && (
+                  <span className="ml-auto text-xs text-muted-foreground">
+                    Locked
+                  </span>
+                )}
+              </DropdownMenuItem>
+              {newTrainingToolsEnabled && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel className="px-2">Tools</DropdownMenuLabel>
+                  <DropdownMenuItem
+                    className="px-2 py-2 font-sans"
+                    onClick={() => setActiveTrainingTool('schedule')}
+                  >
+                    <CalendarDays /> Training schedule
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="px-2 py-2 font-sans"
+                    onClick={() => setActiveTrainingTool('readiness')}
+                  >
+                    <Activity /> Readiness check
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="px-2 py-2 font-sans"
+                    onClick={() => setActiveTrainingTool('calculator')}
+                  >
+                    <Calculator /> Warm-up & plates
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="px-2 py-2 font-sans"
+                    onClick={() => setActiveTrainingTool('metrics')}
+                  >
+                    <Scale /> Body metrics
+                  </DropdownMenuItem>
+                </>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="px-2 py-2 font-sans"
+                onClick={() => setView('guide')}
+              >
+                <BookOpen /> Training guide
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
 
@@ -1854,98 +1992,6 @@ export function WorkoutApp() {
             </AlertDescription>
           </Alert>
         )}
-
-        <div className="mb-5 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-border/80 bg-card px-3 py-2.5 shadow-sm shadow-slate-900/5">
-          <span
-            className={`flex items-center gap-2 font-sans text-xs font-semibold ${isOnline ? 'text-success' : 'text-warning-foreground'}`}
-          >
-            {isOnline ? (
-              <Cloud className="size-4" />
-            ) : (
-              <CloudOff className="size-4" />
-            )}
-            {isOnline ? 'Liftline online' : 'Offline mode'}
-          </span>
-          <span className="h-4 w-px bg-border" />
-          <span className="font-sans text-xs text-muted-foreground">
-            {pendingWorkoutCount > 0
-              ? `${pendingWorkoutCount} workout ${pendingWorkoutCount === 1 ? 'change' : 'changes'} waiting to sync`
-              : 'All device changes saved'}
-          </span>
-          <span className="h-4 w-px bg-border" />
-          <span
-            className={`font-sans text-xs ${failedSheetEntries > 0 ? 'font-semibold text-destructive' : 'text-muted-foreground'}`}
-          >
-            {failedSheetEntries > 0
-              ? `${failedSheetEntries} Sheet ${failedSheetEntries === 1 ? 'update needs' : 'updates need'} retrying`
-              : latestSheetSyncedAt > 0
-                ? `Google Sheet sent ${new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' }).format(latestSheetSyncedAt)}`
-                : queuedSheetEntries > 0
-                  ? 'Google Sheet sync queued'
-                  : 'Google Sheet ready'}
-          </span>
-          {pendingWorkoutCount > 0 && (
-            <Button
-              variant="ghost"
-              size="xs"
-              className="ml-auto"
-              onClick={() => void flushPendingWorkouts()}
-              disabled={!isOnline}
-            >
-              <Cloud /> Sync now
-            </Button>
-          )}
-          {(failedSheetEntries > 0 || queuedSheetEntries > 0) && (
-            <Button
-              variant="ghost"
-              size="xs"
-              className={pendingWorkoutCount > 0 ? '' : 'ml-auto'}
-              onClick={syncGoogleSheet}
-              disabled={syncingSheet || !isOnline}
-            >
-              <RefreshCw className={syncingSheet ? 'animate-spin' : ''} /> Retry
-            </Button>
-          )}
-        </div>
-
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/80 bg-card px-3 py-2.5 shadow-sm shadow-slate-900/5">
-          <div className="min-w-0">
-            <p className="font-sans text-xs font-semibold text-foreground">
-              Training programme
-            </p>
-            <p className="font-sans text-xs text-muted-foreground">
-              {activePhase === 1
-                ? `${phaseOneSessions} of 36 Phase 1 sessions complete`
-                : 'Specialized full-body + free-weight progression'}
-            </p>
-          </div>
-          <div className="grid grid-cols-2 gap-1 rounded-xl bg-muted p-1">
-            <Button
-              type="button"
-              size="sm"
-              variant={activePhase === 1 ? 'secondary' : 'ghost'}
-              className="font-sans"
-              onClick={() => selectPhase(1)}
-            >
-              Phase 1
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant={activePhase === 2 ? 'secondary' : 'ghost'}
-              className="font-sans"
-              onClick={() => selectPhase(2)}
-              aria-label={
-                phaseTwoUnlocked
-                  ? 'Open Phase 2'
-                  : `Phase 2 locked, ${phaseOneSessions} of 36 sessions complete`
-              }
-            >
-              {phaseTwoUnlocked ? <UnlockKeyhole /> : <LockKeyhole />}
-              Phase 2
-            </Button>
-          </div>
-        </div>
 
         {view === 'today' && (
           <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_320px]">
@@ -2124,11 +2170,7 @@ export function WorkoutApp() {
                       variant="outline"
                       size="sm"
                       aria-label={`Show an animated movement guide for ${exercise.name}`}
-                      onClick={() => {
-                        setExerciseDemoVariantIndex(0);
-                        setExerciseDemoImageFailed(false);
-                        setExerciseDemoOpen(true);
-                      }}
+                      onClick={() => setExerciseDemoOpen(true)}
                       className="border-primary/20 bg-background font-sans text-xs font-semibold text-primary hover:bg-accent hover:text-primary"
                     >
                       <CirclePlay className="size-4" /> See movement
@@ -2841,6 +2883,36 @@ export function WorkoutApp() {
                 );
               })}
             </div>
+            {newTrainingToolsEnabled && (
+              <details className="group mt-5 overflow-hidden rounded-2xl border bg-card">
+                <summary className="flex cursor-pointer list-none items-center gap-3 px-5 py-4 font-sans [&::-webkit-details-marker]:hidden">
+                  <span className="grid size-9 place-items-center rounded-xl bg-accent text-primary">
+                    <Sparkles className="size-4" />
+                  </span>
+                  <span>
+                    <span className="block text-sm font-semibold">
+                      Programme insights
+                    </span>
+                    <span className="block text-xs font-normal text-muted-foreground">
+                      Progress, effort, muscle balance, and recovery signals
+                    </span>
+                  </span>
+                  <ChevronDown className="ml-auto size-4 text-muted-foreground transition-transform group-open:rotate-180" />
+                </summary>
+                <div className="border-t px-4 py-4 sm:px-5">
+                  <Suspense
+                    fallback={
+                      <div className="h-28 animate-pulse rounded-xl bg-muted/45" />
+                    }
+                  >
+                    <AdvancedInsights
+                      entries={phaseEntries}
+                      routine={activeRoutine}
+                    />
+                  </Suspense>
+                </div>
+              </details>
+            )}
             <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(330px,.65fr)]">
               <Card>
                 <CardHeader>
@@ -3810,134 +3882,29 @@ export function WorkoutApp() {
         </DialogContent>
       </Dialog>
 
-      <Dialog
-        open={exerciseDemoOpen}
-        onOpenChange={(open) => {
-          setExerciseDemoOpen(open);
-          if (!open) setExerciseDemoImageFailed(false);
-        }}
-      >
-        <DialogContent className="max-h-[calc(100dvh-1.5rem)] overflow-y-auto sm:max-w-lg">
-          <DialogHeader className="pr-8">
-            <DialogTitle className="flex items-center gap-2 font-sans text-xl">
-              <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-accent text-primary">
-                <CirclePlay className="size-5" />
-              </span>
-              {exerciseDemoVariant?.label ?? exercise.name}
-            </DialogTitle>
-            <DialogDescription className="font-sans">
-              Animated movement guide for {exercise.name}
-            </DialogDescription>
-          </DialogHeader>
+      {exerciseDemoOpen && (
+        <Suspense fallback={null}>
+          <ExerciseDemoDialog
+            exerciseName={exercise.name}
+            open={exerciseDemoOpen}
+            onOpenChange={setExerciseDemoOpen}
+          />
+        </Suspense>
+      )}
 
-          {exerciseDemo && exerciseDemoVariant ? (
-            <div className="space-y-4">
-              {exerciseDemo.variants.length > 1 && (
-                <fieldset className="flex gap-2 overflow-x-auto pb-1">
-                  <legend className="sr-only">Choose a movement</legend>
-                  {exerciseDemo.variants.map((variant, index) => (
-                    <Button
-                      key={variant.label}
-                      type="button"
-                      size="sm"
-                      variant={
-                        exerciseDemoVariantIndex === index
-                          ? 'default'
-                          : 'outline'
-                      }
-                      className="shrink-0 font-sans"
-                      aria-pressed={exerciseDemoVariantIndex === index}
-                      onClick={() => {
-                        setExerciseDemoVariantIndex(index);
-                        setExerciseDemoImageFailed(false);
-                      }}
-                    >
-                      {variant.label}
-                    </Button>
-                  ))}
-                </fieldset>
-              )}
-
-              <div className="grid min-h-64 place-items-center overflow-hidden rounded-2xl border border-primary/15 bg-white shadow-inner">
-                {exerciseDemoImageFailed ? (
-                  <div className="px-6 py-12 text-center">
-                    <ImageOff className="mx-auto size-8 text-muted-foreground" />
-                    <p className="mt-3 font-sans font-semibold">
-                      Movement guide unavailable
-                    </p>
-                    <p className="mt-1 font-sans text-sm text-muted-foreground">
-                      Check your connection and try opening the guide again.
-                    </p>
-                  </div>
-                ) : (
-                  // oxlint-disable-next-line next/no-img-element -- The on-demand modal uses animated GIFs, which should not be transformed by an image optimizer.
-                  <img
-                    key={exerciseDemoVariant.gif}
-                    src={exerciseDemoVariant.gif}
-                    alt={`${exerciseDemoVariant.label} animated exercise demonstration`}
-                    className="aspect-square max-h-[42dvh] w-full object-contain"
-                    loading="eager"
-                    decoding="async"
-                    referrerPolicy="no-referrer"
-                    onError={() => setExerciseDemoImageFailed(true)}
-                  />
-                )}
-              </div>
-
-              {exerciseDemoVariant.note && (
-                <p className="rounded-xl border border-warning/20 bg-warning-soft px-3 py-2 font-sans text-xs leading-relaxed text-warning-foreground">
-                  {exerciseDemoVariant.note}
-                </p>
-              )}
-
-              <div className="rounded-2xl bg-accent/45 p-4">
-                <p className="font-sans text-sm font-semibold">Form cues</p>
-                <ul className="mt-2 space-y-2 pl-5 font-sans text-sm leading-relaxed text-muted-foreground marker:text-primary">
-                  {exerciseDemoVariant.cues.map((cue) => (
-                    <li key={cue} className="list-disc pl-1">
-                      {cue}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <p className="font-sans text-xs leading-relaxed text-muted-foreground">
-                Use this as a movement reference, not a substitute for in-person
-                coaching. Animation from the{' '}
-                <a
-                  href={exerciseDemoSource}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="font-semibold text-primary underline-offset-2 hover:underline"
-                >
-                  open exercise library
-                </a>
-                .
-              </p>
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-dashed border-border px-6 py-10 text-center">
-              <ImageOff className="mx-auto size-8 text-muted-foreground" />
-              <p className="mt-3 font-sans font-semibold">
-                No animation matched yet
-              </p>
-              <p className="mt-1 font-sans text-sm text-muted-foreground">
-                This can happen for a custom or renamed exercise.
-              </p>
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button
-              type="button"
-              className="w-full sm:w-auto"
-              onClick={() => setExerciseDemoOpen(false)}
-            >
-              Got it
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {activeTrainingTool && (
+        <Suspense fallback={null}>
+          <TrainingToolsDialog
+            tool={activeTrainingTool}
+            schedule={schedule}
+            activeWeek={activeWeek}
+            activeDay={activeDay}
+            currentWeight={numberOrNull(draft.sets[0]?.weight ?? '')}
+            onScheduleChange={setSchedule}
+            onClose={() => setActiveTrainingTool(null)}
+          />
+        </Suspense>
+      )}
 
       <Dialog
         open={programOpen}

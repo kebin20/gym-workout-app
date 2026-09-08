@@ -16,7 +16,7 @@ export const metadata: Metadata = {
   applicationName: 'Liftline',
   manifest: '/manifest-v2.webmanifest',
   description:
-    'A mobile-friendly 12-week, 3-day workout tracker for logging sets, reps, RIR, notes, volume, and weekly progress.',
+    'A mobile-friendly two-phase strength tracker for logging sets, reps, RIR, notes, volume, and weekly progress.',
   icons: {
     icon: [
       { url: '/favicon-v2.svg', type: 'image/svg+xml' },
@@ -43,7 +43,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'Liftline',
     description:
-      'Log every set, follow your 3-day routine, and see 12 weeks of progress.',
+      'Log every set, follow your 3-day routine, and track progress across two training phases.',
     type: 'website',
     images: [
       {
@@ -58,7 +58,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'Liftline',
     description:
-      'Log every set, follow your 3-day routine, and see 12 weeks of progress.',
+      'Log every set, follow your 3-day routine, and track progress across two training phases.',
     images: ['/og.png'],
   },
 };

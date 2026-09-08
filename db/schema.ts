@@ -1,4 +1,5 @@
 import {
+  index,
   integer,
   real,
   sqliteTable,
@@ -43,6 +44,7 @@ export const workoutEntries = sqliteTable(
       table.day,
       table.exerciseOrder,
     ),
+    index('workout_entry_updated_at_idx').on(table.updatedAt),
   ],
 );
 
@@ -70,5 +72,46 @@ export const sessionExercises = sqliteTable(
       table.day,
       table.exerciseOrder,
     ),
+  ],
+);
+
+export const appSettings = sqliteTable('app_settings', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+  updatedAt: text('updated_at').notNull(),
+});
+
+export const readinessChecks = sqliteTable(
+  'readiness_checks',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    checkedAt: text('checked_at').notNull(),
+    week: integer('week').notNull(),
+    day: text('day').notNull(),
+    sleep: integer('sleep').notNull(),
+    energy: integer('energy').notNull(),
+    soreness: integer('soreness').notNull(),
+    jointComfort: integer('joint_comfort').notNull(),
+    recommendation: text('recommendation').notNull(),
+  },
+  (table) => [index('readiness_checked_at_idx').on(table.checkedAt)],
+);
+
+export const bodyMetrics = sqliteTable(
+  'body_metrics',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    date: text('date').notNull(),
+    weight: real('weight'),
+    waist: real('waist'),
+    bodyFat: real('body_fat'),
+    leanMass: real('lean_mass'),
+    source: text('source').notNull().default('manual'),
+    notes: text('notes'),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('body_metric_date_source_idx').on(table.date, table.source),
+    index('body_metric_date_idx').on(table.date),
   ],
 );
