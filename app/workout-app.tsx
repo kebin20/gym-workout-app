@@ -86,6 +86,7 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -187,8 +188,6 @@ const sessionExerciseCacheKey = 'liftline.session-exercises.v1';
 const pendingWorkoutKey = 'liftline.pending-workouts.v1';
 const activeWeekPreferenceKey = 'liftline.active-week.v1';
 const setNumbers = [1, 2, 3, 4, 5] as const;
-const newTrainingToolsEnabled = true;
-
 const emptyDraft: Draft = {
   sets: Array.from({ length: 5 }, () => ({
     weight: '',
@@ -801,6 +800,8 @@ export function WorkoutApp() {
   const [isOnline, setIsOnline] = useState(true);
   const [pendingWorkoutCount, setPendingWorkoutCount] = useState(0);
   const [restAlertsEnabled, setRestAlertsEnabled] = useState(false);
+  const [notificationAlertsAvailable, setNotificationAlertsAvailable] =
+    useState(false);
   const [personalRecords, setPersonalRecords] = useState<string[]>([]);
   const [personalRecordOpen, setPersonalRecordOpen] = useState(false);
   const [sessionSummaryOpen, setSessionSummaryOpen] = useState(false);
@@ -950,6 +951,7 @@ export function WorkoutApp() {
         setSessionExercises(cachedSessionExercises);
       setIsOnline(navigator.onLine);
       setPendingWorkoutCount(readPendingWorkouts().length);
+      setNotificationAlertsAvailable('Notification' in window);
       setRestAlertsEnabled(
         'Notification' in window && Notification.permission === 'granted',
       );
@@ -1261,6 +1263,7 @@ export function WorkoutApp() {
       setPhaseUnlockOpen(true);
       return;
     }
+    if (phase === activePhase) return;
     const nextWeek = phase === 1 ? 12 : 13;
     setActiveWeek(nextWeek);
     window.localStorage.setItem(activeWeekPreferenceKey, String(nextWeek));
@@ -1907,70 +1910,70 @@ export function WorkoutApp() {
               Phase {activePhase} <ChevronDown />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-72 p-2">
-              <DropdownMenuLabel className="space-y-1 px-2 py-2">
-                <span className="block font-sans text-sm font-semibold text-foreground">
-                  Training programme
-                </span>
-                <span className="block font-sans text-xs font-normal text-muted-foreground">
-                  {activePhase === 1
-                    ? `${phaseOneSessions} of 36 Phase 1 sessions complete`
-                    : 'Specialized full-body progression'}
-                </span>
-                <span className="block h-1.5 overflow-hidden rounded-full bg-muted">
-                  <span
-                    className="block h-full rounded-full bg-primary"
-                    style={{ width: `${(phaseOneSessions / 36) * 100}%` }}
-                  />
-                </span>
-              </DropdownMenuLabel>
-              <DropdownMenuItem
-                className="px-2 py-2 font-sans"
-                onClick={() => selectPhase(1)}
-              >
-                {activePhase === 1 ? <Check /> : <Dumbbell />} Phase 1
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="px-2 py-2 font-sans"
-                onClick={() => selectPhase(2)}
-              >
-                {phaseTwoUnlocked ? <UnlockKeyhole /> : <LockKeyhole />}
-                Phase 2
-                {!phaseTwoUnlocked && (
-                  <span className="ml-auto text-xs text-muted-foreground">
-                    Locked
+              <DropdownMenuGroup>
+                <DropdownMenuLabel className="space-y-1 px-2 py-2">
+                  <span className="block font-sans text-sm font-semibold text-foreground">
+                    Training programme
                   </span>
-                )}
-              </DropdownMenuItem>
-              {newTrainingToolsEnabled && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuLabel className="px-2">Tools</DropdownMenuLabel>
-                  <DropdownMenuItem
-                    className="px-2 py-2 font-sans"
-                    onClick={() => setActiveTrainingTool('schedule')}
-                  >
-                    <CalendarDays /> Training schedule
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    className="px-2 py-2 font-sans"
-                    onClick={() => setActiveTrainingTool('readiness')}
-                  >
-                    <Activity /> Readiness check
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    className="px-2 py-2 font-sans"
-                    onClick={() => setActiveTrainingTool('calculator')}
-                  >
-                    <Calculator /> Warm-up & plates
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    className="px-2 py-2 font-sans"
-                    onClick={() => setActiveTrainingTool('metrics')}
-                  >
-                    <Scale /> Body metrics
-                  </DropdownMenuItem>
-                </>
-              )}
+                  <span className="block font-sans text-xs font-normal text-muted-foreground">
+                    {activePhase === 1
+                      ? `${phaseOneSessions} of 36 Phase 1 sessions complete`
+                      : 'Specialized full-body progression'}
+                  </span>
+                  <span className="block h-1.5 overflow-hidden rounded-full bg-muted">
+                    <span
+                      className="block h-full rounded-full bg-primary"
+                      style={{ width: `${(phaseOneSessions / 36) * 100}%` }}
+                    />
+                  </span>
+                </DropdownMenuLabel>
+                <DropdownMenuItem
+                  className="px-2 py-2 font-sans"
+                  onClick={() => selectPhase(1)}
+                >
+                  {activePhase === 1 ? <Check /> : <Dumbbell />} Phase 1
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="px-2 py-2 font-sans"
+                  onClick={() => selectPhase(2)}
+                >
+                  {phaseTwoUnlocked ? <UnlockKeyhole /> : <LockKeyhole />}
+                  Phase 2
+                  {!phaseTwoUnlocked && (
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      Locked
+                    </span>
+                  )}
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                <DropdownMenuLabel className="px-2">Tools</DropdownMenuLabel>
+                <DropdownMenuItem
+                  className="px-2 py-2 font-sans"
+                  onClick={() => setActiveTrainingTool('schedule')}
+                >
+                  <CalendarDays /> Training schedule
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="px-2 py-2 font-sans"
+                  onClick={() => setActiveTrainingTool('readiness')}
+                >
+                  <Activity /> Readiness check
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="px-2 py-2 font-sans"
+                  onClick={() => setActiveTrainingTool('calculator')}
+                >
+                  <Calculator /> Warm-up & plates
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="px-2 py-2 font-sans"
+                  onClick={() => setActiveTrainingTool('metrics')}
+                >
+                  <Scale /> Body metrics
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="px-2 py-2 font-sans"
@@ -2100,8 +2103,8 @@ export function WorkoutApp() {
                 </CardContent>
               </Card>
 
-              <div className="flex items-center justify-between gap-3">
-                <div>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
                   <p className="font-sans text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                     Day {activeDay} · Exercise {activeIndex + 1} of{' '}
                     {dayExercises.length}
@@ -2110,7 +2113,7 @@ export function WorkoutApp() {
                     {exercise.name}
                   </h2>
                 </div>
-                <div className="flex flex-wrap justify-end gap-2">
+                <div className="flex shrink-0 flex-nowrap justify-end gap-2">
                   <Button
                     variant="outline"
                     size="icon"
@@ -2208,7 +2211,7 @@ export function WorkoutApp() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      {!restAlertsEnabled && 'Notification' in globalThis && (
+                      {!restAlertsEnabled && notificationAlertsAvailable && (
                         <Button
                           type="button"
                           variant="ghost"
@@ -2893,36 +2896,34 @@ export function WorkoutApp() {
                 );
               })}
             </div>
-            {newTrainingToolsEnabled && (
-              <details className="group mt-5 overflow-hidden rounded-2xl border bg-card">
-                <summary className="flex cursor-pointer list-none items-center gap-3 px-5 py-4 font-sans [&::-webkit-details-marker]:hidden">
-                  <span className="grid size-9 place-items-center rounded-xl bg-accent text-primary">
-                    <Sparkles className="size-4" />
+            <details className="group mt-5 overflow-hidden rounded-2xl border bg-card">
+              <summary className="flex cursor-pointer list-none items-center gap-3 px-5 py-4 font-sans [&::-webkit-details-marker]:hidden">
+                <span className="grid size-9 place-items-center rounded-xl bg-accent text-primary">
+                  <Sparkles className="size-4" />
+                </span>
+                <span>
+                  <span className="block text-sm font-semibold">
+                    Programme insights
                   </span>
-                  <span>
-                    <span className="block text-sm font-semibold">
-                      Programme insights
-                    </span>
-                    <span className="block text-xs font-normal text-muted-foreground">
-                      Progress, effort, muscle balance, and recovery signals
-                    </span>
+                  <span className="block text-xs font-normal text-muted-foreground">
+                    Progress, effort, muscle balance, and recovery signals
                   </span>
-                  <ChevronDown className="ml-auto size-4 text-muted-foreground transition-transform group-open:rotate-180" />
-                </summary>
-                <div className="border-t px-4 py-4 sm:px-5">
-                  <Suspense
-                    fallback={
-                      <div className="h-28 animate-pulse rounded-xl bg-muted/45" />
-                    }
-                  >
-                    <AdvancedInsights
-                      entries={phaseEntries}
-                      routine={activeRoutine}
-                    />
-                  </Suspense>
-                </div>
-              </details>
-            )}
+                </span>
+                <ChevronDown className="ml-auto size-4 text-muted-foreground transition-transform group-open:rotate-180" />
+              </summary>
+              <div className="border-t px-4 py-4 sm:px-5">
+                <Suspense
+                  fallback={
+                    <div className="h-28 animate-pulse rounded-xl bg-muted/45" />
+                  }
+                >
+                  <AdvancedInsights
+                    entries={phaseEntries}
+                    routine={activeRoutine}
+                  />
+                </Suspense>
+              </div>
+            </details>
             <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(330px,.65fr)]">
               <Card>
                 <CardHeader>
