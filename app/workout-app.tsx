@@ -611,6 +611,32 @@ function weeklySummariesForPhase(
   });
 }
 
+function firstIncompleteDayForWeek(
+  entries: WorkoutEntry[],
+  sessionExercises: SessionExercise[],
+  week: number,
+) {
+  const completedEntries = entries.filter(
+    (entry) => entry.week === week && entry.completed,
+  );
+  return (
+    days.find((day) => {
+      const required = planForSession(sessionExercises, week, day).filter(
+        (item) => !item.skipped,
+      );
+      return (
+        required.length > 0 &&
+        !required.every((item) =>
+          completedEntries.some(
+            (entry) =>
+              entry.day === day && entry.exerciseOrder === item.order,
+          ),
+        )
+      );
+    }) ?? 'A'
+  );
+}
+
 function visibleSetsForEntry(
   entry: WorkoutEntry | undefined,
   fallback: number,
@@ -1160,9 +1186,18 @@ export function WorkoutApp() {
     if (loading || startupWeekApplied.current) return;
     startupWeekApplied.current = true;
     const scheduledWeek = scheduledWeekForToday(schedule, phaseTwoUnlocked);
-    const restore = window.setTimeout(() => setActiveWeek(scheduledWeek), 0);
+    const scheduledDay = firstIncompleteDayForWeek(
+      entries,
+      sessionExercises,
+      scheduledWeek,
+    );
+    const restore = window.setTimeout(() => {
+      setActiveWeek(scheduledWeek);
+      setActiveDay(scheduledDay);
+      setActiveIndex(0);
+    }, 0);
     return () => window.clearTimeout(restore);
-  }, [loading, phaseTwoUnlocked, schedule]);
+  }, [entries, loading, phaseTwoUnlocked, schedule, sessionExercises]);
 
   const currentSummary = weeklySummaries[activeDisplayWeek - 1];
   const sessionsDone = currentSummary.sessions;
@@ -1287,7 +1322,9 @@ export function WorkoutApp() {
     if (phase === activePhase) return;
     const nextWeek = phase === 1 ? 12 : 13;
     setActiveWeek(nextWeek);
-    setActiveDay('A');
+    setActiveDay(
+      firstIncompleteDayForWeek(entries, sessionExercises, nextWeek),
+    );
     setActiveIndex(0);
     setActiveTipIndex(0);
     setProgressExerciseKey('A|1');
@@ -1301,6 +1338,8 @@ export function WorkoutApp() {
 
   function selectWeek(week: number) {
     setActiveWeek(week);
+    setActiveDay(firstIncompleteDayForWeek(entries, sessionExercises, week));
+    setActiveIndex(0);
   }
 
   function chooseDay(day: TrainingDay) {
