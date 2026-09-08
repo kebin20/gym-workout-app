@@ -186,7 +186,6 @@ type SheetImportPreview = {
 const workoutCacheKey = 'liftline.workout-entries.v1';
 const sessionExerciseCacheKey = 'liftline.session-exercises.v1';
 const pendingWorkoutKey = 'liftline.pending-workouts.v1';
-const activeWeekPreferenceKey = 'liftline.active-week.v1';
 const setNumbers = [1, 2, 3, 4, 5] as const;
 const emptyDraft: Draft = {
   sets: Array.from({ length: 5 }, () => ({
@@ -379,6 +378,37 @@ function weekRange(startDate: string, offset: number) {
     timeZone: 'UTC',
   });
   return `${month.format(start)} ${start.getUTCDate()}–${month.format(end)} ${end.getUTCDate()}`;
+}
+
+function scheduledWeekForToday(
+  schedule: ProgramSchedule,
+  phaseTwoUnlocked: boolean,
+  now = new Date(),
+) {
+  const dateParts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(now);
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(dateParts.find((part) => part.type === type)?.value);
+  const today = Date.UTC(value('year'), value('month') - 1, value('day'));
+  const phaseOneStart = Date.parse(`${schedule.phase1StartDate}T00:00:00Z`);
+  const phaseTwoStart = Date.parse(`${schedule.phase2StartDate}T00:00:00Z`);
+  const weekFrom = (start: number) =>
+    Math.floor((today - start) / (7 * 24 * 60 * 60 * 1000));
+
+  if (
+    phaseTwoUnlocked &&
+    Number.isFinite(phaseTwoStart) &&
+    today >= phaseTwoStart
+  ) {
+    return Math.min(24, Math.max(13, 13 + weekFrom(phaseTwoStart)));
+  }
+
+  if (!Number.isFinite(phaseOneStart)) return 1;
+  return Math.min(12, Math.max(1, 1 + weekFrom(phaseOneStart)));
 }
 
 const trainingTips = [
@@ -824,7 +854,7 @@ export function WorkoutApp() {
   const [schedule, setSchedule] = useState<ProgramSchedule>(defaultSchedule);
   const [progressExerciseKey, setProgressExerciseKey] = useState('A|1');
   const restTimerEndsAt = useRef<number | null>(null);
-  const activeWeekPreferenceApplied = useRef(false);
+  const startupWeekApplied = useRef(false);
 
   const activePhase = activeWeek > 12 ? 2 : 1;
   const phaseStartWeek = activePhase === 1 ? 1 : 13;
@@ -1127,21 +1157,12 @@ export function WorkoutApp() {
   const phaseTwoUnlocked = phaseOneSessions === 36;
 
   useEffect(() => {
-    if (loading || activeWeekPreferenceApplied.current) return;
-    activeWeekPreferenceApplied.current = true;
-    const savedWeek = Number(
-      window.localStorage.getItem(activeWeekPreferenceKey),
-    );
-    if (
-      Number.isInteger(savedWeek) &&
-      savedWeek >= 1 &&
-      savedWeek <= 24 &&
-      (savedWeek <= 12 || phaseTwoUnlocked)
-    ) {
-      const restore = window.setTimeout(() => setActiveWeek(savedWeek), 0);
-      return () => window.clearTimeout(restore);
-    }
-  }, [loading, phaseTwoUnlocked]);
+    if (loading || startupWeekApplied.current) return;
+    startupWeekApplied.current = true;
+    const scheduledWeek = scheduledWeekForToday(schedule, phaseTwoUnlocked);
+    const restore = window.setTimeout(() => setActiveWeek(scheduledWeek), 0);
+    return () => window.clearTimeout(restore);
+  }, [loading, phaseTwoUnlocked, schedule]);
 
   const currentSummary = weeklySummaries[activeDisplayWeek - 1];
   const sessionsDone = currentSummary.sessions;
@@ -1266,7 +1287,6 @@ export function WorkoutApp() {
     if (phase === activePhase) return;
     const nextWeek = phase === 1 ? 12 : 13;
     setActiveWeek(nextWeek);
-    window.localStorage.setItem(activeWeekPreferenceKey, String(nextWeek));
     setActiveDay('A');
     setActiveIndex(0);
     setActiveTipIndex(0);
@@ -1281,7 +1301,6 @@ export function WorkoutApp() {
 
   function selectWeek(week: number) {
     setActiveWeek(week);
-    window.localStorage.setItem(activeWeekPreferenceKey, String(week));
   }
 
   function chooseDay(day: TrainingDay) {
@@ -2128,9 +2147,14 @@ export function WorkoutApp() {
                     variant="outline"
                     size="icon"
                     aria-label="Previous exercise"
-                    disabled={activeIndex === 0}
+                    disabled={dayExercises.length <= 1}
                     onClick={() =>
-                      setActiveIndex((index) => Math.max(0, index - 1))
+                      setActiveIndex((index) =>
+                        dayExercises.length > 0
+                          ? (index - 1 + dayExercises.length) %
+                            dayExercises.length
+                          : 0,
+                      )
                     }
                   >
                     <ChevronLeft />
@@ -2139,10 +2163,12 @@ export function WorkoutApp() {
                     variant="outline"
                     size="icon"
                     aria-label="Next exercise"
-                    disabled={activeIndex === dayExercises.length - 1}
+                    disabled={dayExercises.length <= 1}
                     onClick={() =>
                       setActiveIndex((index) =>
-                        Math.min(dayExercises.length - 1, index + 1),
+                        dayExercises.length > 0
+                          ? (index + 1) % dayExercises.length
+                          : 0,
                       )
                     }
                   >

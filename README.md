@@ -59,6 +59,8 @@ Minor fixes, visual refinements, and deployment maintenance are grouped into the
 - Simplified the mobile session editor to a compact settings icon while retaining its full label on larger screens.
 - Stabilized the consolidated Phase menu, kept active-phase selections on the current week, and removed a notification-button hydration error that could show an error page.
 - Kept the session editor and previous/next exercise controls on one compact row on mobile.
+- Made exercise navigation circular so moving past the final exercise returns to the first, and moving back from the first returns to the final exercise.
+- Made startup calendar-aware so Liftline opens on the programme week containing today instead of resetting to Week 1.
 
 ### v3.1 — Faster startup and quieter navigation (8 September 2026)
 
