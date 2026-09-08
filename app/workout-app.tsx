@@ -2216,8 +2216,8 @@ export function WorkoutApp() {
                 </div>
               </div>
 
-              <Card className="border-0 shadow-sm shadow-slate-900/5 ring-border">
-                <CardHeader className="border-b bg-muted/35">
+              <Card className="gap-0 border-0 py-0 shadow-sm shadow-slate-900/5 ring-border">
+                <CardHeader className="border-b bg-muted/35 pt-(--card-spacing)">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge className="bg-day-c font-sans text-day-c-foreground">
                       Day {activeDay}
@@ -2367,7 +2367,7 @@ export function WorkoutApp() {
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent className="pt-1">
+                <CardContent className="py-(--card-spacing)">
                   {exercise.skipped ? (
                     <div className="grid min-h-52 place-items-center py-8 text-center">
                       <div className="max-w-sm">
