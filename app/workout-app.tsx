@@ -804,6 +804,8 @@ export function WorkoutApp() {
   const [personalRecords, setPersonalRecords] = useState<string[]>([]);
   const [personalRecordOpen, setPersonalRecordOpen] = useState(false);
   const [sessionSummaryOpen, setSessionSummaryOpen] = useState(false);
+  const [sessionCelebrationPending, setSessionCelebrationPending] =
+    useState(false);
   const [programOpen, setProgramOpen] = useState(false);
   const [programSaving, setProgramSaving] = useState(false);
   const [programDraft, setProgramDraft] = useState<SessionExercise[]>([]);
@@ -1416,10 +1418,6 @@ export function WorkoutApp() {
     const nextEntries = replaceWorkoutEntry(entries, localEntry);
     setEntries(nextEntries);
     cacheWorkoutEntries(nextEntries);
-    if (records.length > 0) {
-      setPersonalRecords(records);
-      setPersonalRecordOpen(true);
-    }
     const sessionComplete = dayExercises
       .filter((item) => !item.skipped)
       .every((item) =>
@@ -1431,6 +1429,12 @@ export function WorkoutApp() {
             entry.exerciseOrder === item.order,
         ),
       );
+    const sessionJustCompleted = sessionComplete && !currentSessionComplete;
+    if (sessionJustCompleted) setSessionCelebrationPending(true);
+    if (records.length > 0) {
+      setPersonalRecords(records);
+      setPersonalRecordOpen(true);
+    }
 
     const queueForLater = () => {
       const key = workoutKey(payload);
@@ -1444,7 +1448,8 @@ export function WorkoutApp() {
     };
 
     const advance = () => {
-      if (sessionComplete && records.length === 0) setSessionSummaryOpen(true);
+      if (sessionJustCompleted && records.length === 0)
+        setSessionSummaryOpen(true);
       else if (activeIndex < dayExercises.length - 1)
         setActiveIndex((index) => index + 1);
     };
@@ -2108,10 +2113,13 @@ export function WorkoutApp() {
                 <div className="flex flex-wrap justify-end gap-2">
                   <Button
                     variant="outline"
-                    size="sm"
+                    size="icon"
+                    className="sm:w-auto sm:px-3"
+                    aria-label="Edit session"
                     onClick={() => openProgramEditor()}
                   >
-                    <Settings2 /> Edit session
+                    <Settings2 />
+                    <span className="hidden sm:inline">Edit session</span>
                   </Button>
                   <Button
                     variant="outline"
@@ -4136,15 +4144,38 @@ export function WorkoutApp() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={sessionSummaryOpen} onOpenChange={setSessionSummaryOpen}>
+      <Dialog
+        open={sessionSummaryOpen}
+        onOpenChange={(open) => {
+          setSessionSummaryOpen(open);
+          if (!open) setSessionCelebrationPending(false);
+        }}
+      >
         <DialogContent className="max-h-[calc(100dvh-1.5rem)] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 font-sans text-xl">
-              <Sparkles className="size-5 text-primary" /> Phase {activePhase} ·
-              Week {activeDisplayWeek} · Day {activeDay}
+            {sessionCelebrationPending && (
+              <div className="mx-auto mb-2 grid size-16 place-items-center rounded-2xl bg-success-soft text-success ring-8 ring-success-soft/45">
+                <CheckCircle2 className="size-8" />
+              </div>
+            )}
+            <DialogTitle
+              className={`flex items-center gap-2 font-sans text-xl ${sessionCelebrationPending ? 'justify-center text-center' : ''}`}
+            >
+              {sessionCelebrationPending ? (
+                'Workout complete!'
+              ) : (
+                <>
+                  <Sparkles className="size-5 text-primary" /> Phase{' '}
+                  {activePhase} · Week {activeDisplayWeek} · Day {activeDay}
+                </>
+              )}
             </DialogTitle>
-            <DialogDescription className="font-sans">
-              Your completed session at a glance.
+            <DialogDescription
+              className={`font-sans ${sessionCelebrationPending ? 'text-center' : ''}`}
+            >
+              {sessionCelebrationPending
+                ? `Day ${activeDay} is done. Great work—here is your session at a glance.`
+                : 'Your current session at a glance.'}
             </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-3">
@@ -4212,7 +4243,7 @@ export function WorkoutApp() {
         open={personalRecordOpen}
         onOpenChange={(open) => {
           setPersonalRecordOpen(open);
-          if (!open && currentSessionComplete) setSessionSummaryOpen(true);
+          if (!open && sessionCelebrationPending) setSessionSummaryOpen(true);
         }}
       >
         <DialogContent className="sm:max-w-md">

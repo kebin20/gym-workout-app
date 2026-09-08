@@ -55,6 +55,8 @@ Minor fixes, visual refinements, and deployment maintenance are grouped into the
 - Added persistent weight, waist, body-fat, and lean-mass tracking with manual, Withings, InBody, and CSV source labels plus CSV import.
 - Added a compact, collapsed programme-insights panel for strength trends, muscle-group set distribution, hard-effort signals, and possible recovery concerns.
 - Extended JSON backups to include programme dates, body measurements, and readiness checks while retaining compatibility with earlier backups.
+- Added a clear workout-complete celebration and session recap when the final exercise of a day is logged.
+- Simplified the mobile session editor to a compact settings icon while retaining its full label on larger screens.
 
 ### v3.1 — Faster startup and quieter navigation (8 September 2026)
 
