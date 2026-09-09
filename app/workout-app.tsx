@@ -3154,6 +3154,7 @@ export function WorkoutApp() {
                 <Carousel
                   opts={{ align: 'start', loop: false }}
                   adaptiveHeight
+                  wheelNavigation
                   aria-label="Workout history by training day"
                 >
                   <CarouselContent>
@@ -3220,7 +3221,7 @@ export function WorkoutApp() {
                                   </p>
                                 </div>
                               </div>
-                              <div className="flex flex-wrap gap-2">
+                              <div className="flex flex-wrap items-center justify-end gap-2">
                                 <Badge
                                   variant="outline"
                                   className="bg-card font-sans"
@@ -3235,6 +3236,19 @@ export function WorkoutApp() {
                                   {Math.round(dayVolume).toLocaleString()} kg
                                   volume
                                 </Badge>
+                                <span className="mx-1 hidden h-6 w-px bg-border md:block" />
+                                <div className="hidden shrink-0 gap-2 md:flex">
+                                  <CarouselPrevious
+                                    aria-label="Previous training day"
+                                    title="Previous training day"
+                                    className="static inset-auto m-0 size-8 translate-x-0 translate-y-0"
+                                  />
+                                  <CarouselNext
+                                    aria-label="Next training day"
+                                    title="Next training day"
+                                    className="static inset-auto m-0 size-8 translate-x-0 translate-y-0"
+                                  />
+                                </div>
                               </div>
                             </div>
 
@@ -3333,7 +3347,8 @@ export function WorkoutApp() {
                   </CarouselContent>
                   <div className="mt-4 flex items-center justify-between gap-3">
                     <p className="font-sans text-xs text-muted-foreground">
-                      Swipe horizontally or use the arrows to change day.
+                      Swipe or scroll horizontally, or use the arrows to change
+                      day.
                     </p>
                     <div className="flex shrink-0 gap-2">
                       <CarouselPrevious className="static inset-auto m-0 translate-x-0 translate-y-0" />

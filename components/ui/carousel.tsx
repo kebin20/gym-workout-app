@@ -20,6 +20,7 @@ type CarouselProps = {
   orientation?: 'horizontal' | 'vertical';
   setApi?: (api: CarouselApi) => void;
   adaptiveHeight?: boolean;
+  wheelNavigation?: boolean;
 };
 
 type CarouselContextProps = {
@@ -49,6 +50,7 @@ function Carousel({
   setApi,
   plugins,
   adaptiveHeight = false,
+  wheelNavigation = false,
   className,
   children,
   ...props
@@ -147,6 +149,42 @@ function Carousel({
     };
   }, [adaptiveHeight, api]);
 
+  React.useEffect(() => {
+    if (!api || !wheelNavigation || orientation !== 'horizontal') return;
+
+    const viewport = api.rootNode();
+    let accumulatedDelta = 0;
+    let gestureActive = false;
+    let gestureEndTimer = 0;
+
+    const handleWheel = (event: WheelEvent) => {
+      if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
+
+      event.preventDefault();
+      window.clearTimeout(gestureEndTimer);
+      gestureEndTimer = window.setTimeout(() => {
+        accumulatedDelta = 0;
+        gestureActive = false;
+      }, 180);
+
+      if (gestureActive) return;
+      accumulatedDelta += event.deltaX;
+      if (Math.abs(accumulatedDelta) < 30) return;
+
+      gestureActive = true;
+      if (accumulatedDelta > 0) api.scrollNext();
+      else api.scrollPrev();
+      accumulatedDelta = 0;
+    };
+
+    viewport.addEventListener('wheel', handleWheel, { passive: false });
+
+    return () => {
+      window.clearTimeout(gestureEndTimer);
+      viewport.removeEventListener('wheel', handleWheel);
+    };
+  }, [api, orientation, wheelNavigation]);
+
   return (
     <CarouselContext.Provider
       value={{
@@ -154,6 +192,7 @@ function Carousel({
         api: api,
         opts,
         adaptiveHeight,
+        wheelNavigation,
         orientation:
           orientation || (opts?.axis === 'y' ? 'vertical' : 'horizontal'),
         scrollPrev,
