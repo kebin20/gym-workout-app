@@ -3152,7 +3152,7 @@ export function WorkoutApp() {
               </CardHeader>
               <CardContent className="pt-5">
                 <Carousel
-                  opts={{ align: 'start', loop: false }}
+                  opts={{ align: 'start', loop: false, duration: 18 }}
                   adaptiveHeight
                   wheelNavigation
                   aria-label="Workout history by training day"

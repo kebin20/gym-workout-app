@@ -153,6 +153,8 @@ function Carousel({
     if (!api || !wheelNavigation || orientation !== 'horizontal') return;
 
     const viewport = api.rootNode();
+    const interactionSurface =
+      viewport.closest<HTMLElement>('[data-slot="card"]') ?? viewport;
     let accumulatedDelta = 0;
     let activeDirection = 0;
     let gestureEndTimer = 0;
@@ -165,7 +167,7 @@ function Carousel({
       gestureEndTimer = window.setTimeout(() => {
         accumulatedDelta = 0;
         activeDirection = 0;
-      }, 180);
+      }, 140);
 
       const direction = event.deltaX > 0 ? 1 : -1;
       if (activeDirection === direction) return;
@@ -176,7 +178,7 @@ function Carousel({
         accumulatedDelta = 0;
       }
       accumulatedDelta += event.deltaX;
-      if (Math.abs(accumulatedDelta) < 36) return;
+      if (Math.abs(accumulatedDelta) < 16) return;
 
       activeDirection = direction;
       if (accumulatedDelta > 0) api.scrollNext();
@@ -184,11 +186,13 @@ function Carousel({
       accumulatedDelta = 0;
     };
 
-    viewport.addEventListener('wheel', handleWheel, { passive: false });
+    interactionSurface.addEventListener('wheel', handleWheel, {
+      passive: false,
+    });
 
     return () => {
       window.clearTimeout(gestureEndTimer);
-      viewport.removeEventListener('wheel', handleWheel);
+      interactionSurface.removeEventListener('wheel', handleWheel);
     };
   }, [api, orientation, wheelNavigation]);
 
@@ -230,7 +234,7 @@ function CarouselContent({ className, ...props }: React.ComponentProps<'div'>) {
       ref={carouselRef}
       className={cn(
         'overflow-hidden',
-        adaptiveHeight && 'transition-[height] duration-300 ease-out',
+        adaptiveHeight && 'transition-[height] duration-200 ease-out',
       )}
       data-slot="carousel-content"
     >
