@@ -19,6 +19,7 @@ type CarouselProps = {
   plugins?: CarouselPlugin;
   orientation?: 'horizontal' | 'vertical';
   setApi?: (api: CarouselApi) => void;
+  adaptiveHeight?: boolean;
 };
 
 type CarouselContextProps = {
@@ -47,6 +48,7 @@ function Carousel({
   opts,
   setApi,
   plugins,
+  adaptiveHeight = false,
   className,
   children,
   ...props
@@ -104,12 +106,54 @@ function Carousel({
     };
   }, [api, onSelect]);
 
+  React.useEffect(() => {
+    if (!api || !adaptiveHeight) return;
+
+    const viewport = api.rootNode();
+    let resizeObserver: ResizeObserver | undefined;
+    let animationFrame = 0;
+
+    const updateHeight = () => {
+      window.cancelAnimationFrame(animationFrame);
+      animationFrame = window.requestAnimationFrame(() => {
+        const selectedSlide = api.slideNodes()[api.selectedScrollSnap()];
+        if (!selectedSlide) return;
+        viewport.style.height = `${Math.ceil(selectedSlide.getBoundingClientRect().height)}px`;
+      });
+    };
+
+    const observeSelectedSlide = () => {
+      resizeObserver?.disconnect();
+      const selectedSlide = api.slideNodes()[api.selectedScrollSnap()];
+      if (selectedSlide && 'ResizeObserver' in window) {
+        resizeObserver = new ResizeObserver(updateHeight);
+        resizeObserver.observe(selectedSlide);
+      }
+      updateHeight();
+    };
+
+    observeSelectedSlide();
+    api.on('select', observeSelectedSlide);
+    api.on('reInit', observeSelectedSlide);
+    window.addEventListener('resize', updateHeight);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      resizeObserver?.disconnect();
+      api.off('select', observeSelectedSlide);
+      api.off('reInit', observeSelectedSlide);
+      window.removeEventListener('resize', updateHeight);
+      viewport.style.removeProperty('height');
+    };
+  }, [adaptiveHeight, api]);
+
   return (
     <CarouselContext.Provider
       value={{
         carouselRef,
         api: api,
         opts,
+        adaptiveHeight,
         orientation:
           orientation || (opts?.axis === 'y' ? 'vertical' : 'horizontal'),
         scrollPrev,
@@ -133,17 +177,21 @@ function Carousel({
 }
 
 function CarouselContent({ className, ...props }: React.ComponentProps<'div'>) {
-  const { carouselRef, orientation } = useCarousel();
+  const { adaptiveHeight, carouselRef, orientation } = useCarousel();
 
   return (
     <div
       ref={carouselRef}
-      className="overflow-hidden"
+      className={cn(
+        'overflow-hidden',
+        adaptiveHeight && 'transition-[height] duration-300 ease-out',
+      )}
       data-slot="carousel-content"
     >
       <div
         className={cn(
           'flex',
+          adaptiveHeight && 'items-start',
           orientation === 'horizontal' ? '-ml-4' : '-mt-4 flex-col',
           className,
         )}
