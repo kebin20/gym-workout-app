@@ -154,7 +154,7 @@ function Carousel({
 
     const viewport = api.rootNode();
     let accumulatedDelta = 0;
-    let gestureActive = false;
+    let activeDirection = 0;
     let gestureEndTimer = 0;
 
     const handleWheel = (event: WheelEvent) => {
@@ -164,14 +164,21 @@ function Carousel({
       window.clearTimeout(gestureEndTimer);
       gestureEndTimer = window.setTimeout(() => {
         accumulatedDelta = 0;
-        gestureActive = false;
+        activeDirection = 0;
       }, 180);
 
-      if (gestureActive) return;
+      const direction = event.deltaX > 0 ? 1 : -1;
+      if (activeDirection === direction) return;
+      if (
+        accumulatedDelta !== 0 &&
+        Math.sign(accumulatedDelta) !== direction
+      ) {
+        accumulatedDelta = 0;
+      }
       accumulatedDelta += event.deltaX;
-      if (Math.abs(accumulatedDelta) < 30) return;
+      if (Math.abs(accumulatedDelta) < 36) return;
 
-      gestureActive = true;
+      activeDirection = direction;
       if (accumulatedDelta > 0) api.scrollNext();
       else api.scrollPrev();
       accumulatedDelta = 0;
