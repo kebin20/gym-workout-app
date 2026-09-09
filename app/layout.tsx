@@ -1,11 +1,5 @@
 import type { Metadata } from 'next';
-import { Geist } from 'next/font/google';
 import './globals.css';
-
-const geistSans = Geist({
-  variable: '--font-geist-sans',
-  subsets: ['latin'],
-});
 
 const publicIconOrigin =
   'https://raw.githubusercontent.com/kebin20/gym-workout-app/62c99c0864196e7f05409f47633a79132c185675/public';
@@ -70,7 +64,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${geistSans.variable} antialiased`}>{children}</body>
+      <body className="antialiased">{children}</body>
     </html>
   );
 }

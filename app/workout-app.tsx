@@ -74,24 +74,6 @@ import {
   CarouselNext,
   CarouselPrevious,
 } from '@/components/ui/carousel';
-import { Checkbox } from '@/components/ui/checkbox';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -362,6 +344,41 @@ const ExerciseProgressChart = lazy(() => import('./exercise-progress-chart'));
 const ExerciseDemoDialog = lazy(() => import('./exercise-demo-dialog'));
 const TrainingToolsDialog = lazy(() => import('./training-tools-dialog'));
 const AdvancedInsights = lazy(() => import('./advanced-insights'));
+const Checkbox = lazy(() =>
+  import('@/components/ui/checkbox').then((module) => ({
+    default: module.Checkbox,
+  })),
+);
+const Dialog = lazy(() =>
+  import('@/components/ui/dialog').then((module) => ({
+    default: module.Dialog,
+  })),
+);
+const DialogContent = lazy(() =>
+  import('@/components/ui/dialog').then((module) => ({
+    default: module.DialogContent,
+  })),
+);
+const DialogDescription = lazy(() =>
+  import('@/components/ui/dialog').then((module) => ({
+    default: module.DialogDescription,
+  })),
+);
+const DialogFooter = lazy(() =>
+  import('@/components/ui/dialog').then((module) => ({
+    default: module.DialogFooter,
+  })),
+);
+const DialogHeader = lazy(() =>
+  import('@/components/ui/dialog').then((module) => ({
+    default: module.DialogHeader,
+  })),
+);
+const DialogTitle = lazy(() =>
+  import('@/components/ui/dialog').then((module) => ({
+    default: module.DialogTitle,
+  })),
+);
 
 const defaultSchedule: ProgramSchedule = {
   phase1StartDate: '2026-08-26',
@@ -826,9 +843,10 @@ function HistoryWeekDisclosure({
 }
 
 export function WorkoutApp() {
+  const initialWeek = scheduledWeekForToday(defaultSchedule, false);
   const [view, setView] = useState<View>('today');
-  const [activeWeek, setActiveWeek] = useState(1);
-  const [activeDay, setActiveDay] = useState<TrainingDay>('C');
+  const [activeWeek, setActiveWeek] = useState(initialWeek);
+  const [activeDay, setActiveDay] = useState<TrainingDay>('A');
   const [activeIndex, setActiveIndex] = useState(0);
   const [entries, setEntries] = useState<WorkoutEntry[]>([]);
   const [sessionExercises, setSessionExercises] = useState<SessionExercise[]>(
@@ -864,6 +882,7 @@ export function WorkoutApp() {
   const [sessionCelebrationPending, setSessionCelebrationPending] =
     useState(false);
   const [programOpen, setProgramOpen] = useState(false);
+  const [programmeMenuOpen, setProgrammeMenuOpen] = useState(false);
   const [programSaving, setProgramSaving] = useState(false);
   const [programDraft, setProgramDraft] = useState<SessionExercise[]>([]);
   const [backupOpen, setBackupOpen] = useState(false);
@@ -880,6 +899,7 @@ export function WorkoutApp() {
   const [schedule, setSchedule] = useState<ProgramSchedule>(defaultSchedule);
   const [progressExerciseKey, setProgressExerciseKey] = useState('A|1');
   const restTimerEndsAt = useRef<number | null>(null);
+  const programmeMenuRef = useRef<HTMLDivElement>(null);
   const startupWeekApplied = useRef(false);
 
   const activePhase = activeWeek > 12 ? 2 : 1;
@@ -994,6 +1014,25 @@ export function WorkoutApp() {
       setNotice('Offline workouts are safely synced to Liftline.');
     }
   }, [refreshWorkoutData]);
+
+  useEffect(() => {
+    if (!programmeMenuOpen) return;
+
+    const closeOnOutsidePress = (event: PointerEvent) => {
+      if (!programmeMenuRef.current?.contains(event.target as Node))
+        setProgrammeMenuOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setProgrammeMenuOpen(false);
+    };
+
+    document.addEventListener('pointerdown', closeOnOutsidePress);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsidePress);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [programmeMenuOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1954,22 +1993,29 @@ export function WorkoutApp() {
               onChange={setView}
             />
           </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="shrink-0 font-sans"
-                  aria-label="Open programme and tools menu"
-                />
-              }
+          <div ref={programmeMenuRef} className="relative">
+            <Button
+              type="button"
+              variant="outline"
+              className="shrink-0 font-sans"
+              aria-label="Open programme and tools menu"
+              aria-haspopup="menu"
+              aria-expanded={programmeMenuOpen}
+              aria-controls="programme-tools-menu"
+              onClick={() => setProgrammeMenuOpen((open) => !open)}
             >
-              Phase {activePhase} <ChevronDown />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-72 p-2">
-              <DropdownMenuGroup>
-                <DropdownMenuLabel className="space-y-1 px-2 py-2">
+              Phase {activePhase}{' '}
+              <ChevronDown
+                className={`transition-transform ${programmeMenuOpen ? 'rotate-180' : ''}`}
+              />
+            </Button>
+            {programmeMenuOpen && (
+              <div
+                id="programme-tools-menu"
+                role="menu"
+                className="absolute right-0 top-full z-50 mt-2 w-72 rounded-xl bg-popover p-2 text-popover-foreground shadow-lg ring-1 ring-foreground/10"
+              >
+                <div className="space-y-1 px-2 py-2">
                   <span className="block font-sans text-sm font-semibold text-foreground">
                     Training programme
                   </span>
@@ -1984,63 +2030,84 @@ export function WorkoutApp() {
                       style={{ width: `${(phaseOneSessions / 36) * 100}%` }}
                     />
                   </span>
-                </DropdownMenuLabel>
-                <DropdownMenuItem
-                  className="px-2 py-2 font-sans"
-                  onClick={() => selectPhase(1)}
+                </div>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left font-sans text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+                  onClick={() => {
+                    setProgrammeMenuOpen(false);
+                    selectPhase(1);
+                  }}
                 >
-                  {activePhase === 1 ? <Check /> : <Dumbbell />} Phase 1
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="px-2 py-2 font-sans"
-                  onClick={() => selectPhase(2)}
+                  {activePhase === 1 ? (
+                    <Check className="size-4" />
+                  ) : (
+                    <Dumbbell className="size-4" />
+                  )}{' '}
+                  Phase 1
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left font-sans text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+                  onClick={() => {
+                    setProgrammeMenuOpen(false);
+                    selectPhase(2);
+                  }}
                 >
-                  {phaseTwoUnlocked ? <UnlockKeyhole /> : <LockKeyhole />}
+                  {phaseTwoUnlocked ? (
+                    <UnlockKeyhole className="size-4" />
+                  ) : (
+                    <LockKeyhole className="size-4" />
+                  )}
                   Phase 2
                   {!phaseTwoUnlocked && (
                     <span className="ml-auto text-xs text-muted-foreground">
                       Locked
                     </span>
                   )}
-                </DropdownMenuItem>
-              </DropdownMenuGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuGroup>
-                <DropdownMenuLabel className="px-2">Tools</DropdownMenuLabel>
-                <DropdownMenuItem
-                  className="px-2 py-2 font-sans"
-                  onClick={() => setActiveTrainingTool('schedule')}
+                </button>
+                <div className="-mx-1 my-1 h-px bg-border" />
+                <p className="px-2 py-1 font-sans text-xs font-medium text-muted-foreground">
+                  Tools
+                </p>
+                {(
+                  [
+                    ['schedule', CalendarDays, 'Training schedule'],
+                    ['readiness', Activity, 'Readiness check'],
+                    ['calculator', Calculator, 'Warm-up & plates'],
+                    ['metrics', Scale, 'Body metrics'],
+                  ] as const
+                ).map(([tool, Icon, label]) => (
+                  <button
+                    key={tool}
+                    type="button"
+                    role="menuitem"
+                    className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left font-sans text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+                    onClick={() => {
+                      setProgrammeMenuOpen(false);
+                      setActiveTrainingTool(tool);
+                    }}
+                  >
+                    <Icon className="size-4" /> {label}
+                  </button>
+                ))}
+                <div className="-mx-1 my-1 h-px bg-border" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left font-sans text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+                  onClick={() => {
+                    setProgrammeMenuOpen(false);
+                    setView('guide');
+                  }}
                 >
-                  <CalendarDays /> Training schedule
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="px-2 py-2 font-sans"
-                  onClick={() => setActiveTrainingTool('readiness')}
-                >
-                  <Activity /> Readiness check
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="px-2 py-2 font-sans"
-                  onClick={() => setActiveTrainingTool('calculator')}
-                >
-                  <Calculator /> Warm-up & plates
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="px-2 py-2 font-sans"
-                  onClick={() => setActiveTrainingTool('metrics')}
-                >
-                  <Scale /> Body metrics
-                </DropdownMenuItem>
-              </DropdownMenuGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="px-2 py-2 font-sans"
-                onClick={() => setView('guide')}
-              >
-                <BookOpen /> Training guide
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                  <BookOpen className="size-4" /> Training guide
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -3909,8 +3976,10 @@ export function WorkoutApp() {
         )}
       </div>
 
-      <Dialog open={phaseUnlockOpen} onOpenChange={setPhaseUnlockOpen}>
-        <DialogContent className="sm:max-w-md">
+      {phaseUnlockOpen && (
+        <Suspense fallback={null}>
+          <Dialog open={phaseUnlockOpen} onOpenChange={setPhaseUnlockOpen}>
+            <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 font-sans text-xl">
               <span className="grid size-9 place-items-center rounded-xl bg-accent text-primary">
@@ -3971,8 +4040,10 @@ export function WorkoutApp() {
               Keep training Phase 1
             </Button>
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            </DialogContent>
+          </Dialog>
+        </Suspense>
+      )}
 
       {exerciseDemoOpen && (
         <Suspense fallback={null}>
@@ -3998,13 +4069,15 @@ export function WorkoutApp() {
         </Suspense>
       )}
 
-      <Dialog
-        open={programOpen}
-        onOpenChange={(open) => {
-          if (!programSaving) setProgramOpen(open);
-        }}
-      >
-        <DialogContent className="h-[calc(100dvh-1.5rem)] max-h-[820px] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden p-0 sm:max-w-2xl">
+      {programOpen && (
+        <Suspense fallback={null}>
+          <Dialog
+            open={programOpen}
+            onOpenChange={(open) => {
+              if (!programSaving) setProgramOpen(open);
+            }}
+          >
+            <DialogContent className="h-[calc(100dvh-1.5rem)] max-h-[820px] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden p-0 sm:max-w-2xl">
           <DialogHeader className="px-5 pt-5">
             <DialogTitle className="flex items-center gap-2 font-sans text-lg font-semibold">
               <Settings2 className="size-5 text-primary" /> Edit Week{' '}
@@ -4223,17 +4296,21 @@ export function WorkoutApp() {
               Save session
             </Button>
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            </DialogContent>
+          </Dialog>
+        </Suspense>
+      )}
 
-      <Dialog
-        open={sessionSummaryOpen}
-        onOpenChange={(open) => {
-          setSessionSummaryOpen(open);
-          if (!open) setSessionCelebrationPending(false);
-        }}
-      >
-        <DialogContent className="max-h-[calc(100dvh-1.5rem)] overflow-y-auto sm:max-w-lg">
+      {sessionSummaryOpen && (
+        <Suspense fallback={null}>
+          <Dialog
+            open={sessionSummaryOpen}
+            onOpenChange={(open) => {
+              setSessionSummaryOpen(open);
+              if (!open) setSessionCelebrationPending(false);
+            }}
+          >
+            <DialogContent className="max-h-[calc(100dvh-1.5rem)] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             {sessionCelebrationPending && (
               <div className="mx-auto mb-2 grid size-16 place-items-center rounded-2xl bg-success-soft text-success ring-8 ring-success-soft/45">
@@ -4318,17 +4395,22 @@ export function WorkoutApp() {
           <DialogFooter>
             <Button onClick={() => setSessionSummaryOpen(false)}>Done</Button>
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            </DialogContent>
+          </Dialog>
+        </Suspense>
+      )}
 
-      <Dialog
-        open={personalRecordOpen}
-        onOpenChange={(open) => {
-          setPersonalRecordOpen(open);
-          if (!open && sessionCelebrationPending) setSessionSummaryOpen(true);
-        }}
-      >
-        <DialogContent className="sm:max-w-md">
+      {personalRecordOpen && (
+        <Suspense fallback={null}>
+          <Dialog
+            open={personalRecordOpen}
+            onOpenChange={(open) => {
+              setPersonalRecordOpen(open);
+              if (!open && sessionCelebrationPending)
+                setSessionSummaryOpen(true);
+            }}
+          >
+            <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <div className="mx-auto mb-2 grid size-14 place-items-center rounded-2xl bg-warning-soft text-warning-foreground">
               <Medal className="size-7" />
@@ -4358,16 +4440,20 @@ export function WorkoutApp() {
               Keep going
             </Button>
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            </DialogContent>
+          </Dialog>
+        </Suspense>
+      )}
 
-      <Dialog
-        open={backupOpen}
-        onOpenChange={(open) => {
-          if (!backupBusy) setBackupOpen(open);
-        }}
-      >
-        <DialogContent className="sm:max-w-lg">
+      {backupOpen && (
+        <Suspense fallback={null}>
+          <Dialog
+            open={backupOpen}
+            onOpenChange={(open) => {
+              if (!backupBusy) setBackupOpen(open);
+            }}
+          >
+            <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 font-sans">
               <Upload className="size-5 text-primary" /> Restore Liftline backup
@@ -4443,16 +4529,20 @@ export function WorkoutApp() {
               Restore backup
             </Button>
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            </DialogContent>
+          </Dialog>
+        </Suspense>
+      )}
 
-      <Dialog
-        open={importOpen}
-        onOpenChange={(open) => {
-          if (!importingSheet) setImportOpen(open);
-        }}
-      >
-        <DialogContent className="h-[calc(100dvh-1.5rem)] max-h-[760px] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden p-0 sm:max-w-2xl">
+      {importOpen && (
+        <Suspense fallback={null}>
+          <Dialog
+            open={importOpen}
+            onOpenChange={(open) => {
+              if (!importingSheet) setImportOpen(open);
+            }}
+          >
+            <DialogContent className="h-[calc(100dvh-1.5rem)] max-h-[760px] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden p-0 sm:max-w-2xl">
           <DialogHeader className="px-5 pt-5">
             <DialogTitle className="font-sans text-lg font-semibold">
               Preview Google Sheet import
@@ -4613,8 +4703,10 @@ export function WorkoutApp() {
                 : `Import selected${selectedImportKeys.length > 0 ? ` (${selectedImportKeys.length})` : ''}`}
             </Button>
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            </DialogContent>
+          </Dialog>
+        </Suspense>
+      )}
 
       <nav
         aria-label="Primary navigation"
