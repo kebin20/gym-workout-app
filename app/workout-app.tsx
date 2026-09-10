@@ -1483,6 +1483,16 @@ export function WorkoutApp() {
     setNotice('Previous weights and reps copied. Review them before saving.');
   }
 
+  function closeSessionSummary() {
+    setSessionSummaryOpen(false);
+    setSessionCelebrationPending(false);
+  }
+
+  function closePersonalRecord() {
+    setPersonalRecordOpen(false);
+    if (sessionCelebrationPending) setSessionSummaryOpen(true);
+  }
+
   async function saveExercise() {
     if (!readyToSave) {
       setError(`Enter reps for all ${visibleSetCount} displayed sets.`);
@@ -4306,8 +4316,8 @@ export function WorkoutApp() {
           <Dialog
             open={sessionSummaryOpen}
             onOpenChange={(open) => {
-              setSessionSummaryOpen(open);
-              if (!open) setSessionCelebrationPending(false);
+              if (open) setSessionSummaryOpen(true);
+              else closeSessionSummary();
             }}
           >
             <DialogContent className="max-h-[calc(100dvh-1.5rem)] overflow-y-auto sm:max-w-lg">
@@ -4321,7 +4331,7 @@ export function WorkoutApp() {
               className={`flex items-center gap-2 font-sans text-xl ${sessionCelebrationPending ? 'justify-center text-center' : ''}`}
             >
               {sessionCelebrationPending ? (
-                'Workout complete!'
+                `Day ${activeDay} complete!`
               ) : (
                 <>
                   <Sparkles className="size-5 text-primary" /> Phase{' '}
@@ -4393,7 +4403,7 @@ export function WorkoutApp() {
               ))}
           </div>
           <DialogFooter>
-            <Button onClick={() => setSessionSummaryOpen(false)}>Done</Button>
+            <Button onClick={closeSessionSummary}>Done</Button>
           </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -4405,9 +4415,8 @@ export function WorkoutApp() {
           <Dialog
             open={personalRecordOpen}
             onOpenChange={(open) => {
-              setPersonalRecordOpen(open);
-              if (!open && sessionCelebrationPending)
-                setSessionSummaryOpen(true);
+              if (open) setPersonalRecordOpen(true);
+              else closePersonalRecord();
             }}
           >
             <DialogContent className="sm:max-w-md">
@@ -4435,7 +4444,7 @@ export function WorkoutApp() {
           <DialogFooter>
             <Button
               className="w-full"
-              onClick={() => setPersonalRecordOpen(false)}
+              onClick={closePersonalRecord}
             >
               Keep going
             </Button>

@@ -1,4 +1,4 @@
-const cacheVersion = 'liftline-2026-09-09-9';
+const cacheVersion = 'liftline-2026-09-10-1';
 const shellCache = `${cacheVersion}-shell`;
 const assetCache = `${cacheVersion}-assets`;
 
