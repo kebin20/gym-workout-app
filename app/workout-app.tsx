@@ -1483,9 +1483,35 @@ export function WorkoutApp() {
     setNotice('Previous weights and reps copied. Review them before saving.');
   }
 
+  function advanceToNextSession() {
+    const dayIndex = days.indexOf(activeDay);
+    const nextDay = days[dayIndex + 1];
+
+    if (nextDay) {
+      setActiveDay(nextDay);
+    } else if (activeWeek === 12 && !phaseTwoUnlocked) {
+      setNotice(
+        'Phase 2 will unlock after every Phase 1 training day is complete.',
+      );
+      return;
+    } else if (activeWeek < 24) {
+      setActiveWeek((week) => week + 1);
+      setActiveDay('A');
+    } else {
+      setNotice('You completed every Liftline training session.');
+      return;
+    }
+
+    setActiveIndex(0);
+    setActiveTipIndex(0);
+    setView('today');
+  }
+
   function closeSessionSummary() {
+    const shouldAdvance = sessionCelebrationPending;
     setSessionSummaryOpen(false);
     setSessionCelebrationPending(false);
+    if (shouldAdvance) advanceToNextSession();
   }
 
   function closePersonalRecord() {
@@ -4403,7 +4429,26 @@ export function WorkoutApp() {
               ))}
           </div>
           <DialogFooter>
-            <Button onClick={closeSessionSummary}>Done</Button>
+            <Button onClick={closeSessionSummary}>
+              {sessionCelebrationPending
+                ? activeDay === 'A'
+                  ? 'Continue to Day B'
+                  : activeDay === 'B'
+                    ? 'Continue to Day C'
+                    : activeWeek === 12 && phaseTwoUnlocked
+                      ? 'Start Phase 2'
+                      : activeWeek < 24 && activeWeek !== 12
+                        ? 'Continue to next week'
+                        : activeWeek === 24
+                          ? 'Finish programme'
+                          : 'Done'
+                : 'Done'}
+              {sessionCelebrationPending &&
+                activeWeek < 24 &&
+                (activeWeek !== 12 || phaseTwoUnlocked) && (
+                  <ChevronRight data-icon="inline-end" />
+                )}
+            </Button>
           </DialogFooter>
             </DialogContent>
           </Dialog>
