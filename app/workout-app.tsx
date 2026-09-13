@@ -168,6 +168,7 @@ type SheetImportPreview = {
 const workoutCacheKey = 'liftline.workout-entries.v1';
 const sessionExerciseCacheKey = 'liftline.session-exercises.v1';
 const pendingWorkoutKey = 'liftline.pending-workouts.v1';
+const appVersion = '3.2.1';
 const setNumbers = [1, 2, 3, 4, 5] as const;
 const emptyDraft: Draft = {
   sets: Array.from({ length: 5 }, () => ({
@@ -4011,6 +4012,13 @@ export function WorkoutApp() {
           </section>
         )}
       </div>
+
+      <footer
+        aria-label={`Liftline version ${appVersion}`}
+        className="mx-auto max-w-6xl px-4 pb-1 text-center font-sans text-xs text-muted-foreground/75 sm:px-6"
+      >
+        Liftline v{appVersion}
+      </footer>
 
       {phaseUnlockOpen && (
         <Suspense fallback={null}>
