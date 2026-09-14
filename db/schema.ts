@@ -48,6 +48,48 @@ export const workoutEntries = sqliteTable(
   ],
 );
 
+export const holidayWorkoutEntries = sqliteTable(
+  'holiday_workout_entries',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    sessionId: text('session_id').notNull(),
+    sessionDate: text('session_date').notNull(),
+    sessionType: text('session_type').notNull(),
+    exerciseOrder: integer('exercise_order').notNull(),
+    exercise: text('exercise').notNull(),
+    target: text('target').notNull(),
+    metric: text('metric').notNull(),
+    set1Weight: real('set1_weight'),
+    set1Value: real('set1_value'),
+    set2Weight: real('set2_weight'),
+    set2Value: real('set2_value'),
+    set3Weight: real('set3_weight'),
+    set3Value: real('set3_value'),
+    set4Weight: real('set4_weight'),
+    set4Value: real('set4_value'),
+    set5Weight: real('set5_weight'),
+    set5Value: real('set5_value'),
+    setCount: integer('set_count').notNull(),
+    rir: integer('rir'),
+    notes: text('notes'),
+    completed: integer('completed', { mode: 'boolean' })
+      .notNull()
+      .default(false),
+    completedAt: text('completed_at'),
+    syncStatus: text('sync_status').notNull().default('pending'),
+    sheetSyncedAt: text('sheet_synced_at'),
+    syncError: text('sync_error'),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('holiday_workout_session_exercise_idx').on(
+      table.sessionId,
+      table.exerciseOrder,
+    ),
+    index('holiday_workout_date_idx').on(table.sessionDate),
+  ],
+);
+
 export const sessionExercises = sqliteTable(
   'session_exercises',
   {

@@ -10,7 +10,7 @@ Made with ChatGPT Codex
 
 The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgpt.site](https://liftline-strength-plan.ktanzyl.chatgpt.site). Access is restricted to the site owner.
 
-Current app version: **v3.2.1**
+Current app version: **v3.3.0**
 
 ## Features
 
@@ -43,11 +43,23 @@ Current app version: **v3.2.1**
 - Fast installed-app startup with a cached interface and immediate device-local display of the latest synced workouts
 - In-app animated movement guides with exercise-specific form cues and alternate movement choices
 - A mobile-friendly nutrition guide with daily targets, meal templates, practical restaurant choices, and progress rules
+- A separate tropical-themed Holiday mode with alternating A/B bodyweight sessions, rep-or-time logging, optional travel-equipment loads, exercise history, and completion recaps
+- A dedicated `Holiday Log` Google Sheet tab that keeps travel training separate from the 12-week programme
 - Responsive Material-inspired interface using Geist typography
 
 ## Version history
 
 Minor fixes, visual refinements, and deployment maintenance are grouped into the nearest feature release so this history focuses on meaningful product changes.
+
+### v3.3 — Holiday training mode (14 September 2026)
+
+- Added a compact palm-tree Holiday control beside the phase menu without crowding the main navigation.
+- Added two alternating 25–35 minute travel sessions based on the holiday maintenance guide, covering legs, pushing, pulling, shoulders, posterior chain, and core.
+- Added a distinct teal, turquoise, and warm-sand visual theme so Holiday mode is immediately recognizable while retaining Liftline's interaction patterns.
+- Added one-to-five-set logging with optional load, reps or timed seconds, RIR, notes, previous-session recall, and recent holiday history.
+- Added a holiday-session completion recap plus guidance for recovery days and activity-heavy trips.
+- Kept all Holiday mode records in a separate D1 table so Phase 1 and Phase 2 history, progress, and unlock state remain untouched.
+- Added a separate `Holiday Log` tab and connector action for holiday records in the workout Google Sheet.
 
 ### v3.2 — Training tools and programme insights (8 September 2026)
 
@@ -180,7 +192,9 @@ app/
   api/settings/route.ts  Programme schedule settings
   api/readiness/route.ts  Recovery readiness records and guidance
   api/body-metrics/route.ts  Body measurements and CSV-import storage
+  api/holiday-workouts/route.ts  Separate Holiday mode workout history API
   workout-app.tsx        Main responsive application interface
+  holiday-workout.tsx    Holiday A/B workout logger and history
 db/schema.ts             Drizzle schema
 drizzle/                 Generated SQLite migrations
 lib/routine.ts           Phase 1 and Phase 2 routine definitions
@@ -202,13 +216,15 @@ If a workout is saved without a connection, Liftline keeps a temporary device qu
 
 Each exercise can store between one and five sets. Removing a set clears that row from the saved record; adding it again starts with an empty row.
 
+Holiday mode uses its own persistent `holiday_workout_entries` table. Each trip session receives a unique session ID, so any number of Holiday A/B sessions can be recorded without consuming a programme week or changing the current Phase 1/2 workout. Timed core movements store seconds in the same per-set value field used for repetitions and are labelled by metric in the interface and Sheet.
+
 The initial Week 1 example entries mirror the source spreadsheet so the progress experience is visible immediately. New and updated entries are stored persistently in D1.
 
 Session customizations are stored separately by week and day. Reordering, substituting, skipping, or adding an exercise changes only that selected session; the original 12-week routine remains available as the reset state.
 
 ## Google Sheet sync
 
-Liftline can exchange completed Phase 1 entries with the existing `Workout Log` layout. Each normal Phase 1 save updates its matching Week/Day/Exercise row, and the Phase 1 Progress screen includes a **Send to Google Sheet** button for backfilling completed Liftline entries. Phase 2 stays in Liftline and its downloadable backups because the original Sheet has no Phase 2 rows.
+Liftline can exchange completed Phase 1 entries with the existing `Workout Log` layout. Each normal Phase 1 save updates its matching Week/Day/Exercise row, and the Phase 1 Progress screen includes a **Send to Google Sheet** button for backfilling completed Liftline entries. Phase 2 stays in Liftline and its downloadable backups because the original Sheet has no Phase 2 rows. Holiday mode writes to the separate `Holiday Log` tab by session ID and exercise number.
 
 Normal saves return as soon as Liftline's database has stored the workout, while Google Sheet mirroring continues in the background. Because the existing sheet layout contains three set pairs, sets 4–5 remain stored and visible in Liftline while the first three sets are mirrored to Google Sheets.
 
@@ -227,6 +243,6 @@ The linked workbook is currently an Excel `.xlsm` file in Google Drive. Google r
    - `GOOGLE_SHEETS_WEBHOOK_URL`: the Apps Script `/exec` URL
    - `GOOGLE_SHEETS_SYNC_TOKEN`: the same random token
 
-The Apps Script reads completed rows and only writes Date, set weights/reps, RIR, Notes, and Logged status. It identifies rows by Week, Day, and Exercise number, preserving the workbook's existing formulas and formatting.
+The Apps Script reads completed programme rows and only writes Date, set weights/reps, RIR, Notes, and Logged status. It identifies programme rows by Week, Day, and Exercise number. Holiday entries are appended or updated in `Holiday Log` using Session ID and Exercise number, including their reps-or-seconds metric and optional loads. After updating an existing Apps Script deployment for v3.3, create a new deployment version so the `writeHoliday` action becomes available at the existing `/exec` URL.
 
 Workout dates use Liftline's Asia/Tokyo calendar day rather than the Google Sheet's timezone. This prevents an evening workout recorded on September 4 in Liftline from appearing as September 3 in a Sheet configured for a western timezone.

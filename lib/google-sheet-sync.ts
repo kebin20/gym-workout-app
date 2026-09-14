@@ -1,5 +1,7 @@
 import { env } from 'cloudflare:workers';
 
+import type { HolidayWorkoutEntry } from '@/lib/holiday-workout-types';
+
 export type WorkoutSheetEntry = {
   week: number;
   day: string;
@@ -152,6 +154,65 @@ export async function syncWorkoutEntries(
       configured: true,
       synced: 0,
       message: 'Liftline is saved, but the Google Sheet could not be reached.',
+    };
+  }
+}
+
+export async function syncHolidayWorkoutEntries(
+  entries: HolidayWorkoutEntry[],
+): Promise<SheetSyncResult> {
+  const config = getSyncConfig();
+  if (!config) {
+    return {
+      ok: false,
+      configured: false,
+      synced: 0,
+      message: 'Google Sheet sync is not connected yet.',
+    };
+  }
+
+  if (entries.length === 0) return { ok: true, configured: true, synced: 0 };
+
+  try {
+    const response = await fetch(config.webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+      body: JSON.stringify({
+        token: config.token,
+        action: 'writeHoliday',
+        entries,
+      }),
+      redirect: 'follow',
+      signal: AbortSignal.timeout(10_000),
+    });
+    const responseText = await response.text();
+    let result: { ok?: boolean; synced?: number; error?: string } = {};
+    try {
+      result = JSON.parse(responseText) as typeof result;
+    } catch {
+      // A non-JSON response is handled by the failure branch below.
+    }
+
+    if (!response.ok || !result.ok) {
+      return {
+        ok: false,
+        configured: true,
+        synced: Number(result.synced ?? 0),
+        message: result.error ?? 'The Holiday Log did not accept the update.',
+      };
+    }
+
+    return {
+      ok: true,
+      configured: true,
+      synced: Number(result.synced ?? entries.length),
+    };
+  } catch {
+    return {
+      ok: false,
+      configured: true,
+      synced: 0,
+      message: 'Liftline is saved, but the Holiday Log could not be reached.',
     };
   }
 }

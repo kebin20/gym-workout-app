@@ -3,6 +3,8 @@ const WORKOUT_SHEET_NAME = 'Workout Log';
 const WORKOUT_TIME_ZONE = 'Asia/Tokyo';
 const HEADER_ROW = 4;
 const COLUMN_COUNT = 18;
+const HOLIDAY_SHEET_NAME = 'Holiday Log';
+const HOLIDAY_COLUMN_COUNT = 20;
 
 function doGet() {
   return jsonResponse({ ok: true, service: 'Liftline Google Sheet sync' });
@@ -20,6 +22,15 @@ function doPost(event) {
     }
 
     if (payload.action === 'read') return readWorkoutEntries();
+    if (payload.action === 'writeHoliday') {
+      const holidayEntries = Array.isArray(payload.entries)
+        ? payload.entries
+        : [];
+      if (holidayEntries.length === 0)
+        return jsonResponse({ ok: true, synced: 0 });
+      lock.waitLock(10000);
+      return writeHolidayEntries(holidayEntries);
+    }
 
     const entries = Array.isArray(payload.entries) ? payload.entries : [];
     if (entries.length === 0) return jsonResponse({ ok: true, synced: 0 });
@@ -88,6 +99,57 @@ function doPost(event) {
   }
 }
 
+function writeHolidayEntries(entries) {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = spreadsheet.getSheetByName(HOLIDAY_SHEET_NAME);
+  if (!sheet) throw new Error('Holiday Log sheet not found.');
+
+  const firstDataRow = HEADER_ROW + 1;
+  const rowCount = Math.max(0, sheet.getLastRow() - HEADER_ROW);
+  const rows = rowCount
+    ? sheet
+        .getRange(firstDataRow, 1, rowCount, HOLIDAY_COLUMN_COUNT)
+        .getValues()
+    : [];
+  const rowByKey = {};
+  rows.forEach(function (row, index) {
+    rowByKey[holidayEntryKey(row[0], row[3])] = firstDataRow + index;
+  });
+
+  entries.forEach(function (entry) {
+    const key = holidayEntryKey(entry.sessionId, entry.exerciseOrder);
+    const rowNumber = rowByKey[key] || sheet.getLastRow() + 1;
+    const values = [
+      String(entry.sessionId || ''),
+      calendarDateSerial(entry.sessionDate, entry.completedAt),
+      String(entry.sessionType || ''),
+      numberValue(entry.exerciseOrder),
+      String(entry.exercise || ''),
+      String(entry.target || ''),
+      String(entry.metric || 'reps'),
+      cellValue(entry.set1Weight),
+      cellValue(entry.set1Value),
+      cellValue(entry.set2Weight),
+      cellValue(entry.set2Value),
+      cellValue(entry.set3Weight),
+      cellValue(entry.set3Value),
+      cellValue(entry.set4Weight),
+      cellValue(entry.set4Value),
+      cellValue(entry.set5Weight),
+      cellValue(entry.set5Value),
+      cellValue(entry.rir),
+      String(entry.notes || ''),
+      entry.completed ? 'Yes' : '',
+    ];
+    sheet.getRange(rowNumber, 1, 1, HOLIDAY_COLUMN_COUNT).setValues([values]);
+    sheet.getRange(rowNumber, 2).setNumberFormat('yyyy-mm-dd');
+    rowByKey[key] = rowNumber;
+  });
+
+  SpreadsheetApp.flush();
+  return jsonResponse({ ok: true, synced: entries.length });
+}
+
 function readWorkoutEntries() {
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   const spreadsheetTimeZone =
@@ -144,6 +206,10 @@ function entryKey(week, day, exerciseOrder) {
     '|' +
     Number(exerciseOrder)
   );
+}
+
+function holidayEntryKey(sessionId, exerciseOrder) {
+  return String(sessionId || '').trim() + '|' + Number(exerciseOrder);
 }
 
 function cellValue(value) {

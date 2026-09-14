@@ -52,6 +52,7 @@ import {
   TimerReset,
   Trash2,
   TrendingUp,
+  TreePalm,
   UnlockKeyhole,
   Upload,
 } from 'lucide-react';
@@ -168,7 +169,7 @@ type SheetImportPreview = {
 const workoutCacheKey = 'liftline.workout-entries.v1';
 const sessionExerciseCacheKey = 'liftline.session-exercises.v1';
 const pendingWorkoutKey = 'liftline.pending-workouts.v1';
-const appVersion = '3.2.1';
+const appVersion = '3.3.0';
 const setNumbers = [1, 2, 3, 4, 5] as const;
 const emptyDraft: Draft = {
   sets: Array.from({ length: 5 }, () => ({
@@ -345,6 +346,7 @@ const ExerciseProgressChart = lazy(() => import('./exercise-progress-chart'));
 const ExerciseDemoDialog = lazy(() => import('./exercise-demo-dialog'));
 const TrainingToolsDialog = lazy(() => import('./training-tools-dialog'));
 const AdvancedInsights = lazy(() => import('./advanced-insights'));
+const HolidayWorkout = lazy(() => import('./holiday-workout'));
 const Checkbox = lazy(() =>
   import('@/components/ui/checkbox').then((module) => ({
     default: module.Checkbox,
@@ -646,8 +648,7 @@ function firstIncompleteDayForWeek(
         required.length > 0 &&
         !required.every((item) =>
           completedEntries.some(
-            (entry) =>
-              entry.day === day && entry.exerciseOrder === item.order,
+            (entry) => entry.day === day && entry.exerciseOrder === item.order,
           ),
         )
       );
@@ -846,6 +847,7 @@ function HistoryWeekDisclosure({
 export function WorkoutApp() {
   const initialWeek = scheduledWeekForToday(defaultSchedule, false);
   const [view, setView] = useState<View>('today');
+  const [holidayMode, setHolidayMode] = useState(false);
   const [activeWeek, setActiveWeek] = useState(initialWeek);
   const [activeDay, setActiveDay] = useState<TrainingDay>('A');
   const [activeIndex, setActiveIndex] = useState(0);
@@ -1971,6 +1973,26 @@ export function WorkoutApp() {
     }
   }
 
+  if (holidayMode) {
+    return (
+      <Suspense
+        fallback={
+          <main className="grid min-h-screen place-items-center bg-[linear-gradient(180deg,#ecfdf8,#fff8eb)] text-teal-800">
+            <span className="flex items-center gap-2 font-sans text-sm font-semibold">
+              <Loader2 className="size-4 animate-spin" /> Opening Holiday mode
+            </span>
+          </main>
+        }
+      >
+        <HolidayWorkout
+          appVersion={appVersion}
+          isOnline={isOnline}
+          onExit={() => setHolidayMode(false)}
+        />
+      </Suspense>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-background pb-24 font-sans text-foreground md:pb-10">
       <header className="sticky top-0 z-30 border-b border-border/80 bg-card/95 backdrop-blur">
@@ -2030,120 +2052,131 @@ export function WorkoutApp() {
               onChange={setView}
             />
           </div>
-          <div ref={programmeMenuRef} className="relative">
+          <div className="ml-auto flex items-center gap-2 md:ml-0">
             <Button
               type="button"
               variant="outline"
-              className="shrink-0 font-sans"
-              aria-label="Open programme and tools menu"
-              aria-haspopup="menu"
-              aria-expanded={programmeMenuOpen}
-              aria-controls="programme-tools-menu"
-              onClick={() => setProgrammeMenuOpen((open) => !open)}
+              className="shrink-0 border-teal-800/20 bg-teal-50 font-sans text-teal-800 hover:bg-teal-100 hover:text-teal-900"
+              aria-label="Open Holiday mode"
+              onClick={() => setHolidayMode(true)}
             >
-              Phase {activePhase}{' '}
-              <ChevronDown
-                className={`transition-transform ${programmeMenuOpen ? 'rotate-180' : ''}`}
-              />
+              <TreePalm /> <span className="hidden sm:inline">Holiday</span>
             </Button>
-            {programmeMenuOpen && (
-              <div
-                id="programme-tools-menu"
-                role="menu"
-                className="absolute right-0 top-full z-50 mt-2 w-72 rounded-xl bg-popover p-2 text-popover-foreground shadow-lg ring-1 ring-foreground/10"
+            <div ref={programmeMenuRef} className="relative">
+              <Button
+                type="button"
+                variant="outline"
+                className="shrink-0 font-sans"
+                aria-label="Open programme and tools menu"
+                aria-haspopup="menu"
+                aria-expanded={programmeMenuOpen}
+                aria-controls="programme-tools-menu"
+                onClick={() => setProgrammeMenuOpen((open) => !open)}
               >
-                <div className="space-y-1 px-2 py-2">
-                  <span className="block font-sans text-sm font-semibold text-foreground">
-                    Training programme
-                  </span>
-                  <span className="block font-sans text-xs font-normal text-muted-foreground">
-                    {activePhase === 1
-                      ? `${phaseOneSessions} of 36 Phase 1 sessions complete`
-                      : 'Specialized full-body progression'}
-                  </span>
-                  <span className="block h-1.5 overflow-hidden rounded-full bg-muted">
-                    <span
-                      className="block h-full rounded-full bg-primary"
-                      style={{ width: `${(phaseOneSessions / 36) * 100}%` }}
-                    />
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left font-sans text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
-                  onClick={() => {
-                    setProgrammeMenuOpen(false);
-                    selectPhase(1);
-                  }}
+                Phase {activePhase}{' '}
+                <ChevronDown
+                  className={`transition-transform ${programmeMenuOpen ? 'rotate-180' : ''}`}
+                />
+              </Button>
+              {programmeMenuOpen && (
+                <div
+                  id="programme-tools-menu"
+                  role="menu"
+                  className="absolute right-0 top-full z-50 mt-2 w-72 rounded-xl bg-popover p-2 text-popover-foreground shadow-lg ring-1 ring-foreground/10"
                 >
-                  {activePhase === 1 ? (
-                    <Check className="size-4" />
-                  ) : (
-                    <Dumbbell className="size-4" />
-                  )}{' '}
-                  Phase 1
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left font-sans text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
-                  onClick={() => {
-                    setProgrammeMenuOpen(false);
-                    selectPhase(2);
-                  }}
-                >
-                  {phaseTwoUnlocked ? (
-                    <UnlockKeyhole className="size-4" />
-                  ) : (
-                    <LockKeyhole className="size-4" />
-                  )}
-                  Phase 2
-                  {!phaseTwoUnlocked && (
-                    <span className="ml-auto text-xs text-muted-foreground">
-                      Locked
+                  <div className="space-y-1 px-2 py-2">
+                    <span className="block font-sans text-sm font-semibold text-foreground">
+                      Training programme
                     </span>
-                  )}
-                </button>
-                <div className="-mx-1 my-1 h-px bg-border" />
-                <p className="px-2 py-1 font-sans text-xs font-medium text-muted-foreground">
-                  Tools
-                </p>
-                {(
-                  [
-                    ['schedule', CalendarDays, 'Training schedule'],
-                    ['readiness', Activity, 'Readiness check'],
-                    ['calculator', Calculator, 'Warm-up & plates'],
-                    ['metrics', Scale, 'Body metrics'],
-                  ] as const
-                ).map(([tool, Icon, label]) => (
+                    <span className="block font-sans text-xs font-normal text-muted-foreground">
+                      {activePhase === 1
+                        ? `${phaseOneSessions} of 36 Phase 1 sessions complete`
+                        : 'Specialized full-body progression'}
+                    </span>
+                    <span className="block h-1.5 overflow-hidden rounded-full bg-muted">
+                      <span
+                        className="block h-full rounded-full bg-primary"
+                        style={{ width: `${(phaseOneSessions / 36) * 100}%` }}
+                      />
+                    </span>
+                  </div>
                   <button
-                    key={tool}
                     type="button"
                     role="menuitem"
                     className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left font-sans text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
                     onClick={() => {
                       setProgrammeMenuOpen(false);
-                      setActiveTrainingTool(tool);
+                      selectPhase(1);
                     }}
                   >
-                    <Icon className="size-4" /> {label}
+                    {activePhase === 1 ? (
+                      <Check className="size-4" />
+                    ) : (
+                      <Dumbbell className="size-4" />
+                    )}{' '}
+                    Phase 1
                   </button>
-                ))}
-                <div className="-mx-1 my-1 h-px bg-border" />
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left font-sans text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
-                  onClick={() => {
-                    setProgrammeMenuOpen(false);
-                    setView('guide');
-                  }}
-                >
-                  <BookOpen className="size-4" /> Training guide
-                </button>
-              </div>
-            )}
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left font-sans text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+                    onClick={() => {
+                      setProgrammeMenuOpen(false);
+                      selectPhase(2);
+                    }}
+                  >
+                    {phaseTwoUnlocked ? (
+                      <UnlockKeyhole className="size-4" />
+                    ) : (
+                      <LockKeyhole className="size-4" />
+                    )}
+                    Phase 2
+                    {!phaseTwoUnlocked && (
+                      <span className="ml-auto text-xs text-muted-foreground">
+                        Locked
+                      </span>
+                    )}
+                  </button>
+                  <div className="-mx-1 my-1 h-px bg-border" />
+                  <p className="px-2 py-1 font-sans text-xs font-medium text-muted-foreground">
+                    Tools
+                  </p>
+                  {(
+                    [
+                      ['schedule', CalendarDays, 'Training schedule'],
+                      ['readiness', Activity, 'Readiness check'],
+                      ['calculator', Calculator, 'Warm-up & plates'],
+                      ['metrics', Scale, 'Body metrics'],
+                    ] as const
+                  ).map(([tool, Icon, label]) => (
+                    <button
+                      key={tool}
+                      type="button"
+                      role="menuitem"
+                      className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left font-sans text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+                      onClick={() => {
+                        setProgrammeMenuOpen(false);
+                        setActiveTrainingTool(tool);
+                      }}
+                    >
+                      <Icon className="size-4" /> {label}
+                    </button>
+                  ))}
+                  <div className="-mx-1 my-1 h-px bg-border" />
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left font-sans text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+                    onClick={() => {
+                      setProgrammeMenuOpen(false);
+                      setView('guide');
+                    }}
+                  >
+                    <BookOpen className="size-4" /> Training guide
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </header>
@@ -4024,66 +4057,66 @@ export function WorkoutApp() {
         <Suspense fallback={null}>
           <Dialog open={phaseUnlockOpen} onOpenChange={setPhaseUnlockOpen}>
             <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 font-sans text-xl">
-              <span className="grid size-9 place-items-center rounded-xl bg-accent text-primary">
-                <LockKeyhole className="size-5" />
-              </span>
-              Phase 2 unlocks after Phase 1
-            </DialogTitle>
-            <DialogDescription className="font-sans leading-relaxed">
-              Finish all three sessions in each of the 12 Phase 1 weeks. Your
-              existing workout history will remain available when the next
-              programme opens.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="rounded-2xl bg-secondary/65 p-4">
-              <div className="flex items-end justify-between gap-3 font-sans">
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground">
-                    Phase 1 progress
-                  </p>
-                  <p className="mt-1 text-2xl font-bold">
-                    {phaseOneSessions} of 36 sessions
-                  </p>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 font-sans text-xl">
+                  <span className="grid size-9 place-items-center rounded-xl bg-accent text-primary">
+                    <LockKeyhole className="size-5" />
+                  </span>
+                  Phase 2 unlocks after Phase 1
+                </DialogTitle>
+                <DialogDescription className="font-sans leading-relaxed">
+                  Finish all three sessions in each of the 12 Phase 1 weeks.
+                  Your existing workout history will remain available when the
+                  next programme opens.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="rounded-2xl bg-secondary/65 p-4">
+                  <div className="flex items-end justify-between gap-3 font-sans">
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground">
+                        Phase 1 progress
+                      </p>
+                      <p className="mt-1 text-2xl font-bold">
+                        {phaseOneSessions} of 36 sessions
+                      </p>
+                    </div>
+                    <p className="text-sm font-semibold text-primary">
+                      {Math.round((phaseOneSessions / 36) * 100)}%
+                    </p>
+                  </div>
+                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full rounded-full bg-primary transition-[width]"
+                      style={{ width: `${(phaseOneSessions / 36) * 100}%` }}
+                    />
+                  </div>
                 </div>
-                <p className="text-sm font-semibold text-primary">
-                  {Math.round((phaseOneSessions / 36) * 100)}%
-                </p>
+                <div className="space-y-2 font-sans text-sm">
+                  <p className="font-semibold">Waiting in Phase 2</p>
+                  {[
+                    'Day A · Chest + quad emphasis · 7 exercises',
+                    'Day B · Back + posterior-chain emphasis · 7 exercises',
+                    'Day C · Shoulders + arms emphasis · 9 exercises',
+                  ].map((item) => (
+                    <p
+                      key={item}
+                      className="rounded-xl border border-border/70 px-3 py-2 text-muted-foreground"
+                    >
+                      {item}
+                    </p>
+                  ))}
+                </div>
               </div>
-              <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full rounded-full bg-primary transition-[width]"
-                  style={{ width: `${(phaseOneSessions / 36) * 100}%` }}
-                />
-              </div>
-            </div>
-            <div className="space-y-2 font-sans text-sm">
-              <p className="font-semibold">Waiting in Phase 2</p>
-              {[
-                'Day A · Chest + quad emphasis · 7 exercises',
-                'Day B · Back + posterior-chain emphasis · 7 exercises',
-                'Day C · Shoulders + arms emphasis · 9 exercises',
-              ].map((item) => (
-                <p
-                  key={item}
-                  className="rounded-xl border border-border/70 px-3 py-2 text-muted-foreground"
+              <DialogFooter>
+                <Button
+                  type="button"
+                  className="w-full sm:w-auto"
+                  onClick={() => setPhaseUnlockOpen(false)}
                 >
-                  {item}
-                </p>
-              ))}
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              className="w-full sm:w-auto"
-              onClick={() => setPhaseUnlockOpen(false)}
-            >
-              Keep training Phase 1
-            </Button>
-          </DialogFooter>
+                  Keep training Phase 1
+                </Button>
+              </DialogFooter>
             </DialogContent>
           </Dialog>
         </Suspense>
@@ -4122,224 +4155,238 @@ export function WorkoutApp() {
             }}
           >
             <DialogContent className="h-[calc(100dvh-1.5rem)] max-h-[820px] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden p-0 sm:max-w-2xl">
-          <DialogHeader className="px-5 pt-5">
-            <DialogTitle className="flex items-center gap-2 font-sans text-lg font-semibold">
-              <Settings2 className="size-5 text-primary" /> Edit Week{' '}
-              {activeDisplayWeek} · Day {activeDay}
-            </DialogTitle>
-            <DialogDescription className="font-sans">
-              Reorder, substitute, skip, or add exercises for this session only.
-              Your base programme stays unchanged.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="min-h-0 space-y-3 overflow-y-auto px-5 pb-3">
-            {programDraft.map((item, index) => {
-              const hasCompletedRecord = entries.some(
-                (entry) =>
-                  entry.completed &&
-                  entry.week === activeWeek &&
-                  entry.day === activeDay &&
-                  entry.exerciseOrder === item.exerciseOrder,
-              );
-              return (
-                <div
-                  key={item.exerciseOrder}
-                  className={`rounded-xl border p-3 ${item.skipped ? 'bg-muted/45 opacity-70' : 'bg-card'}`}
-                >
-                  <div className="flex items-start gap-2">
-                    <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-secondary font-sans text-xs font-bold">
-                      {index + 1}
-                    </span>
-                    <div className="min-w-0 flex-1 space-y-2">
-                      <Input
-                        value={item.name}
-                        aria-label={`Exercise ${index + 1} name`}
-                        onChange={(event) =>
-                          setProgramDraft((current) =>
-                            current.map((exercise) =>
-                              exercise.exerciseOrder === item.exerciseOrder
-                                ? { ...exercise, name: event.target.value }
-                                : exercise,
-                            ),
-                          )
-                        }
-                        className="h-9 font-sans font-semibold"
-                      />
-                      <div className="grid grid-cols-3 gap-2">
-                        <label
-                          htmlFor={`program-sets-${item.exerciseOrder}`}
-                          className="font-sans text-[11px] text-muted-foreground"
-                        >
-                          Sets
+              <DialogHeader className="px-5 pt-5">
+                <DialogTitle className="flex items-center gap-2 font-sans text-lg font-semibold">
+                  <Settings2 className="size-5 text-primary" /> Edit Week{' '}
+                  {activeDisplayWeek} · Day {activeDay}
+                </DialogTitle>
+                <DialogDescription className="font-sans">
+                  Reorder, substitute, skip, or add exercises for this session
+                  only. Your base programme stays unchanged.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="min-h-0 space-y-3 overflow-y-auto px-5 pb-3">
+                {programDraft.map((item, index) => {
+                  const hasCompletedRecord = entries.some(
+                    (entry) =>
+                      entry.completed &&
+                      entry.week === activeWeek &&
+                      entry.day === activeDay &&
+                      entry.exerciseOrder === item.exerciseOrder,
+                  );
+                  return (
+                    <div
+                      key={item.exerciseOrder}
+                      className={`rounded-xl border p-3 ${item.skipped ? 'bg-muted/45 opacity-70' : 'bg-card'}`}
+                    >
+                      <div className="flex items-start gap-2">
+                        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-secondary font-sans text-xs font-bold">
+                          {index + 1}
+                        </span>
+                        <div className="min-w-0 flex-1 space-y-2">
                           <Input
-                            id={`program-sets-${item.exerciseOrder}`}
-                            type="number"
-                            min="1"
-                            max="5"
-                            value={item.targetSets}
+                            value={item.name}
+                            aria-label={`Exercise ${index + 1} name`}
                             onChange={(event) =>
                               setProgramDraft((current) =>
                                 current.map((exercise) =>
                                   exercise.exerciseOrder === item.exerciseOrder
-                                    ? {
-                                        ...exercise,
-                                        targetSets: Math.min(
-                                          5,
-                                          Math.max(
-                                            1,
-                                            Number(event.target.value) || 1,
-                                          ),
-                                        ),
-                                      }
+                                    ? { ...exercise, name: event.target.value }
                                     : exercise,
                                 ),
                               )
                             }
-                            className="mt-1 h-8"
+                            className="h-9 font-sans font-semibold"
                           />
-                        </label>
-                        <label
-                          htmlFor={`program-reps-${item.exerciseOrder}`}
-                          className="font-sans text-[11px] text-muted-foreground"
-                        >
-                          Rep range
-                          <Input
-                            id={`program-reps-${item.exerciseOrder}`}
-                            value={item.repRange}
-                            onChange={(event) =>
-                              setProgramDraft((current) =>
-                                current.map((exercise) =>
-                                  exercise.exerciseOrder === item.exerciseOrder
-                                    ? {
-                                        ...exercise,
-                                        repRange: event.target.value,
-                                      }
-                                    : exercise,
-                                ),
-                              )
-                            }
-                            className="mt-1 h-8"
-                          />
-                        </label>
-                        <label
-                          htmlFor={`program-rest-${item.exerciseOrder}`}
-                          className="font-sans text-[11px] text-muted-foreground"
-                        >
-                          Rest
-                          <Input
-                            id={`program-rest-${item.exerciseOrder}`}
-                            value={item.rest}
-                            onChange={(event) =>
-                              setProgramDraft((current) =>
-                                current.map((exercise) =>
-                                  exercise.exerciseOrder === item.exerciseOrder
-                                    ? { ...exercise, rest: event.target.value }
-                                    : exercise,
-                                ),
-                              )
-                            }
-                            className="mt-1 h-8"
-                          />
-                        </label>
-                      </div>
-                      <label className="flex items-center gap-2 font-sans text-xs font-medium">
-                        <Checkbox
-                          checked={Boolean(item.skipped)}
-                          onCheckedChange={(checked) =>
-                            setProgramDraft((current) =>
-                              current.map((exercise) =>
-                                exercise.exerciseOrder === item.exerciseOrder
-                                  ? { ...exercise, skipped: checked === true }
-                                  : exercise,
-                              ),
-                            )
-                          }
-                        />{' '}
-                        Skip this session
-                      </label>
-                    </div>
-                    <div className="grid shrink-0 gap-1">
-                      <Button
-                        variant="outline"
-                        size="icon-xs"
-                        aria-label={`Move ${item.name} up`}
-                        disabled={index === 0}
-                        onClick={() => moveProgramExercise(index, -1)}
-                      >
-                        <ArrowUp />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="icon-xs"
-                        aria-label={`Move ${item.name} down`}
-                        disabled={index === programDraft.length - 1}
-                        onClick={() => moveProgramExercise(index, 1)}
-                      >
-                        <ArrowDown />
-                      </Button>
-                      {Boolean(item.custom) && (
-                        <Button
-                          variant="ghost"
-                          size="icon-xs"
-                          aria-label={`Remove ${item.name}`}
-                          disabled={hasCompletedRecord}
-                          onClick={() =>
-                            setProgramDraft((current) =>
-                              current
-                                .filter(
-                                  (exercise) =>
-                                    exercise.exerciseOrder !==
-                                    item.exerciseOrder,
+                          <div className="grid grid-cols-3 gap-2">
+                            <label
+                              htmlFor={`program-sets-${item.exerciseOrder}`}
+                              className="font-sans text-[11px] text-muted-foreground"
+                            >
+                              Sets
+                              <Input
+                                id={`program-sets-${item.exerciseOrder}`}
+                                type="number"
+                                min="1"
+                                max="5"
+                                value={item.targetSets}
+                                onChange={(event) =>
+                                  setProgramDraft((current) =>
+                                    current.map((exercise) =>
+                                      exercise.exerciseOrder ===
+                                      item.exerciseOrder
+                                        ? {
+                                            ...exercise,
+                                            targetSets: Math.min(
+                                              5,
+                                              Math.max(
+                                                1,
+                                                Number(event.target.value) || 1,
+                                              ),
+                                            ),
+                                          }
+                                        : exercise,
+                                    ),
+                                  )
+                                }
+                                className="mt-1 h-8"
+                              />
+                            </label>
+                            <label
+                              htmlFor={`program-reps-${item.exerciseOrder}`}
+                              className="font-sans text-[11px] text-muted-foreground"
+                            >
+                              Rep range
+                              <Input
+                                id={`program-reps-${item.exerciseOrder}`}
+                                value={item.repRange}
+                                onChange={(event) =>
+                                  setProgramDraft((current) =>
+                                    current.map((exercise) =>
+                                      exercise.exerciseOrder ===
+                                      item.exerciseOrder
+                                        ? {
+                                            ...exercise,
+                                            repRange: event.target.value,
+                                          }
+                                        : exercise,
+                                    ),
+                                  )
+                                }
+                                className="mt-1 h-8"
+                              />
+                            </label>
+                            <label
+                              htmlFor={`program-rest-${item.exerciseOrder}`}
+                              className="font-sans text-[11px] text-muted-foreground"
+                            >
+                              Rest
+                              <Input
+                                id={`program-rest-${item.exerciseOrder}`}
+                                value={item.rest}
+                                onChange={(event) =>
+                                  setProgramDraft((current) =>
+                                    current.map((exercise) =>
+                                      exercise.exerciseOrder ===
+                                      item.exerciseOrder
+                                        ? {
+                                            ...exercise,
+                                            rest: event.target.value,
+                                          }
+                                        : exercise,
+                                    ),
+                                  )
+                                }
+                                className="mt-1 h-8"
+                              />
+                            </label>
+                          </div>
+                          <label className="flex items-center gap-2 font-sans text-xs font-medium">
+                            <Checkbox
+                              checked={Boolean(item.skipped)}
+                              onCheckedChange={(checked) =>
+                                setProgramDraft((current) =>
+                                  current.map((exercise) =>
+                                    exercise.exerciseOrder ===
+                                    item.exerciseOrder
+                                      ? {
+                                          ...exercise,
+                                          skipped: checked === true,
+                                        }
+                                      : exercise,
+                                  ),
                                 )
-                                .map((exercise, exerciseIndex) => ({
-                                  ...exercise,
-                                  displayOrder: exerciseIndex + 1,
-                                })),
-                            )
-                          }
-                        >
-                          <Trash2 />
-                        </Button>
-                      )}
+                              }
+                            />{' '}
+                            Skip this session
+                          </label>
+                        </div>
+                        <div className="grid shrink-0 gap-1">
+                          <Button
+                            variant="outline"
+                            size="icon-xs"
+                            aria-label={`Move ${item.name} up`}
+                            disabled={index === 0}
+                            onClick={() => moveProgramExercise(index, -1)}
+                          >
+                            <ArrowUp />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="icon-xs"
+                            aria-label={`Move ${item.name} down`}
+                            disabled={index === programDraft.length - 1}
+                            onClick={() => moveProgramExercise(index, 1)}
+                          >
+                            <ArrowDown />
+                          </Button>
+                          {Boolean(item.custom) && (
+                            <Button
+                              variant="ghost"
+                              size="icon-xs"
+                              aria-label={`Remove ${item.name}`}
+                              disabled={hasCompletedRecord}
+                              onClick={() =>
+                                setProgramDraft((current) =>
+                                  current
+                                    .filter(
+                                      (exercise) =>
+                                        exercise.exerciseOrder !==
+                                        item.exerciseOrder,
+                                    )
+                                    .map((exercise, exerciseIndex) => ({
+                                      ...exercise,
+                                      displayOrder: exerciseIndex + 1,
+                                    })),
+                                )
+                              }
+                            >
+                              <Trash2 />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
-              );
-            })}
-            <Button
-              variant="outline"
-              className="w-full"
-              disabled={programDraft.length >= 10}
-              onClick={addProgramExercise}
-            >
-              <Plus /> Add exercise
-            </Button>
-          </div>
-          <DialogFooter className="m-0 px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-            <Button
-              variant="ghost"
-              onClick={() =>
-                setProgramDraft(defaultSessionPlan(activeWeek, activeDay))
-              }
-              disabled={programSaving}
-            >
-              <RotateCcw /> Reset Day {activeDay}
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => setProgramOpen(false)}
-              disabled={programSaving}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={saveProgram}
-              disabled={programSaving || programDraft.length === 0}
-            >
-              {programSaving ? <Loader2 className="animate-spin" /> : <Check />}{' '}
-              Save session
-            </Button>
-          </DialogFooter>
+                  );
+                })}
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  disabled={programDraft.length >= 10}
+                  onClick={addProgramExercise}
+                >
+                  <Plus /> Add exercise
+                </Button>
+              </div>
+              <DialogFooter className="m-0 px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+                <Button
+                  variant="ghost"
+                  onClick={() =>
+                    setProgramDraft(defaultSessionPlan(activeWeek, activeDay))
+                  }
+                  disabled={programSaving}
+                >
+                  <RotateCcw /> Reset Day {activeDay}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setProgramOpen(false)}
+                  disabled={programSaving}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={saveProgram}
+                  disabled={programSaving || programDraft.length === 0}
+                >
+                  {programSaving ? (
+                    <Loader2 className="animate-spin" />
+                  ) : (
+                    <Check />
+                  )}{' '}
+                  Save session
+                </Button>
+              </DialogFooter>
             </DialogContent>
           </Dialog>
         </Suspense>
@@ -4355,109 +4402,111 @@ export function WorkoutApp() {
             }}
           >
             <DialogContent className="max-h-[calc(100dvh-1.5rem)] overflow-y-auto sm:max-w-lg">
-          <DialogHeader>
-            {sessionCelebrationPending && (
-              <div className="mx-auto mb-2 grid size-16 place-items-center rounded-2xl bg-success-soft text-success ring-8 ring-success-soft/45">
-                <CheckCircle2 className="size-8" />
-              </div>
-            )}
-            <DialogTitle
-              className={`flex items-center gap-2 font-sans text-xl ${sessionCelebrationPending ? 'justify-center text-center' : ''}`}
-            >
-              {sessionCelebrationPending ? (
-                `Day ${activeDay} complete!`
-              ) : (
-                <>
-                  <Sparkles className="size-5 text-primary" /> Phase{' '}
-                  {activePhase} · Week {activeDisplayWeek} · Day {activeDay}
-                </>
-              )}
-            </DialogTitle>
-            <DialogDescription
-              className={`font-sans ${sessionCelebrationPending ? 'text-center' : ''}`}
-            >
-              {sessionCelebrationPending
-                ? `Day ${activeDay} is done. Great work—here is your session at a glance.`
-                : 'Your current session at a glance.'}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid grid-cols-2 gap-3">
-            {[
-              ['Exercises', String(currentSessionEntries.length)],
-              ['Working sets', String(currentSessionSets)],
-              [
-                'Total volume',
-                `${Math.round(currentSessionVolume).toLocaleString()} kg`,
-              ],
-              ['Personal records', String(currentSessionRecords)],
-              [
-                'Duration',
-                sessionDurationMinutes
-                  ? `${sessionDurationMinutes} min`
-                  : 'Not available',
-              ],
-              [
-                'Vs previous Day',
-                previousSessionVolume > 0
-                  ? `${currentSessionVolume >= previousSessionVolume ? '+' : ''}${Math.round(((currentSessionVolume - previousSessionVolume) / previousSessionVolume) * 100)}% volume`
-                  : 'First comparison',
-              ],
-            ].map(([label, value]) => (
-              <div key={label} className="rounded-xl bg-secondary/65 p-3">
-                <p className="font-sans text-xs text-muted-foreground">
-                  {label}
-                </p>
-                <p className="mt-1 font-sans text-lg font-bold tabular-nums">
-                  {value}
-                </p>
-              </div>
-            ))}
-          </div>
-          <div className="space-y-2">
-            {currentSessionEntries
-              .sort((left, right) => left.exerciseOrder - right.exerciseOrder)
-              .map((entry) => (
-                <div
-                  key={entry.exerciseOrder}
-                  className="rounded-xl border border-border/75 p-3"
-                >
-                  <p className="font-sans text-sm font-semibold">
-                    {entry.exercise}
-                  </p>
-                  <p className="mt-1 font-sans text-xs text-muted-foreground">
-                    {loggedSets(entry)
-                      .map((set) =>
-                        set.weight == null
-                          ? `${set.reps} reps`
-                          : `${set.weight} kg × ${set.reps}`,
-                      )
-                      .join(' · ')}
-                  </p>
-                </div>
-              ))}
-          </div>
-          <DialogFooter>
-            <Button onClick={closeSessionSummary}>
-              {sessionCelebrationPending
-                ? activeDay === 'A'
-                  ? 'Continue to Day B'
-                  : activeDay === 'B'
-                    ? 'Continue to Day C'
-                    : activeWeek === 12 && phaseTwoUnlocked
-                      ? 'Start Phase 2'
-                      : activeWeek < 24 && activeWeek !== 12
-                        ? 'Continue to next week'
-                        : activeWeek === 24
-                          ? 'Finish programme'
-                          : 'Done'
-                : 'Done'}
-              {sessionCelebrationPending &&
-                activeWeek < 24 &&
-                (activeWeek !== 12 || phaseTwoUnlocked) && (
-                  <ChevronRight data-icon="inline-end" />
+              <DialogHeader>
+                {sessionCelebrationPending && (
+                  <div className="mx-auto mb-2 grid size-16 place-items-center rounded-2xl bg-success-soft text-success ring-8 ring-success-soft/45">
+                    <CheckCircle2 className="size-8" />
+                  </div>
                 )}
-            </Button>
-          </DialogFooter>
+                <DialogTitle
+                  className={`flex items-center gap-2 font-sans text-xl ${sessionCelebrationPending ? 'justify-center text-center' : ''}`}
+                >
+                  {sessionCelebrationPending ? (
+                    `Day ${activeDay} complete!`
+                  ) : (
+                    <>
+                      <Sparkles className="size-5 text-primary" /> Phase{' '}
+                      {activePhase} · Week {activeDisplayWeek} · Day {activeDay}
+                    </>
+                  )}
+                </DialogTitle>
+                <DialogDescription
+                  className={`font-sans ${sessionCelebrationPending ? 'text-center' : ''}`}
+                >
+                  {sessionCelebrationPending
+                    ? `Day ${activeDay} is done. Great work—here is your session at a glance.`
+                    : 'Your current session at a glance.'}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  ['Exercises', String(currentSessionEntries.length)],
+                  ['Working sets', String(currentSessionSets)],
+                  [
+                    'Total volume',
+                    `${Math.round(currentSessionVolume).toLocaleString()} kg`,
+                  ],
+                  ['Personal records', String(currentSessionRecords)],
+                  [
+                    'Duration',
+                    sessionDurationMinutes
+                      ? `${sessionDurationMinutes} min`
+                      : 'Not available',
+                  ],
+                  [
+                    'Vs previous Day',
+                    previousSessionVolume > 0
+                      ? `${currentSessionVolume >= previousSessionVolume ? '+' : ''}${Math.round(((currentSessionVolume - previousSessionVolume) / previousSessionVolume) * 100)}% volume`
+                      : 'First comparison',
+                  ],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-xl bg-secondary/65 p-3">
+                    <p className="font-sans text-xs text-muted-foreground">
+                      {label}
+                    </p>
+                    <p className="mt-1 font-sans text-lg font-bold tabular-nums">
+                      {value}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <div className="space-y-2">
+                {currentSessionEntries
+                  .sort(
+                    (left, right) => left.exerciseOrder - right.exerciseOrder,
+                  )
+                  .map((entry) => (
+                    <div
+                      key={entry.exerciseOrder}
+                      className="rounded-xl border border-border/75 p-3"
+                    >
+                      <p className="font-sans text-sm font-semibold">
+                        {entry.exercise}
+                      </p>
+                      <p className="mt-1 font-sans text-xs text-muted-foreground">
+                        {loggedSets(entry)
+                          .map((set) =>
+                            set.weight == null
+                              ? `${set.reps} reps`
+                              : `${set.weight} kg × ${set.reps}`,
+                          )
+                          .join(' · ')}
+                      </p>
+                    </div>
+                  ))}
+              </div>
+              <DialogFooter>
+                <Button onClick={closeSessionSummary}>
+                  {sessionCelebrationPending
+                    ? activeDay === 'A'
+                      ? 'Continue to Day B'
+                      : activeDay === 'B'
+                        ? 'Continue to Day C'
+                        : activeWeek === 12 && phaseTwoUnlocked
+                          ? 'Start Phase 2'
+                          : activeWeek < 24 && activeWeek !== 12
+                            ? 'Continue to next week'
+                            : activeWeek === 24
+                              ? 'Finish programme'
+                              : 'Done'
+                    : 'Done'}
+                  {sessionCelebrationPending &&
+                    activeWeek < 24 &&
+                    (activeWeek !== 12 || phaseTwoUnlocked) && (
+                      <ChevronRight data-icon="inline-end" />
+                    )}
+                </Button>
+              </DialogFooter>
             </DialogContent>
           </Dialog>
         </Suspense>
@@ -4473,35 +4522,32 @@ export function WorkoutApp() {
             }}
           >
             <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <div className="mx-auto mb-2 grid size-14 place-items-center rounded-2xl bg-warning-soft text-warning-foreground">
-              <Medal className="size-7" />
-            </div>
-            <DialogTitle className="text-center font-sans text-xl">
-              New personal record
-            </DialogTitle>
-            <DialogDescription className="text-center font-sans">
-              A stronger entry for {exercise.name}.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-wrap justify-center gap-2">
-            {personalRecords.map((record) => (
-              <Badge
-                key={record}
-                className="bg-warning-soft font-sans text-warning-foreground"
-              >
-                {record}
-              </Badge>
-            ))}
-          </div>
-          <DialogFooter>
-            <Button
-              className="w-full"
-              onClick={closePersonalRecord}
-            >
-              Keep going
-            </Button>
-          </DialogFooter>
+              <DialogHeader>
+                <div className="mx-auto mb-2 grid size-14 place-items-center rounded-2xl bg-warning-soft text-warning-foreground">
+                  <Medal className="size-7" />
+                </div>
+                <DialogTitle className="text-center font-sans text-xl">
+                  New personal record
+                </DialogTitle>
+                <DialogDescription className="text-center font-sans">
+                  A stronger entry for {exercise.name}.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex flex-wrap justify-center gap-2">
+                {personalRecords.map((record) => (
+                  <Badge
+                    key={record}
+                    className="bg-warning-soft font-sans text-warning-foreground"
+                  >
+                    {record}
+                  </Badge>
+                ))}
+              </div>
+              <DialogFooter>
+                <Button className="w-full" onClick={closePersonalRecord}>
+                  Keep going
+                </Button>
+              </DialogFooter>
             </DialogContent>
           </Dialog>
         </Suspense>
@@ -4516,81 +4562,88 @@ export function WorkoutApp() {
             }}
           >
             <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 font-sans">
-              <Upload className="size-5 text-primary" /> Restore Liftline backup
-            </DialogTitle>
-            <DialogDescription className="font-sans">
-              Choose a Liftline JSON backup. You will see exactly how many
-              records it contains before anything changes.
-            </DialogDescription>
-          </DialogHeader>
-          <label className="grid cursor-pointer place-items-center rounded-xl border border-dashed border-primary/35 bg-accent/25 px-5 py-8 text-center">
-            {backupBusy ? (
-              <Loader2 className="size-6 animate-spin text-primary" />
-            ) : (
-              <Upload className="size-6 text-primary" />
-            )}
-            <span className="mt-2 font-sans text-sm font-semibold">
-              {backupFileName || 'Choose backup file'}
-            </span>
-            <span className="mt-1 font-sans text-xs text-muted-foreground">
-              JSON files exported by Liftline
-            </span>
-            <input
-              type="file"
-              accept="application/json,.json"
-              className="sr-only"
-              onChange={previewBackupFile}
-              disabled={backupBusy}
-            />
-          </label>
-          {backupSummary && (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-xl bg-success-soft p-3">
-                <p className="font-sans text-xl font-bold text-success">
-                  {backupSummary.newWorkoutRecords}
-                </p>
-                <p className="font-sans text-xs text-success/80">New records</p>
-              </div>
-              <div className="rounded-xl bg-warning-soft p-3">
-                <p className="font-sans text-xl font-bold text-warning-foreground">
-                  {backupSummary.replacedWorkoutRecords}
-                </p>
-                <p className="font-sans text-xs text-warning-foreground/80">
-                  Records replaced
-                </p>
-              </div>
-              <div className="col-span-2 rounded-xl bg-secondary p-3">
-                <p className="font-sans text-sm font-semibold">
-                  {backupSummary.sessionChanges} session customizations
-                  {(backupSummary.bodyMeasurements ?? 0) > 0 &&
-                    ` · ${backupSummary.bodyMeasurements} body measurements`}
-                  {(backupSummary.readinessChecks ?? 0) > 0 &&
-                    ` · ${backupSummary.readinessChecks} readiness checks`}
-                </p>
-                <p className="font-sans text-xs text-muted-foreground">
-                  Records not contained in the backup will be kept.
-                </p>
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setBackupOpen(false)}
-              disabled={backupBusy}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={restoreBackup}
-              disabled={!backupSummary || backupBusy}
-            >
-              {backupBusy ? <Loader2 className="animate-spin" /> : <Upload />}{' '}
-              Restore backup
-            </Button>
-          </DialogFooter>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 font-sans">
+                  <Upload className="size-5 text-primary" /> Restore Liftline
+                  backup
+                </DialogTitle>
+                <DialogDescription className="font-sans">
+                  Choose a Liftline JSON backup. You will see exactly how many
+                  records it contains before anything changes.
+                </DialogDescription>
+              </DialogHeader>
+              <label className="grid cursor-pointer place-items-center rounded-xl border border-dashed border-primary/35 bg-accent/25 px-5 py-8 text-center">
+                {backupBusy ? (
+                  <Loader2 className="size-6 animate-spin text-primary" />
+                ) : (
+                  <Upload className="size-6 text-primary" />
+                )}
+                <span className="mt-2 font-sans text-sm font-semibold">
+                  {backupFileName || 'Choose backup file'}
+                </span>
+                <span className="mt-1 font-sans text-xs text-muted-foreground">
+                  JSON files exported by Liftline
+                </span>
+                <input
+                  type="file"
+                  accept="application/json,.json"
+                  className="sr-only"
+                  onChange={previewBackupFile}
+                  disabled={backupBusy}
+                />
+              </label>
+              {backupSummary && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-xl bg-success-soft p-3">
+                    <p className="font-sans text-xl font-bold text-success">
+                      {backupSummary.newWorkoutRecords}
+                    </p>
+                    <p className="font-sans text-xs text-success/80">
+                      New records
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-warning-soft p-3">
+                    <p className="font-sans text-xl font-bold text-warning-foreground">
+                      {backupSummary.replacedWorkoutRecords}
+                    </p>
+                    <p className="font-sans text-xs text-warning-foreground/80">
+                      Records replaced
+                    </p>
+                  </div>
+                  <div className="col-span-2 rounded-xl bg-secondary p-3">
+                    <p className="font-sans text-sm font-semibold">
+                      {backupSummary.sessionChanges} session customizations
+                      {(backupSummary.bodyMeasurements ?? 0) > 0 &&
+                        ` · ${backupSummary.bodyMeasurements} body measurements`}
+                      {(backupSummary.readinessChecks ?? 0) > 0 &&
+                        ` · ${backupSummary.readinessChecks} readiness checks`}
+                    </p>
+                    <p className="font-sans text-xs text-muted-foreground">
+                      Records not contained in the backup will be kept.
+                    </p>
+                  </div>
+                </div>
+              )}
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setBackupOpen(false)}
+                  disabled={backupBusy}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={restoreBackup}
+                  disabled={!backupSummary || backupBusy}
+                >
+                  {backupBusy ? (
+                    <Loader2 className="animate-spin" />
+                  ) : (
+                    <Upload />
+                  )}{' '}
+                  Restore backup
+                </Button>
+              </DialogFooter>
             </DialogContent>
           </Dialog>
         </Suspense>
@@ -4605,166 +4658,172 @@ export function WorkoutApp() {
             }}
           >
             <DialogContent className="h-[calc(100dvh-1.5rem)] max-h-[760px] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden p-0 sm:max-w-2xl">
-          <DialogHeader className="px-5 pt-5">
-            <DialogTitle className="font-sans text-lg font-semibold">
-              Preview Google Sheet import
-            </DialogTitle>
-            <DialogDescription className="font-sans">
-              Nothing changes until you confirm. New entries are selected;
-              existing Liftline records remain protected unless you select them.
-            </DialogDescription>
-          </DialogHeader>
+              <DialogHeader className="px-5 pt-5">
+                <DialogTitle className="font-sans text-lg font-semibold">
+                  Preview Google Sheet import
+                </DialogTitle>
+                <DialogDescription className="font-sans">
+                  Nothing changes until you confirm. New entries are selected;
+                  existing Liftline records remain protected unless you select
+                  them.
+                </DialogDescription>
+              </DialogHeader>
 
-          <div className="min-h-0 overflow-y-auto px-5 pb-2">
-            {loadingImport && (
-              <div className="grid min-h-52 place-items-center text-muted-foreground">
-                <div className="flex items-center gap-2 font-sans">
-                  <Loader2 className="size-5 animate-spin" /> Reading Workout
-                  Log…
-                </div>
-              </div>
-            )}
-            {sheetImportError && (
-              <Alert variant="destructive" className="my-3">
-                <AlertCircle />
-                <AlertTitle>Import preview unavailable</AlertTitle>
-                <AlertDescription>{sheetImportError}</AlertDescription>
-              </Alert>
-            )}
-
-            {importPreview && !loadingImport && (
-              <div className="space-y-4 py-2">
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="rounded-xl bg-success-soft p-3">
-                    <p className="font-sans text-xl font-bold text-success">
-                      {importPreview.summary.new}
-                    </p>
-                    <p className="font-sans text-xs text-success/80">New</p>
-                  </div>
-                  <div className="rounded-xl bg-secondary p-3">
-                    <p className="font-sans text-xl font-bold">
-                      {importPreview.summary.unchanged}
-                    </p>
-                    <p className="font-sans text-xs text-muted-foreground">
-                      Already matches
-                    </p>
-                  </div>
-                  <div className="rounded-xl bg-warning-soft p-3">
-                    <p className="font-sans text-xl font-bold text-warning-foreground">
-                      {importPreview.summary.protected}
-                    </p>
-                    <p className="font-sans text-xs text-warning-foreground/80">
-                      Protected
-                    </p>
-                  </div>
-                </div>
-
-                {importPreview.items.some(
-                  (item) => item.status !== 'unchanged',
-                ) ? (
-                  <div className="space-y-2">
-                    {importPreview.items
-                      .filter((item) => item.status !== 'unchanged')
-                      .map((item) => {
-                        const selected = selectedImportKeys.includes(item.key);
-                        return (
-                          <label
-                            key={item.key}
-                            className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors ${selected ? 'border-primary/35 bg-accent/35' : 'border-border/80 bg-card'}`}
-                          >
-                            <Checkbox
-                              checked={selected}
-                              onCheckedChange={(checked) =>
-                                toggleImportItem(item.key, checked === true)
-                              }
-                              aria-label={`Import ${item.source.exercise}`}
-                              className="mt-0.5"
-                            />
-                            <span className="min-w-0 flex-1">
-                              <span className="flex flex-wrap items-center gap-2">
-                                <span className="font-sans text-sm font-semibold">
-                                  Week {item.source.week} · Day{' '}
-                                  {item.source.day} · {item.source.exercise}
-                                </span>
-                                <Badge
-                                  className={`font-sans text-[10px] ${item.status === 'new' ? 'bg-success-soft text-success' : 'bg-warning-soft text-warning-foreground'}`}
-                                >
-                                  {item.status === 'new'
-                                    ? 'New'
-                                    : 'Existing record'}
-                                </Badge>
-                              </span>
-                              <span className="mt-1 block font-sans text-xs text-muted-foreground">
-                                {sheetEntrySummary(item.source) ||
-                                  'No set values'}
-                                {item.source.rir == null
-                                  ? ''
-                                  : ` · RIR ${item.source.rir}`}
-                              </span>
-                              {item.status === 'protected' && (
-                                <span className="mt-1.5 flex items-center gap-1 font-sans text-xs font-medium text-warning-foreground">
-                                  <ShieldCheck className="size-3.5" /> Selecting
-                                  this will replace the Liftline values.
-                                </span>
-                              )}
-                            </span>
-                          </label>
-                        );
-                      })}
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-3 rounded-xl border border-success/25 bg-success-soft p-4 text-success">
-                    <CheckCircle2 className="size-5" />
-                    <p className="font-sans text-sm font-medium">
-                      Liftline already matches every completed Google Sheet row.
-                    </p>
+              <div className="min-h-0 overflow-y-auto px-5 pb-2">
+                {loadingImport && (
+                  <div className="grid min-h-52 place-items-center text-muted-foreground">
+                    <div className="flex items-center gap-2 font-sans">
+                      <Loader2 className="size-5 animate-spin" /> Reading
+                      Workout Log…
+                    </div>
                   </div>
                 )}
-
-                {selectedImportKeys.some((key) =>
-                  importPreview.items.some(
-                    (item) => item.key === key && item.status === 'protected',
-                  ),
-                ) && (
-                  <Alert className="border-warning/25 bg-warning-soft text-warning-foreground">
-                    <ShieldCheck />
-                    <AlertTitle>Replacement selected</AlertTitle>
-                    <AlertDescription className="text-warning-foreground/80">
-                      One or more existing Liftline records will be replaced
-                      with the Google Sheet values when you confirm.
-                    </AlertDescription>
+                {sheetImportError && (
+                  <Alert variant="destructive" className="my-3">
+                    <AlertCircle />
+                    <AlertTitle>Import preview unavailable</AlertTitle>
+                    <AlertDescription>{sheetImportError}</AlertDescription>
                   </Alert>
                 )}
-              </div>
-            )}
-          </div>
 
-          <DialogFooter className="m-0 px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-            <Button
-              variant="outline"
-              onClick={() => setImportOpen(false)}
-              disabled={importingSheet}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={importSelectedSheetEntries}
-              disabled={
-                !importPreview ||
-                selectedImportKeys.length === 0 ||
-                importingSheet
-              }
-            >
-              {importingSheet ? (
-                <Loader2 className="animate-spin" />
-              ) : (
-                <Download />
-              )}
-              {importingSheet
-                ? 'Importing…'
-                : `Import selected${selectedImportKeys.length > 0 ? ` (${selectedImportKeys.length})` : ''}`}
-            </Button>
-          </DialogFooter>
+                {importPreview && !loadingImport && (
+                  <div className="space-y-4 py-2">
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="rounded-xl bg-success-soft p-3">
+                        <p className="font-sans text-xl font-bold text-success">
+                          {importPreview.summary.new}
+                        </p>
+                        <p className="font-sans text-xs text-success/80">New</p>
+                      </div>
+                      <div className="rounded-xl bg-secondary p-3">
+                        <p className="font-sans text-xl font-bold">
+                          {importPreview.summary.unchanged}
+                        </p>
+                        <p className="font-sans text-xs text-muted-foreground">
+                          Already matches
+                        </p>
+                      </div>
+                      <div className="rounded-xl bg-warning-soft p-3">
+                        <p className="font-sans text-xl font-bold text-warning-foreground">
+                          {importPreview.summary.protected}
+                        </p>
+                        <p className="font-sans text-xs text-warning-foreground/80">
+                          Protected
+                        </p>
+                      </div>
+                    </div>
+
+                    {importPreview.items.some(
+                      (item) => item.status !== 'unchanged',
+                    ) ? (
+                      <div className="space-y-2">
+                        {importPreview.items
+                          .filter((item) => item.status !== 'unchanged')
+                          .map((item) => {
+                            const selected = selectedImportKeys.includes(
+                              item.key,
+                            );
+                            return (
+                              <label
+                                key={item.key}
+                                className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors ${selected ? 'border-primary/35 bg-accent/35' : 'border-border/80 bg-card'}`}
+                              >
+                                <Checkbox
+                                  checked={selected}
+                                  onCheckedChange={(checked) =>
+                                    toggleImportItem(item.key, checked === true)
+                                  }
+                                  aria-label={`Import ${item.source.exercise}`}
+                                  className="mt-0.5"
+                                />
+                                <span className="min-w-0 flex-1">
+                                  <span className="flex flex-wrap items-center gap-2">
+                                    <span className="font-sans text-sm font-semibold">
+                                      Week {item.source.week} · Day{' '}
+                                      {item.source.day} · {item.source.exercise}
+                                    </span>
+                                    <Badge
+                                      className={`font-sans text-[10px] ${item.status === 'new' ? 'bg-success-soft text-success' : 'bg-warning-soft text-warning-foreground'}`}
+                                    >
+                                      {item.status === 'new'
+                                        ? 'New'
+                                        : 'Existing record'}
+                                    </Badge>
+                                  </span>
+                                  <span className="mt-1 block font-sans text-xs text-muted-foreground">
+                                    {sheetEntrySummary(item.source) ||
+                                      'No set values'}
+                                    {item.source.rir == null
+                                      ? ''
+                                      : ` · RIR ${item.source.rir}`}
+                                  </span>
+                                  {item.status === 'protected' && (
+                                    <span className="mt-1.5 flex items-center gap-1 font-sans text-xs font-medium text-warning-foreground">
+                                      <ShieldCheck className="size-3.5" />{' '}
+                                      Selecting this will replace the Liftline
+                                      values.
+                                    </span>
+                                  )}
+                                </span>
+                              </label>
+                            );
+                          })}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-3 rounded-xl border border-success/25 bg-success-soft p-4 text-success">
+                        <CheckCircle2 className="size-5" />
+                        <p className="font-sans text-sm font-medium">
+                          Liftline already matches every completed Google Sheet
+                          row.
+                        </p>
+                      </div>
+                    )}
+
+                    {selectedImportKeys.some((key) =>
+                      importPreview.items.some(
+                        (item) =>
+                          item.key === key && item.status === 'protected',
+                      ),
+                    ) && (
+                      <Alert className="border-warning/25 bg-warning-soft text-warning-foreground">
+                        <ShieldCheck />
+                        <AlertTitle>Replacement selected</AlertTitle>
+                        <AlertDescription className="text-warning-foreground/80">
+                          One or more existing Liftline records will be replaced
+                          with the Google Sheet values when you confirm.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <DialogFooter className="m-0 px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+                <Button
+                  variant="outline"
+                  onClick={() => setImportOpen(false)}
+                  disabled={importingSheet}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={importSelectedSheetEntries}
+                  disabled={
+                    !importPreview ||
+                    selectedImportKeys.length === 0 ||
+                    importingSheet
+                  }
+                >
+                  {importingSheet ? (
+                    <Loader2 className="animate-spin" />
+                  ) : (
+                    <Download />
+                  )}
+                  {importingSheet
+                    ? 'Importing…'
+                    : `Import selected${selectedImportKeys.length > 0 ? ` (${selectedImportKeys.length})` : ''}`}
+                </Button>
+              </DialogFooter>
             </DialogContent>
           </Dialog>
         </Suspense>
