@@ -170,7 +170,7 @@ type SheetImportPreview = {
 const workoutCacheKey = 'liftline.workout-entries.v1';
 const sessionExerciseCacheKey = 'liftline.session-exercises.v1';
 const pendingWorkoutKey = 'liftline.pending-workouts.v1';
-const appVersion = '3.4.0-beta.1';
+const appVersion = '3.4.0-beta.2';
 const setNumbers = [1, 2, 3, 4, 5] as const;
 const emptyDraft: Draft = {
   sets: Array.from({ length: 5 }, () => ({
@@ -2290,6 +2290,28 @@ export function WorkoutApp() {
                 </Badge>
               </div>
 
+              <div className="beta-training-spotlight">
+                <div className="beta-training-spotlight-copy">
+                  <p className="beta-eyebrow">Move well today</p>
+                  <h2 className="font-sans text-lg font-bold tracking-tight sm:text-xl">
+                    {exercise.name}
+                  </h2>
+                  <p className="mt-1 max-w-sm font-sans text-sm text-muted-foreground">
+                    {targetLabel(exercise)} · {exercise.muscles}
+                  </p>
+                </div>
+                <div className="beta-training-spotlight-art" aria-hidden="true">
+                  <img
+                    src="/illustrations/goblet-squat.png"
+                    alt=""
+                    width={512}
+                    height={768}
+                    loading="lazy"
+                    decoding="async"
+                  />
+                </div>
+              </div>
+
               <div className="beta-metrics-grid" aria-label="Training overview">
                 <DashboardMetric
                   icon={Activity}
@@ -2961,18 +2983,30 @@ export function WorkoutApp() {
 
         {view === 'plan' && (
           <section>
-            <div className="mb-6">
-              <p className="font-sans text-sm font-semibold text-primary">
-                PHASE {activePhase} ROUTINE
-              </p>
-              <h1 className="font-sans text-3xl font-bold tracking-tight">
-                {activePhase === 1
-                  ? 'Three balanced full-body days.'
-                  : 'Specialized full-body progression.'}
-              </h1>
-              <p className="mt-1 font-sans text-muted-foreground">
-                Tap any day to start logging it for week {activeDisplayWeek}.
-              </p>
+            <div className="beta-plan-intro mb-6">
+              <div className="beta-plan-intro-copy">
+                <p className="font-sans text-sm font-semibold text-primary">
+                  PHASE {activePhase} ROUTINE
+                </p>
+                <h1 className="font-sans text-2xl font-bold tracking-tight sm:text-3xl">
+                  {activePhase === 1
+                    ? 'Three balanced full-body days.'
+                    : 'Specialized full-body progression.'}
+                </h1>
+                <p className="mt-1 max-w-xl font-sans text-sm text-muted-foreground sm:text-base">
+                  Tap any day to start logging it for week {activeDisplayWeek}.
+                </p>
+              </div>
+              <div className="beta-plan-art" aria-hidden="true">
+                <img
+                  src="/illustrations/reverse-lunge.png"
+                  alt=""
+                  width={512}
+                  height={768}
+                  loading="lazy"
+                  decoding="async"
+                />
+              </div>
             </div>
             <div className="grid gap-5 lg:grid-cols-3">
               {days.map((day) => {

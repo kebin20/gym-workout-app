@@ -283,6 +283,91 @@
     backdrop-filter: blur(16px);
   }
 
+  .beta-training-spotlight,
+  .beta-plan-intro {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    border: 1px solid rgb(82 111 190 / 14%);
+    background:
+      radial-gradient(
+        circle at 88% 18%,
+        rgb(148 119 255 / 18%),
+        transparent 28%
+      ),
+      linear-gradient(135deg, rgb(255 255 255 / 92%), rgb(236 242 255 / 88%));
+    box-shadow: 0 16px 42px rgb(33 62 132 / 8%);
+  }
+
+  .beta-training-spotlight {
+    min-height: 8.75rem;
+    border-radius: 1.65rem;
+    padding: 1.15rem 10.25rem 1.15rem 1.25rem;
+  }
+
+  .beta-training-spotlight::after,
+  .beta-plan-intro::after {
+    position: absolute;
+    z-index: -1;
+    border: 1px solid rgb(86 98 236 / 13%);
+    border-radius: 999px;
+    content: '';
+  }
+
+  .beta-training-spotlight::after {
+    top: -3.6rem;
+    right: -2rem;
+    width: 11rem;
+    height: 11rem;
+  }
+
+  .beta-training-spotlight-copy,
+  .beta-plan-intro-copy {
+    position: relative;
+    z-index: 2;
+  }
+
+  .beta-training-spotlight-art {
+    position: absolute;
+    right: 0.75rem;
+    bottom: -0.65rem;
+    width: 8.8rem;
+    height: 9.8rem;
+    pointer-events: none;
+    filter: drop-shadow(0 14px 20px rgb(42 58 140 / 15%));
+  }
+
+  .beta-training-spotlight-art img,
+  .beta-plan-art img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    object-position: center bottom;
+  }
+
+  .beta-plan-intro {
+    min-height: 11.25rem;
+    border-radius: 2rem;
+    padding: 1.55rem 13rem 1.55rem 1.6rem;
+  }
+
+  .beta-plan-intro::after {
+    top: -5rem;
+    right: -2rem;
+    width: 14rem;
+    height: 14rem;
+  }
+
+  .beta-plan-art {
+    position: absolute;
+    right: 1.25rem;
+    bottom: -1.45rem;
+    width: 10.5rem;
+    height: 12.5rem;
+    pointer-events: none;
+    filter: drop-shadow(0 16px 22px rgb(42 58 140 / 14%));
+  }
+
   .beta-metrics-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -440,6 +525,29 @@
 
     .beta-dashboard-intro > :first-child {
       width: 100%;
+    }
+
+    .beta-training-spotlight {
+      min-height: 8.2rem;
+      padding: 1rem 7.8rem 1rem 1rem;
+    }
+
+    .beta-training-spotlight-art {
+      right: 0.2rem;
+      width: 7.6rem;
+      height: 8.7rem;
+    }
+
+    .beta-plan-intro {
+      min-height: 11rem;
+      padding: 1.25rem 9.25rem 1.25rem 1.25rem;
+    }
+
+    .beta-plan-art {
+      right: -0.35rem;
+      bottom: -0.9rem;
+      width: 9.5rem;
+      height: 11rem;
     }
 
     .beta-metrics-grid {
