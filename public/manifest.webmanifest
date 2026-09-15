@@ -1,13 +1,13 @@
 {
-  "name": "Liftline",
-  "short_name": "Liftline",
+  "name": "Liftline Beta",
+  "short_name": "Liftline Beta",
   "id": "/",
-  "description": "A mobile-friendly 12-week strength workout tracker.",
+  "description": "A private preview of Liftline's redesigned strength workout tracker.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#F4F7FF",
-  "theme_color": "#405FEF",
+  "background_color": "#F7F9FF",
+  "theme_color": "#245FEA",
   "icons": [
     {
       "src": "https://raw.githubusercontent.com/kebin20/gym-workout-app/62c99c0864196e7f05409f47633a79132c185675/public/liftline-icon-192-v2.png",

@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type CSSProperties,
   type ReactNode,
 } from 'react';
 import {
@@ -169,7 +170,7 @@ type SheetImportPreview = {
 const workoutCacheKey = 'liftline.workout-entries.v1';
 const sessionExerciseCacheKey = 'liftline.session-exercises.v1';
 const pendingWorkoutKey = 'liftline.pending-workouts.v1';
-const appVersion = '3.3.0';
+const appVersion = '3.4.0-beta.1';
 const setNumbers = [1, 2, 3, 4, 5] as const;
 const emptyDraft: Draft = {
   sets: Array.from({ length: 5 }, () => ({
@@ -703,9 +704,11 @@ function NavButton({
         type="button"
         onClick={() => onChange(view)}
         aria-current={active ? 'page' : undefined}
-        className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl font-sans text-xs font-semibold transition-colors ${active ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+        className={`beta-nav-button flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl font-sans text-xs font-semibold transition-colors ${active ? 'is-active text-primary' : 'text-muted-foreground hover:text-foreground'}`}
       >
-        <Icon className="size-5" />
+        <span className="beta-nav-icon">
+          <Icon className="size-5" />
+        </span>
         {label}
       </button>
     );
@@ -721,6 +724,45 @@ function NavButton({
       <Icon data-icon="inline-start" />
       {label}
     </Button>
+  );
+}
+
+function DashboardMetric({
+  icon: Icon,
+  label,
+  value,
+  detail,
+  progress,
+  accent,
+}: {
+  icon: typeof Home;
+  label: string;
+  value: string;
+  detail: string;
+  progress: number;
+  accent: string;
+}) {
+  return (
+    <article
+      className="beta-metric-card"
+      style={
+        {
+          '--metric-progress': `${Math.min(100, Math.max(0, progress)) * 3.6}deg`,
+          '--metric-accent': accent,
+        } as CSSProperties
+      }
+    >
+      <div className="beta-metric-ring" aria-hidden="true">
+        <div className="beta-metric-ring-inner">
+          <Icon className="size-5" />
+        </div>
+      </div>
+      <div className="min-w-0">
+        <p className="beta-metric-label">{label}</p>
+        <p className="beta-metric-value">{value}</p>
+        <p className="beta-metric-detail">{detail}</p>
+      </div>
+    </article>
   );
 }
 
@@ -1994,20 +2036,21 @@ export function WorkoutApp() {
   }
 
   return (
-    <main className="min-h-screen bg-background pb-24 font-sans text-foreground md:pb-10">
-      <header className="sticky top-0 z-30 border-b border-border/80 bg-card/95 backdrop-blur">
-        <div className="mx-auto flex min-h-18 max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
+    <main className="liftline-beta min-h-screen bg-background pb-24 font-sans text-foreground md:pb-10">
+      <header className="beta-app-header sticky top-0 z-30 border-b border-border/70 bg-card/90 backdrop-blur-xl">
+        <div className="beta-header-inner mx-auto flex min-h-18 max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <button
             type="button"
             onClick={() => setView('today')}
-            className="flex items-center gap-3 text-left"
+            className="beta-brand flex items-center gap-3 text-left"
           >
-            <span className="grid size-10 place-items-center rounded-xl bg-[linear-gradient(145deg,#2f75ff_0%,#405fef_55%,#6554db_100%)] text-white shadow-sm shadow-primary/25 ring-1 ring-white/15">
-              <Dumbbell className="size-5" />
+            <span className="beta-brand-mark" aria-hidden="true">
+              <span />
+              <span />
             </span>
             <span>
-              <span className="block font-sans text-lg font-bold tracking-tight">
-                Liftline
+              <span className="flex items-center gap-2 font-sans text-lg font-bold tracking-tight">
+                Liftline <span className="beta-badge">Beta</span>
               </span>
               <span
                 className={`flex items-center gap-1.5 font-sans text-xs ${isOnline ? 'text-success' : 'text-warning-foreground'}`}
@@ -2015,7 +2058,7 @@ export function WorkoutApp() {
                 <span
                   className={`size-1.5 rounded-full ${isOnline ? 'bg-success' : 'bg-warning'}`}
                 />
-                {isOnline ? 'Liftline online' : 'Offline'} ·{' '}
+                {isOnline ? 'Online' : 'Offline'} ·{' '}
                 {pendingWorkoutCount > 0
                   ? `${pendingWorkoutCount} pending`
                   : 'Changes saved'}
@@ -2181,7 +2224,7 @@ export function WorkoutApp() {
         </div>
       </header>
 
-      <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 md:py-8">
+      <div className="beta-app-content mx-auto max-w-6xl px-4 py-5 sm:px-6 md:py-8">
         {(error || notice) && (
           <Alert
             className={`mb-5 ${error ? 'border-destructive/30 bg-destructive/5 text-destructive' : 'border-success/25 bg-success-soft text-success'}`}
@@ -2199,14 +2242,21 @@ export function WorkoutApp() {
         )}
 
         {view === 'today' && (
-          <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_320px]">
-            <section className="min-w-0 space-y-5">
-              <div className="flex flex-wrap items-end justify-between gap-4">
-                <div>
-                  <div className="mb-2 flex items-center gap-2">
+          <div className="beta-today-layout grid gap-5 md:grid-cols-[minmax(0,1fr)_320px]">
+            <section className="beta-workout-column min-w-0 space-y-5">
+              <div className="beta-dashboard-intro flex flex-wrap items-end justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="beta-eyebrow">Training dashboard</p>
+                  <h1 className="font-sans text-2xl font-bold tracking-tight sm:text-3xl">
+                    Ready for your next set?
+                  </h1>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Pick up exactly where you left off.
+                  </p>
+                  <div className="beta-week-picker mt-4 flex flex-wrap items-center gap-2">
                     <label
                       htmlFor="week"
-                      className="text-sm font-semibold text-primary"
+                      className="text-xs font-bold uppercase tracking-[0.14em] text-primary"
                     >
                       WEEK
                     </label>
@@ -2216,7 +2266,7 @@ export function WorkoutApp() {
                       onChange={(event) =>
                         selectWeek(Number(event.target.value))
                       }
-                      className="h-9 rounded-lg border bg-card px-3 text-sm font-semibold outline-none focus:ring-3 focus:ring-ring/30"
+                      className="h-10 rounded-xl border bg-card px-3 text-sm font-semibold shadow-sm outline-none focus:ring-3 focus:ring-ring/30"
                     >
                       {Array.from({ length: 12 }, (_, index) => (
                         <option
@@ -2227,16 +2277,10 @@ export function WorkoutApp() {
                         </option>
                       ))}
                     </select>
-                    <span className="text-sm text-muted-foreground">
+                    <span className="text-sm font-medium text-muted-foreground">
                       · {weekDates[activeWeek - 1]}
                     </span>
                   </div>
-                  <h1 className="font-sans text-2xl font-bold tracking-tight sm:text-3xl">
-                    Your workout, set by set.
-                  </h1>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Log each set, RIR, and notes as you train.
-                  </p>
                 </div>
                 <Badge
                   variant="secondary"
@@ -2246,7 +2290,37 @@ export function WorkoutApp() {
                 </Badge>
               </div>
 
-              <Card className="border-0 text-primary-foreground ring-0 shadow-xl shadow-primary/10 [background:var(--hero)]">
+              <div className="beta-metrics-grid" aria-label="Training overview">
+                <DashboardMetric
+                  icon={Activity}
+                  label="This week"
+                  value={`${sessionsDone}/3`}
+                  detail="sessions"
+                  progress={weeklyPercent}
+                  accent="#2164f3"
+                />
+                <DashboardMetric
+                  icon={TrendingUp}
+                  label="Volume"
+                  value={Math.round(currentSummary.volume).toLocaleString()}
+                  detail="kg logged"
+                  progress={Math.min(
+                    100,
+                    (currentSummary.volume / 12000) * 100,
+                  )}
+                  accent="#7357f6"
+                />
+                <DashboardMetric
+                  icon={Medal}
+                  label="Phase"
+                  value={`${totalSessions}/36`}
+                  detail="sessions"
+                  progress={(totalSessions / 36) * 100}
+                  accent="#9a4ff4"
+                />
+              </div>
+
+              <Card className="beta-week-card border-0 text-primary-foreground ring-0 shadow-xl shadow-primary/10 [background:var(--hero)]">
                 <CardHeader className="pb-1">
                   <CardTitle className="font-sans text-lg font-semibold text-primary-foreground">
                     Phase {activePhase} · Week {activeDisplayWeek} progress
@@ -2298,7 +2372,7 @@ export function WorkoutApp() {
                 </CardContent>
               </Card>
 
-              <div className="flex items-start justify-between gap-3">
+              <div className="beta-exercise-heading flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <p className="font-sans text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                     Day {activeDay} · Exercise {activeIndex + 1} of{' '}
@@ -2353,7 +2427,7 @@ export function WorkoutApp() {
                 </div>
               </div>
 
-              <Card className="gap-0 border-0 py-0 shadow-sm shadow-slate-900/5 ring-border">
+              <Card className="beta-workout-card gap-0 border-0 py-0 shadow-sm shadow-slate-900/5 ring-border">
                 <CardHeader className="border-b bg-muted/35 pt-(--card-spacing)">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge className="bg-day-c font-sans text-day-c-foreground">
@@ -2781,7 +2855,7 @@ export function WorkoutApp() {
               </Card>
             </section>
 
-            <aside className="space-y-5">
+            <aside className="beta-side-rail space-y-5">
               <Card>
                 <CardHeader>
                   <CardTitle className="font-sans">
@@ -4831,7 +4905,7 @@ export function WorkoutApp() {
 
       <nav
         aria-label="Primary navigation"
-        className="fixed inset-x-0 bottom-0 z-30 border-t bg-card/95 px-2 pb-[max(.5rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-8px_30px_rgb(15_23_42/7%)] backdrop-blur md:hidden"
+        className="beta-bottom-nav fixed inset-x-0 bottom-0 z-30 border-t bg-card/95 px-2 pb-[max(.5rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-8px_30px_rgb(15_23_42/7%)] backdrop-blur md:hidden"
       >
         <div className="mx-auto grid max-w-md grid-cols-4">
           <NavButton
