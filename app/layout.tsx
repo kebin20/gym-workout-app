@@ -5,12 +5,12 @@ const publicIconOrigin =
   'https://raw.githubusercontent.com/kebin20/gym-workout-app/62c99c0864196e7f05409f47633a79132c185675/public';
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://liftline-ui-beta.ktanzyl.chatgpt.site'),
-  title: 'Liftline Beta',
-  applicationName: 'Liftline Beta',
+  metadataBase: new URL('https://liftline-strength-plan.ktanzyl.chatgpt.site'),
+  title: 'Liftline',
+  applicationName: 'Liftline',
   manifest: '/manifest-v2.webmanifest',
   description:
-    'A redesigned beta of the Liftline strength tracker for logging sets, reps, RIR, notes, volume, and weekly progress.',
+    'A strength tracker for logging sets, reps, RIR, notes, volume, and weekly progress across two training phases.',
   icons: {
     icon: [
       { url: '/favicon-v2.svg', type: 'image/svg+xml' },
@@ -31,11 +31,11 @@ export const metadata: Metadata = {
   },
   appleWebApp: {
     capable: true,
-    title: 'Liftline Beta',
+    title: 'Liftline',
     statusBarStyle: 'default',
   },
   openGraph: {
-    title: 'Liftline Beta',
+    title: 'Liftline',
     description:
       'Log every set, follow your 3-day routine, and track progress across two training phases.',
     type: 'website',
@@ -44,13 +44,13 @@ export const metadata: Metadata = {
         url: '/og.png',
         width: 1734,
         height: 909,
-        alt: 'Liftline Beta strength training dashboard',
+        alt: 'Liftline strength training dashboard',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Liftline Beta',
+    title: 'Liftline',
     description:
       'Log every set, follow your 3-day routine, and track progress across two training phases.',
     images: ['/og.png'],

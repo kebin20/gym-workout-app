@@ -10,7 +10,7 @@ Made with ChatGPT Codex
 
 The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgpt.site](https://liftline-strength-plan.ktanzyl.chatgpt.site). Access is restricted to the site owner.
 
-Current beta version: **v3.4.0-beta.2**
+Current production version: **v3.4.0**
 
 ## Features
 
@@ -51,12 +51,13 @@ Current beta version: **v3.4.0-beta.2**
 
 Minor fixes, visual refinements, and deployment maintenance are grouped into the nearest feature release so this history focuses on meaningful product changes.
 
-### v3.4 beta — Visual redesign preview (15 September 2026)
+### v3.4 — Liftline visual redesign (20 September 2026)
 
-- Created an isolated Liftline Beta with its own private URL and separate workout database so the production app and its records remain untouched.
+- Promoted the tested beta redesign to the main Liftline app while retaining all existing workout records and integrations.
 - Reworked the visual system around deep navy typography, airy white surfaces, blue-to-violet gradients, larger corner radii, and soft layered shadows inspired by the supplied mobile fitness reference.
 - Added a compact three-ring training overview for weekly sessions, logged volume, and overall phase completion.
 - Added lightweight, minimal exercise illustrations to the Today and Plan views, using transparent artwork and lazy loading to retain the beta's responsive feel.
+- Increased the week selector's arrow spacing for clearer desktop and mobile interaction.
 - Refined the brand header, week picker, workout surfaces, desktop side rail, and mobile navigation while retaining all existing training, history, timer, nutrition, Holiday mode, and Google Sheet tools.
 
 ### v3.3 — Holiday training mode (14 September 2026)

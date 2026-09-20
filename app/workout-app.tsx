@@ -170,7 +170,7 @@ type SheetImportPreview = {
 const workoutCacheKey = 'liftline.workout-entries.v1';
 const sessionExerciseCacheKey = 'liftline.session-exercises.v1';
 const pendingWorkoutKey = 'liftline.pending-workouts.v1';
-const appVersion = '3.4.0-beta.2';
+const appVersion = '3.4.0';
 const setNumbers = [1, 2, 3, 4, 5] as const;
 const emptyDraft: Draft = {
   sets: Array.from({ length: 5 }, () => ({
@@ -2050,7 +2050,7 @@ export function WorkoutApp() {
             </span>
             <span>
               <span className="flex items-center gap-2 font-sans text-lg font-bold tracking-tight">
-                Liftline <span className="beta-badge">Beta</span>
+                Liftline
               </span>
               <span
                 className={`flex items-center gap-1.5 font-sans text-xs ${isOnline ? 'text-success' : 'text-warning-foreground'}`}
@@ -2260,23 +2260,29 @@ export function WorkoutApp() {
                     >
                       WEEK
                     </label>
-                    <select
-                      id="week"
-                      value={activeWeek}
-                      onChange={(event) =>
-                        selectWeek(Number(event.target.value))
-                      }
-                      className="h-10 rounded-xl border bg-card px-3 text-sm font-semibold shadow-sm outline-none focus:ring-3 focus:ring-ring/30"
-                    >
-                      {Array.from({ length: 12 }, (_, index) => (
-                        <option
-                          key={phaseStartWeek + index}
-                          value={phaseStartWeek + index}
-                        >
-                          Week {index + 1}
-                        </option>
-                      ))}
-                    </select>
+                    <span className="relative inline-flex">
+                      <select
+                        id="week"
+                        value={activeWeek}
+                        onChange={(event) =>
+                          selectWeek(Number(event.target.value))
+                        }
+                        className="h-10 appearance-none rounded-xl border bg-card py-2 pl-3 pr-11 text-sm font-semibold shadow-sm outline-none focus:ring-3 focus:ring-ring/30"
+                      >
+                        {Array.from({ length: 12 }, (_, index) => (
+                          <option
+                            key={phaseStartWeek + index}
+                            value={phaseStartWeek + index}
+                          >
+                            Week {index + 1}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown
+                        aria-hidden="true"
+                        className="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                      />
+                    </span>
                     <span className="text-sm font-medium text-muted-foreground">
                       · {weekDates[activeWeek - 1]}
                     </span>
