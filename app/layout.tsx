@@ -5,26 +5,26 @@ export const metadata: Metadata = {
   metadataBase: new URL('https://liftline-strength-plan.ktanzyl.chatgpt.site'),
   title: 'Liftline',
   applicationName: 'Liftline',
-  manifest: '/manifest-v3.webmanifest',
+  manifest: '/manifest-v4.webmanifest',
   description:
     'A strength tracker for logging sets, reps, RIR, notes, volume, and weekly progress across two training phases.',
   icons: {
     icon: [
-      { url: '/favicon-v3.png', sizes: '64x64', type: 'image/png' },
+      { url: '/favicon-v4.png', sizes: '64x64', type: 'image/png' },
       {
-        url: '/liftline-icon-192-v3.png',
+        url: '/liftline-icon-192-v4.png',
         sizes: '192x192',
         type: 'image/png',
       },
     ],
     apple: [
       {
-        url: '/liftline-apple-touch-icon-v3.png',
+        url: '/liftline-apple-touch-icon-v4.png',
         sizes: '180x180',
         type: 'image/png',
       },
     ],
-    shortcut: '/favicon-v3.png',
+    shortcut: '/favicon-v4.png',
   },
   appleWebApp: {
     capable: true,

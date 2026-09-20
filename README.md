@@ -10,7 +10,7 @@ Made with ChatGPT Codex
 
 The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgpt.site](https://liftline-strength-plan.ktanzyl.chatgpt.site). Access is restricted to the site owner.
 
-Current production version: **v3.4.2**
+Current production version: **v3.4.3**
 
 ## Features
 
@@ -60,6 +60,7 @@ Minor fixes, visual refinements, and deployment maintenance are grouped into the
 - Increased the week selector's arrow spacing for clearer desktop and mobile interaction.
 - Added saved notes to the previous-session card so exercise-specific context from the last completed week is visible while training.
 - Refreshed the in-app brand mark, browser favicon, iOS home-screen icon, Chrome/Android install icons, maskable icon, and notification icon with the new glossy blue-violet Liftline design.
+- Cropped the supplied icon artwork to its coloured boundary so it fills each app-icon container without the original white outer margin.
 - Refined the brand header, week picker, workout surfaces, desktop side rail, and mobile navigation while retaining all existing training, history, timer, nutrition, Holiday mode, and Google Sheet tools.
 
 ### v3.3 — Holiday training mode (14 September 2026)
