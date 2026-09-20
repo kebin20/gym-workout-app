@@ -1,4 +1,4 @@
-const cacheVersion = 'liftline-2026-09-20-4';
+const cacheVersion = 'liftline-2026-09-20-5';
 const shellCache = `${cacheVersion}-shell`;
 const assetCache = `${cacheVersion}-assets`;
 
@@ -8,8 +8,11 @@ const coreShell = [
   '/manifest-v2.webmanifest',
   '/manifest-v3.webmanifest',
   '/manifest-v4.webmanifest',
-  '/favicon-v4.png',
+  '/manifest-v5.webmanifest',
+  '/favicon-v5-32.png',
+  '/favicon-v5.png',
   '/apple-touch-icon.png',
+  '/apple-touch-icon-180x180.png',
   '/icon-192.png',
   '/icon-512.png',
   '/liftline-apple-touch-icon-v2.png',
@@ -21,6 +24,12 @@ const coreShell = [
   '/liftline-apple-touch-icon-v4.png',
   '/liftline-icon-192-v4.png',
   '/liftline-icon-512-v4.png',
+  '/liftline-apple-touch-icon-120-v5.png',
+  '/liftline-apple-touch-icon-152-v5.png',
+  '/liftline-apple-touch-icon-167-v5.png',
+  '/liftline-apple-touch-icon-v5.png',
+  '/liftline-icon-192-v5.png',
+  '/liftline-icon-512-v5.png',
 ];
 
 function isCacheable(response) {
@@ -122,6 +131,8 @@ self.addEventListener('fetch', (event) => {
       (async () => {
         const cache = await caches.open(shellCache);
         const cached = await cache.match('/');
+        const preferFresh =
+          url.searchParams.has('v') || url.searchParams.get('source') === 'pwa';
         const refresh = (async () => {
           try {
             const response =
@@ -139,6 +150,13 @@ self.addEventListener('fetch', (event) => {
             return null;
           }
         })();
+
+        if (preferFresh) {
+          const response = await refresh;
+          if (response) return response;
+          if (cached) return cached;
+          return Response.error();
+        }
 
         if (cached) {
           event.waitUntil(refresh);

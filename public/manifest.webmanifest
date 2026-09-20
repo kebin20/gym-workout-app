@@ -3,26 +3,26 @@
   "short_name": "Liftline",
   "id": "/",
   "description": "A private strength workout tracker for two progressive training phases.",
-  "start_url": "/",
+  "start_url": "/?source=pwa&icon=v5",
   "scope": "/",
   "display": "standalone",
   "background_color": "#F7F9FF",
   "theme_color": "#2554E8",
   "icons": [
     {
-      "src": "/liftline-icon-192-v4.png",
+      "src": "/liftline-icon-192-v5.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/liftline-icon-512-v4.png",
+      "src": "/liftline-icon-512-v5.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/liftline-icon-512-v4.png",
+      "src": "/liftline-icon-512-v5.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
