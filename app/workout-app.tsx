@@ -170,7 +170,7 @@ type SheetImportPreview = {
 const workoutCacheKey = 'liftline.workout-entries.v1';
 const sessionExerciseCacheKey = 'liftline.session-exercises.v1';
 const pendingWorkoutKey = 'liftline.pending-workouts.v1';
-const appVersion = '3.4.8';
+const appVersion = '3.4.9';
 const setNumbers = [1, 2, 3, 4, 5] as const;
 const emptyDraft: Draft = {
   sets: Array.from({ length: 5 }, () => ({
@@ -2045,7 +2045,7 @@ export function WorkoutApp() {
             className="beta-brand flex items-center gap-3 text-left"
           >
             <img
-              src="/liftline-brand-mark-v6.png"
+              src="/liftline-icon-192-v6.png"
               alt=""
               width={192}
               height={192}
