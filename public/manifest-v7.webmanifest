@@ -1,8 +1,8 @@
 {
   "name": "Liftline",
   "short_name": "Liftline",
-  "id": "/",
   "description": "A strength tracker for logging sets, reps, RIR, notes, volume, and weekly progress across two training phases.",
+  "id": "/",
   "start_url": "/?source=pwa&icon=v7",
   "scope": "/",
   "display": "standalone",

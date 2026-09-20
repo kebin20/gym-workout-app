@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Liftline app icon</title>
+  <desc id="desc">A rounded blue and violet square with a white rising L-shaped path.</desc>
+  <defs>
+    <linearGradient id="background" x1="110" y1="92" x2="900" y2="930" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0866F5"/>
+      <stop offset="0.52" stop-color="#315FEF"/>
+      <stop offset="1" stop-color="#7448F4"/>
+    </linearGradient>
+  </defs>
+  <rect x="24" y="24" width="976" height="976" rx="228" fill="url(#background)"/>
+  <path
+    d="M326 292v390c0 54 44 98 98 98h35l282-176"
+    fill="none"
+    stroke="#FFFFFF"
+    stroke-width="154"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+</svg>

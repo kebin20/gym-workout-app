@@ -10,7 +10,7 @@ Made with ChatGPT Codex
 
 The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgpt.site](https://liftline-strength-plan.ktanzyl.chatgpt.site). Access is restricted to the site owner.
 
-Current production version: **v3.4.9**
+Current production version: **v3.5.0**
 
 ## Features
 
@@ -50,6 +50,13 @@ Current production version: **v3.4.9**
 ## Version history
 
 Minor fixes, visual refinements, and deployment maintenance are grouped into the nearest feature release so this history focuses on meaningful product changes.
+
+### v3.5 — Lift Path identity (21 September 2026)
+
+- Replaced the previous glossy icon with the selected Lift Path concept: one clean, rising L-shaped silhouette designed to remain recognizable at favicon size.
+- Standardized the in-app header mark, browser favicon, rest-timer notification icon, Apple touch icons, and Chrome/Android install icons around the same blue-to-violet identity.
+- Added separate rounded browser artwork and full-bleed mask-safe home-screen artwork so the mark keeps balanced spacing without nested frames, white gutters, or doubled corner treatments.
+- Versioned the install manifest and offline icon cache so newly added home-screen shortcuts receive the refreshed artwork instead of a stale saved icon.
 
 ### v3.4 — Liftline visual redesign (20 September 2026)
 

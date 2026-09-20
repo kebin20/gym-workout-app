@@ -5,41 +5,42 @@ export const metadata: Metadata = {
   metadataBase: new URL('https://liftline-strength-plan.ktanzyl.chatgpt.site'),
   title: 'Liftline',
   applicationName: 'Liftline',
-  manifest: '/manifest-v6.webmanifest',
+  manifest: '/manifest-v7.webmanifest',
   description:
     'A strength tracker for logging sets, reps, RIR, notes, volume, and weekly progress across two training phases.',
   icons: {
     icon: [
-      { url: '/favicon-v7-32.png', sizes: '32x32', type: 'image/png' },
-      { url: '/favicon-v7.png', sizes: '64x64', type: 'image/png' },
+      { url: '/liftline-app-icon-v7.svg', type: 'image/svg+xml' },
+      { url: '/favicon-v8-32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/favicon-v8.png', sizes: '64x64', type: 'image/png' },
     ],
     apple: [
       {
-        url: '/liftline-apple-touch-icon-120-v6.png',
+        url: '/liftline-apple-touch-icon-120-v7.png',
         sizes: '120x120',
         type: 'image/png',
       },
       {
-        url: '/liftline-apple-touch-icon-152-v6.png',
+        url: '/liftline-apple-touch-icon-152-v7.png',
         sizes: '152x152',
         type: 'image/png',
       },
       {
-        url: '/liftline-apple-touch-icon-167-v6.png',
+        url: '/liftline-apple-touch-icon-167-v7.png',
         sizes: '167x167',
         type: 'image/png',
       },
       {
-        url: '/liftline-apple-touch-icon-v6.png',
+        url: '/liftline-apple-touch-icon-v7.png',
         sizes: '180x180',
         type: 'image/png',
       },
     ],
-    shortcut: '/favicon-v7-32.png',
+    shortcut: '/favicon-v8-32.png',
     other: [
       {
         rel: 'apple-touch-icon-precomposed',
-        url: '/liftline-apple-touch-icon-v6.png',
+        url: '/liftline-apple-touch-icon-v7.png',
         sizes: '180x180',
         type: 'image/png',
       },

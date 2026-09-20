@@ -218,10 +218,8 @@
     display: block;
     width: 2.8rem;
     height: 2.8rem;
-    border-radius: 42%;
-    clip-path: inset(0 round 42%);
-    object-fit: cover;
-    box-shadow: 0 10px 24px rgb(56 95 226 / 30%);
+    object-fit: contain;
+    filter: drop-shadow(0 9px 14px rgb(56 95 226 / 24%));
   }
 
   .beta-badge {
