@@ -1,33 +1,30 @@
 import type { Metadata } from 'next';
 import './globals.css';
 
-const publicIconOrigin =
-  'https://raw.githubusercontent.com/kebin20/gym-workout-app/62c99c0864196e7f05409f47633a79132c185675/public';
-
 export const metadata: Metadata = {
   metadataBase: new URL('https://liftline-strength-plan.ktanzyl.chatgpt.site'),
   title: 'Liftline',
   applicationName: 'Liftline',
-  manifest: '/manifest-v2.webmanifest',
+  manifest: '/manifest-v3.webmanifest',
   description:
     'A strength tracker for logging sets, reps, RIR, notes, volume, and weekly progress across two training phases.',
   icons: {
     icon: [
-      { url: '/favicon-v2.svg', type: 'image/svg+xml' },
+      { url: '/favicon-v3.png', sizes: '64x64', type: 'image/png' },
       {
-        url: `${publicIconOrigin}/liftline-icon-192-v2.png`,
+        url: '/liftline-icon-192-v3.png',
         sizes: '192x192',
         type: 'image/png',
       },
     ],
     apple: [
       {
-        url: `${publicIconOrigin}/liftline-apple-touch-icon-v2.png`,
+        url: '/liftline-apple-touch-icon-v3.png',
         sizes: '180x180',
         type: 'image/png',
       },
     ],
-    shortcut: '/favicon-v2.svg',
+    shortcut: '/favicon-v3.png',
   },
   appleWebApp: {
     capable: true,

@@ -215,36 +215,12 @@
   }
 
   .beta-brand-mark {
-    position: relative;
-    display: grid;
+    display: block;
     width: 2.8rem;
     height: 2.8rem;
-    place-items: center;
-    overflow: hidden;
     border-radius: 1rem;
-    background: linear-gradient(145deg, #1765ec 0%, #4d65f3 58%, #8454f6 100%);
+    object-fit: cover;
     box-shadow: 0 10px 24px rgb(56 95 226 / 30%);
-  }
-
-  .beta-brand-mark > span {
-    position: absolute;
-    width: 0.62rem;
-    height: 1.65rem;
-    border-radius: 999px;
-    background: white;
-    transform: rotate(32deg);
-  }
-
-  .beta-brand-mark > span:first-child {
-    margin-left: -0.65rem;
-    margin-top: -0.28rem;
-  }
-
-  .beta-brand-mark > span:last-child {
-    height: 1.18rem;
-    margin-left: 0.55rem;
-    margin-top: 0.48rem;
-    opacity: 0.8;
   }
 
   .beta-badge {

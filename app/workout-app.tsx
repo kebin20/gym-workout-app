@@ -170,7 +170,7 @@ type SheetImportPreview = {
 const workoutCacheKey = 'liftline.workout-entries.v1';
 const sessionExerciseCacheKey = 'liftline.session-exercises.v1';
 const pendingWorkoutKey = 'liftline.pending-workouts.v1';
-const appVersion = '3.4.1';
+const appVersion = '3.4.2';
 const setNumbers = [1, 2, 3, 4, 5] as const;
 const emptyDraft: Draft = {
   sets: Array.from({ length: 5 }, () => ({
@@ -1240,7 +1240,7 @@ export function WorkoutApp() {
         ) {
           new Notification('Liftline rest complete', {
             body: `${exercise.name}: ready for your next set.`,
-            icon: '/icon-192.png',
+            icon: '/liftline-icon-192-v3.png',
           });
         }
       }
@@ -2044,10 +2044,14 @@ export function WorkoutApp() {
             onClick={() => setView('today')}
             className="beta-brand flex items-center gap-3 text-left"
           >
-            <span className="beta-brand-mark" aria-hidden="true">
-              <span />
-              <span />
-            </span>
+            <img
+              src="/liftline-icon-192-v3.png"
+              alt=""
+              width={192}
+              height={192}
+              className="beta-brand-mark"
+              aria-hidden="true"
+            />
             <span>
               <span className="flex items-center gap-2 font-sans text-lg font-bold tracking-tight">
                 Liftline
