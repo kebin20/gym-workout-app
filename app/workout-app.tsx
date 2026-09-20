@@ -170,7 +170,7 @@ type SheetImportPreview = {
 const workoutCacheKey = 'liftline.workout-entries.v1';
 const sessionExerciseCacheKey = 'liftline.session-exercises.v1';
 const pendingWorkoutKey = 'liftline.pending-workouts.v1';
-const appVersion = '3.4.0';
+const appVersion = '3.4.1';
 const setNumbers = [1, 2, 3, 4, 5] as const;
 const emptyDraft: Draft = {
   sets: Array.from({ length: 5 }, () => ({
@@ -2570,31 +2570,47 @@ export function WorkoutApp() {
                           )}
                         </div>
                         {previousEntry ? (
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {loggedSets(previousEntry).map((set) => (
-                              <span
-                                key={set.set}
-                                className="rounded-lg bg-secondary px-2.5 py-1.5 font-sans text-xs font-medium tabular-nums"
+                          <div className="mt-2">
+                            <div className="flex flex-wrap gap-2">
+                              {loggedSets(previousEntry).map((set) => (
+                                <span
+                                  key={set.set}
+                                  className="rounded-lg bg-secondary px-2.5 py-1.5 font-sans text-xs font-medium tabular-nums"
+                                >
+                                  Set {set.set}:{' '}
+                                  {set.weight == null
+                                    ? `${set.reps} ${exercise.name === 'Plank' ? 'sec' : 'reps'}`
+                                    : `${set.weight} kg × ${set.reps}`}
+                                </span>
+                              ))}
+                              {previousEntry.rir != null && (
+                                <span className="rounded-lg bg-success-soft px-2.5 py-1.5 font-sans text-xs font-medium text-success">
+                                  RIR {previousEntry.rir}
+                                </span>
+                              )}
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="xs"
+                                onClick={usePreviousSession}
                               >
-                                Set {set.set}:{' '}
-                                {set.weight == null
-                                  ? `${set.reps} ${exercise.name === 'Plank' ? 'sec' : 'reps'}`
-                                  : `${set.weight} kg × ${set.reps}`}
-                              </span>
-                            ))}
-                            {previousEntry.rir != null && (
-                              <span className="rounded-lg bg-success-soft px-2.5 py-1.5 font-sans text-xs font-medium text-success">
-                                RIR {previousEntry.rir}
-                              </span>
+                                <Copy /> Use previous
+                              </Button>
+                            </div>
+                            {(previousEntry.notes ?? '').trim() && (
+                              <div className="mt-2.5 flex items-start gap-2 rounded-lg border border-primary/10 bg-background/65 px-3 py-2.5">
+                                <NotebookPen
+                                  className="mt-0.5 size-4 shrink-0 text-primary"
+                                  aria-hidden="true"
+                                />
+                                <p className="min-w-0 break-words font-sans text-xs leading-relaxed text-muted-foreground">
+                                  <span className="font-semibold text-foreground">
+                                    Previous note:
+                                  </span>{' '}
+                                  {previousEntry.notes.trim()}
+                                </p>
+                              </div>
                             )}
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="xs"
-                              onClick={usePreviousSession}
-                            >
-                              <Copy /> Use previous
-                            </Button>
                           </div>
                         ) : (
                           <p className="mt-1 font-sans text-xs leading-relaxed text-muted-foreground">

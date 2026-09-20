@@ -10,7 +10,7 @@ Made with ChatGPT Codex
 
 The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgpt.site](https://liftline-strength-plan.ktanzyl.chatgpt.site). Access is restricted to the site owner.
 
-Current production version: **v3.4.0**
+Current production version: **v3.4.1**
 
 ## Features
 
@@ -35,7 +35,7 @@ Current production version: **v3.4.0**
 - Visible device-save and Google Sheet sync status with manual retry controls
 - Review-first import from and automatic mirroring to the original Google Sheet layout
 - Fast database-first saves with Google Sheet mirroring completed in the background
-- Previous-session recall beside each exercise, including the logged date, weights, reps, and RIR
+- Previous-session recall beside each exercise, including the logged date, weights, reps, RIR, and saved note
 - Optional one-tap copying of previous-session weights and reps
 - Fresh weight and rep inputs for each new week, without copying the previous workout into the new record
 - Session-only exercise substitution, reordering, skipping, and custom exercise additions
@@ -58,6 +58,7 @@ Minor fixes, visual refinements, and deployment maintenance are grouped into the
 - Added a compact three-ring training overview for weekly sessions, logged volume, and overall phase completion.
 - Added lightweight, minimal exercise illustrations to the Today and Plan views, using transparent artwork and lazy loading to retain the beta's responsive feel.
 - Increased the week selector's arrow spacing for clearer desktop and mobile interaction.
+- Added saved notes to the previous-session card so exercise-specific context from the last completed week is visible while training.
 - Refined the brand header, week picker, workout surfaces, desktop side rail, and mobile navigation while retaining all existing training, history, timer, nutrition, Holiday mode, and Google Sheet tools.
 
 ### v3.3 — Holiday training mode (14 September 2026)
