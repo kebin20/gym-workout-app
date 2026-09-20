@@ -10,8 +10,8 @@ export const metadata: Metadata = {
     'A strength tracker for logging sets, reps, RIR, notes, volume, and weekly progress across two training phases.',
   icons: {
     icon: [
-      { url: '/favicon-v5-32.png', sizes: '32x32', type: 'image/png' },
-      { url: '/favicon-v5.png', sizes: '64x64', type: 'image/png' },
+      { url: '/favicon-v6-32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/favicon-v6.png', sizes: '64x64', type: 'image/png' },
       {
         url: '/liftline-icon-192-v5.png',
         sizes: '192x192',
@@ -40,7 +40,7 @@ export const metadata: Metadata = {
         type: 'image/png',
       },
     ],
-    shortcut: '/favicon-v5-32.png',
+    shortcut: '/favicon-v6-32.png',
     other: [
       {
         rel: 'apple-touch-icon-precomposed',

@@ -215,15 +215,12 @@
   }
 
   .beta-brand-mark {
-    box-sizing: border-box;
     display: block;
     width: 2.8rem;
     height: 2.8rem;
-    padding: 0.32rem;
     border-radius: 42%;
-    background: linear-gradient(145deg, #2369ef 0%, #5259ee 58%, #7560ef 100%);
     clip-path: inset(0 round 42%);
-    object-fit: contain;
+    object-fit: cover;
     box-shadow: 0 10px 24px rgb(56 95 226 / 30%);
   }
 

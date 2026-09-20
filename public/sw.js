@@ -1,4 +1,4 @@
-const cacheVersion = 'liftline-2026-09-20-5';
+const cacheVersion = 'liftline-2026-09-20-6';
 const shellCache = `${cacheVersion}-shell`;
 const assetCache = `${cacheVersion}-assets`;
 
@@ -9,8 +9,8 @@ const coreShell = [
   '/manifest-v3.webmanifest',
   '/manifest-v4.webmanifest',
   '/manifest-v5.webmanifest',
-  '/favicon-v5-32.png',
-  '/favicon-v5.png',
+  '/favicon-v6-32.png',
+  '/favicon-v6.png',
   '/apple-touch-icon.png',
   '/apple-touch-icon-180x180.png',
   '/icon-192.png',
