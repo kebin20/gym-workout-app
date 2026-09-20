@@ -218,7 +218,8 @@
     display: block;
     width: 2.8rem;
     height: 2.8rem;
-    border-radius: 0.85rem;
+    border-radius: 42%;
+    clip-path: inset(0 round 42%);
     object-fit: cover;
     box-shadow: 0 10px 24px rgb(56 95 226 / 30%);
   }
@@ -492,7 +493,6 @@
     .beta-brand-mark {
       width: 2.55rem;
       height: 2.55rem;
-      border-radius: 0.9rem;
     }
 
     .beta-dashboard-intro {
