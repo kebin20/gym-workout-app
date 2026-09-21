@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import {
   appRelease,
-  appleTouchIconHref,
+  appleTouchIcon180Href,
+  appleTouchIcons,
   installManifestHref,
   withArtworkRevision,
 } from './app-release';
@@ -72,17 +73,20 @@ export default function RootLayout({
           href={installManifestHref}
           crossOrigin="use-credentials"
         />
-        <link
-          rel="apple-touch-icon"
-          sizes="180x180"
-          type="image/png"
-          href={appleTouchIconHref}
-        />
+        {appleTouchIcons.map((icon) => (
+          <link
+            key={icon.sizes}
+            rel="apple-touch-icon"
+            sizes={icon.sizes}
+            type="image/png"
+            href={icon.href}
+          />
+        ))}
         <link
           rel="apple-touch-icon-precomposed"
           sizes="180x180"
           type="image/png"
-          href={appleTouchIconHref}
+          href={appleTouchIcon180Href}
         />
       </head>
       <body className="antialiased">{children}</body>

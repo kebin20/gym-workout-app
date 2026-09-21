@@ -10,9 +10,13 @@ export function withArtworkRevision(path: string) {
 }
 
 export const installManifestHref = withArtworkRevision(release.manifestPath);
-export const appleTouchIconHref = withArtworkRevision(
-  release.appleTouchIconPath,
-);
+export const appleTouchIcons = release.appleTouchIcons.map((icon) => ({
+  ...icon,
+  href: withArtworkRevision(icon.src),
+}));
+export const appleTouchIcon180Href =
+  appleTouchIcons.find((icon) => icon.sizes === '180x180')?.href ??
+  withArtworkRevision('/apple-touch-icon.png');
 export const brandMarkHref = withArtworkRevision(release.brandMarkPath);
 export const notificationIconHref = withArtworkRevision(
   release.notificationIconPath,

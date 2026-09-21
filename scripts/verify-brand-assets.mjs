@@ -40,8 +40,11 @@ if (!layoutSource.includes('installManifestHref')) {
   problems.push('layout.tsx must use the shared installManifestHref');
 }
 
-if (!layoutSource.includes('appleTouchIconHref')) {
-  problems.push('layout.tsx must use the shared appleTouchIconHref');
+if (
+  !layoutSource.includes('appleTouchIcons') ||
+  !layoutSource.includes('appleTouchIcon180Href')
+) {
+  problems.push('layout.tsx must use the shared Apple touch icon registry');
 }
 
 if (!routeSource.includes('appRelease.icons.map')) {
@@ -49,11 +52,11 @@ if (!routeSource.includes('appRelease.icons.map')) {
 }
 
 const expectedIcons = [
-  {
-    path: release.appleTouchIconPath,
-    sizes: '180x180',
-    label: 'Apple touch icon',
-  },
+  ...release.appleTouchIcons.map((icon) => ({
+    path: icon.src,
+    sizes: icon.sizes,
+    label: `${icon.sizes} Apple touch icon`,
+  })),
   ...release.icons.map((icon) => ({
     path: icon.src,
     sizes: icon.sizes,
@@ -83,7 +86,6 @@ const expectedIcons = [
 
 const requiredArtworkPaths = [
   'sourceArtworkPath',
-  'appleTouchIconPath',
   'brandMarkPath',
   'notificationIconPath',
   'favicon32Path',
@@ -93,6 +95,17 @@ const requiredArtworkPaths = [
 for (const key of requiredArtworkPaths) {
   if (typeof release[key] !== 'string' || !release[key].startsWith('/')) {
     problems.push(`${key} must be a root-relative artwork path`);
+  }
+}
+
+if (!Array.isArray(release.appleTouchIcons)) {
+  problems.push('appleTouchIcons must be an array');
+} else {
+  const requiredAppleSizes = ['120x120', '152x152', '167x167', '180x180'];
+  for (const size of requiredAppleSizes) {
+    if (!release.appleTouchIcons.some((icon) => icon.sizes === size)) {
+      problems.push(`Apple touch icon is missing required size ${size}`);
+    }
   }
 }
 
@@ -114,7 +127,13 @@ try {
 
 try {
   const appleIcon = await readFile(
-    resolve(projectRoot, 'public', release.appleTouchIconPath.slice(1)),
+    resolve(
+      projectRoot,
+      'public',
+      release.appleTouchIcons
+        .find((icon) => icon.sizes === '180x180')
+        .src.slice(1),
+    ),
   );
   const rootFallback = await readFile(
     resolve(projectRoot, 'public/apple-touch-icon.png'),
