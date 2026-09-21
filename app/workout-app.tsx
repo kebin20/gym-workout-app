@@ -2257,7 +2257,7 @@ export function WorkoutApp() {
                   <p className="mt-1 text-sm text-muted-foreground">
                     Pick up exactly where you left off.
                   </p>
-                  <div className="beta-week-picker mt-4 flex flex-wrap items-center gap-2">
+                  <div className="beta-week-picker mt-5 flex flex-wrap items-center gap-x-3 gap-y-2">
                     <label
                       htmlFor="week"
                       className="text-xs font-bold uppercase tracking-[0.14em] text-primary"
@@ -2271,7 +2271,7 @@ export function WorkoutApp() {
                         onChange={(event) =>
                           selectWeek(Number(event.target.value))
                         }
-                        className="h-10 appearance-none rounded-xl border bg-card py-2 pl-3 pr-11 text-sm font-semibold shadow-sm outline-none focus:ring-3 focus:ring-ring/30"
+                        className="h-11 appearance-none rounded-2xl border bg-card py-2 pl-4 pr-12 text-sm font-semibold shadow-sm outline-none focus:ring-3 focus:ring-ring/30"
                       >
                         {Array.from({ length: 12 }, (_, index) => (
                           <option

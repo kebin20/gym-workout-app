@@ -252,9 +252,9 @@
   .beta-week-picker {
     width: fit-content;
     border: 1px solid rgb(93 123 190 / 16%);
-    border-radius: 1rem;
+    border-radius: 1.2rem;
     background: rgb(255 255 255 / 74%);
-    padding: 0.38rem 0.5rem;
+    padding: 0.68rem 0.82rem;
     box-shadow: 0 8px 24px rgb(39 64 126 / 6%);
     backdrop-filter: blur(16px);
   }
