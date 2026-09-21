@@ -1,4 +1,4 @@
-const cacheVersion = 'liftline-2026-09-21-9';
+const cacheVersion = 'liftline-2026-09-21-10';
 const shellCache = `${cacheVersion}-shell`;
 const assetCache = `${cacheVersion}-assets`;
 
@@ -41,6 +41,16 @@ const coreShell = [
   '/liftline-icon-192-v7.png',
   '/liftline-icon-512-v7.png',
   '/liftline-icon-512-maskable-v7.png',
+  '/liftline-icon-master-v9.png',
+  '/favicon-v9-32.png',
+  '/favicon-v9.png',
+  '/liftline-apple-touch-icon-120-v9.png',
+  '/liftline-apple-touch-icon-152-v9.png',
+  '/liftline-apple-touch-icon-167-v9.png',
+  '/liftline-apple-touch-icon-v9.png',
+  '/liftline-icon-192-v9.png',
+  '/liftline-icon-512-v9.png',
+  '/liftline-icon-512-maskable-v9.png',
 ];
 
 function isCacheable(response) {

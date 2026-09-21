@@ -12,7 +12,14 @@ The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgp
 
 Current production version: **v3.5.1**
 
+Staged visual beta: **v3.6.0-beta.1** on `codex/liftline-monogram-icon-beta` (not deployed)
+
 ## Features
+
+### v3.6 beta — Liftline monogram icon
+
+- Recreated the selected minimal monogram as an edge-to-edge cobalt-to-violet app icon with a softly folded white and lavender L.
+- Added matching in-app, notification, favicon, Apple touch, Chrome/Android, and maskable assets while keeping the production branch unchanged.
 
 - Two complete 12-week plans with Day A, B, and C workouts
 - Locked Phase 2 transition after all 36 Phase 1 sessions are complete

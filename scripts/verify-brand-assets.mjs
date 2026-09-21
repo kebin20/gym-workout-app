@@ -82,10 +82,10 @@ const expectedIcons = [
 ];
 
 const requiredArtworkPaths = [
+  'sourceArtworkPath',
   'appleTouchIconPath',
   'brandMarkPath',
   'notificationIconPath',
-  'faviconSvgPath',
   'favicon32Path',
   'favicon64Path',
 ];
@@ -97,9 +97,35 @@ for (const key of requiredArtworkPaths) {
 }
 
 try {
-  await stat(resolve(projectRoot, 'public', release.faviconSvgPath.slice(1)));
+  const masterPath = resolve(
+    projectRoot,
+    'public',
+    release.sourceArtworkPath.slice(1),
+  );
+  const { width, height } = await readPngDimensions(masterPath);
+  if (width !== height || width < 1024) {
+    problems.push(
+      `source artwork must be square and at least 1024px; received ${width}x${height}`,
+    );
+  }
 } catch {
-  problems.push(`SVG favicon is missing: ${release.faviconSvgPath}`);
+  problems.push(`source artwork is missing: ${release.sourceArtworkPath}`);
+}
+
+try {
+  const appleIcon = await readFile(
+    resolve(projectRoot, 'public', release.appleTouchIconPath.slice(1)),
+  );
+  const rootFallback = await readFile(
+    resolve(projectRoot, 'public/apple-touch-icon.png'),
+  );
+  if (!appleIcon.equals(rootFallback)) {
+    problems.push(
+      'apple-touch-icon.png must match the current Apple touch icon artwork',
+    );
+  }
+} catch {
+  problems.push('root Apple touch icon fallback is missing');
 }
 
 for (const icon of expectedIcons) {

@@ -16,10 +16,6 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       {
-        url: withArtworkRevision(appRelease.faviconSvgPath),
-        type: 'image/svg+xml',
-      },
-      {
         url: withArtworkRevision(appRelease.favicon32Path),
         sizes: '32x32',
         type: 'image/png',

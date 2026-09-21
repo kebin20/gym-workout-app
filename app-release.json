@@ -1,28 +1,28 @@
 {
-  "appVersion": "3.5.1",
-  "artworkRevision": "v8",
+  "appVersion": "3.6.0-beta.1",
+  "artworkRevision": "v9",
   "manifestPath": "/manifest.webmanifest",
-  "appleTouchIconPath": "/apple-touch-icon.png",
-  "brandMarkPath": "/liftline-icon-192-v7.png",
-  "notificationIconPath": "/liftline-icon-192-v7.png",
-  "faviconSvgPath": "/liftline-app-icon-v7.svg",
-  "favicon32Path": "/favicon-v8-32.png",
-  "favicon64Path": "/favicon-v8.png",
+  "sourceArtworkPath": "/liftline-icon-master-v9.png",
+  "appleTouchIconPath": "/liftline-apple-touch-icon-v9.png",
+  "brandMarkPath": "/liftline-icon-192-v9.png",
+  "notificationIconPath": "/liftline-icon-192-v9.png",
+  "favicon32Path": "/favicon-v9-32.png",
+  "favicon64Path": "/favicon-v9.png",
   "icons": [
     {
-      "src": "/liftline-icon-192-v7.png",
+      "src": "/liftline-icon-192-v9.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/liftline-icon-512-v7.png",
+      "src": "/liftline-icon-512-v9.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/liftline-icon-512-maskable-v7.png",
+      "src": "/liftline-icon-512-maskable-v9.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
