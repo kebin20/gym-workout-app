@@ -10,7 +10,7 @@ Made with ChatGPT Codex
 
 The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgpt.site](https://liftline-strength-plan.ktanzyl.chatgpt.site). Access is restricted to the site owner.
 
-Current production version: **v3.5.0**
+Current production version: **v3.5.1**
 
 ## Features
 
@@ -57,6 +57,8 @@ Minor fixes, visual refinements, and deployment maintenance are grouped into the
 - Standardized the in-app header mark, browser favicon, rest-timer notification icon, Apple touch icons, and Chrome/Android install icons around the same blue-to-violet identity.
 - Added separate rounded browser artwork and full-bleed mask-safe home-screen artwork so the mark keeps balanced spacing without nested frames, white gutters, or doubled corner treatments.
 - Versioned the install manifest and offline icon cache so newly added home-screen shortcuts receive the refreshed artwork instead of a stale saved icon.
+- Made the private install manifest credential-aware so iOS Chrome can retrieve the real Lift Path artwork instead of generating a fallback letter tile.
+- Centralized the app version, artwork revision, Apple touch icon, and install icons in one release registry. Every production build now verifies the icon files and dimensions and blocks publishing if the protected manifest loses its credential setting.
 
 ### v3.4 — Liftline visual redesign (20 September 2026)
 

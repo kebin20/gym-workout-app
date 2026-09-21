@@ -1,50 +1,36 @@
 import type { Metadata } from 'next';
+import {
+  appRelease,
+  appleTouchIconHref,
+  installManifestHref,
+  withArtworkRevision,
+} from './app-release';
 import './globals.css';
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://liftline-strength-plan.ktanzyl.chatgpt.site'),
   title: 'Liftline',
   applicationName: 'Liftline',
-  manifest: '/manifest-v7.webmanifest',
   description:
     'A strength tracker for logging sets, reps, RIR, notes, volume, and weekly progress across two training phases.',
   icons: {
     icon: [
-      { url: '/liftline-app-icon-v7.svg', type: 'image/svg+xml' },
-      { url: '/favicon-v8-32.png', sizes: '32x32', type: 'image/png' },
-      { url: '/favicon-v8.png', sizes: '64x64', type: 'image/png' },
-    ],
-    apple: [
       {
-        url: '/liftline-apple-touch-icon-120-v7.png',
-        sizes: '120x120',
+        url: withArtworkRevision(appRelease.faviconSvgPath),
+        type: 'image/svg+xml',
+      },
+      {
+        url: withArtworkRevision(appRelease.favicon32Path),
+        sizes: '32x32',
         type: 'image/png',
       },
       {
-        url: '/liftline-apple-touch-icon-152-v7.png',
-        sizes: '152x152',
-        type: 'image/png',
-      },
-      {
-        url: '/liftline-apple-touch-icon-167-v7.png',
-        sizes: '167x167',
-        type: 'image/png',
-      },
-      {
-        url: '/liftline-apple-touch-icon-v7.png',
-        sizes: '180x180',
+        url: withArtworkRevision(appRelease.favicon64Path),
+        sizes: '64x64',
         type: 'image/png',
       },
     ],
-    shortcut: '/favicon-v8-32.png',
-    other: [
-      {
-        rel: 'apple-touch-icon-precomposed',
-        url: '/liftline-apple-touch-icon-v7.png',
-        sizes: '180x180',
-        type: 'image/png',
-      },
-    ],
+    shortcut: withArtworkRevision(appRelease.favicon32Path),
   },
   appleWebApp: {
     capable: true,
@@ -84,6 +70,25 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <link
+          rel="manifest"
+          href={installManifestHref}
+          crossOrigin="use-credentials"
+        />
+        <link
+          rel="apple-touch-icon"
+          sizes="180x180"
+          type="image/png"
+          href={appleTouchIconHref}
+        />
+        <link
+          rel="apple-touch-icon-precomposed"
+          sizes="180x180"
+          type="image/png"
+          href={appleTouchIconHref}
+        />
+      </head>
       <body className="antialiased">{children}</body>
     </html>
   );

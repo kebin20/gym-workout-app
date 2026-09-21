@@ -1,17 +1,19 @@
 {
   "name": "sites-project",
-  "version": "3.5.0",
+  "version": "3.5.1",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
   },
   "scripts": {
     "dev": "vinext dev",
+    "prebuild": "npm run verify:brand",
     "build": "vinext build",
     "start": "wrangler dev --config dist/server/wrangler.json",
     "lint": "oxlint",
     "format": "oxfmt",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "verify:brand": "node scripts/verify-brand-assets.mjs"
   },
   "dependencies": {
     "react": "19.2.6",
