@@ -2057,12 +2057,17 @@ export function WorkoutApp() {
                 Liftline
               </span>
               <span
-                className={`flex items-center gap-1.5 font-sans text-xs ${isOnline ? 'text-success' : 'text-warning-foreground'}`}
+                className={`flex items-center gap-1.5 font-sans text-xs ${isOnline ? 'text-success' : 'text-destructive'}`}
+                aria-label={`${isOnline ? 'Online' : 'Offline'}. ${
+                  pendingWorkoutCount > 0
+                    ? `${pendingWorkoutCount} changes pending`
+                    : 'Changes saved'
+                }`}
               >
                 <span
-                  className={`size-1.5 rounded-full ${isOnline ? 'bg-success' : 'bg-warning'}`}
+                  className={`size-1.5 rounded-full ${isOnline ? 'bg-success' : 'bg-destructive'}`}
+                  aria-hidden="true"
                 />
-                {isOnline ? 'Online' : 'Offline'} ·{' '}
                 {pendingWorkoutCount > 0
                   ? `${pendingWorkoutCount} pending`
                   : 'Changes saved'}

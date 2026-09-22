@@ -10,7 +10,7 @@ Made with ChatGPT Codex
 
 The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgpt.site](https://liftline-strength-plan.ktanzyl.chatgpt.site). Access is restricted to the site owner.
 
-Current production version: **v3.6.1**
+Current production version: **v3.6.2**
 
 ## Features
 
@@ -20,6 +20,8 @@ Current production version: **v3.6.1**
 - Added matching in-app, notification, favicon, multi-size Apple touch, Chrome/Android, and maskable assets.
 - Preserved credential-aware manifest loading for the private Site, plus the root Apple icon fallback, so both Safari and Chrome on iOS can retrieve the updated artwork.
 - Increased the week picker's padding, control height, and spacing between its label, dropdown, and date for a calmer mobile layout.
+- Simplified the header status to a green online or red offline dot beside the save state, removing the redundant connectivity label.
+- Refreshed the repository banner with the current Liftline monogram, redesigned workout dashboard, and matching training illustration.
 
 - Two complete 12-week plans with Day A, B, and C workouts
 - Locked Phase 2 transition after all 36 Phase 1 sessions are complete
