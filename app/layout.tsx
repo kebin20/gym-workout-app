@@ -1,38 +1,41 @@
 import type { Metadata } from 'next';
+import {
+  appRelease,
+  appleTouchIcon180Href,
+  appleTouchIcons,
+  installManifestHref,
+  withArtworkRevision,
+} from './app-release';
 import './globals.css';
-
-const publicIconOrigin =
-  'https://raw.githubusercontent.com/kebin20/gym-workout-app/62c99c0864196e7f05409f47633a79132c185675/public';
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://liftline-strength-plan.ktanzyl.chatgpt.site'),
   title: 'Liftline',
   applicationName: 'Liftline',
-  manifest: '/manifest-v2.webmanifest',
   description:
-    'A mobile-friendly two-phase strength tracker for logging sets, reps, RIR, notes, volume, and weekly progress.',
+    'A strength tracker for logging sets, reps, RIR, notes, volume, and weekly progress across two training phases.',
   icons: {
     icon: [
-      { url: '/favicon-v2.svg', type: 'image/svg+xml' },
       {
-        url: `${publicIconOrigin}/liftline-icon-192-v2.png`,
-        sizes: '192x192',
+        url: withArtworkRevision(appRelease.favicon32Path),
+        sizes: '32x32',
+        type: 'image/png',
+      },
+      {
+        url: withArtworkRevision(appRelease.favicon64Path),
+        sizes: '64x64',
         type: 'image/png',
       },
     ],
-    apple: [
-      {
-        url: `${publicIconOrigin}/liftline-apple-touch-icon-v2.png`,
-        sizes: '180x180',
-        type: 'image/png',
-      },
-    ],
-    shortcut: '/favicon-v2.svg',
+    shortcut: withArtworkRevision(appRelease.favicon32Path),
   },
   appleWebApp: {
     capable: true,
     title: 'Liftline',
     statusBarStyle: 'default',
+  },
+  other: {
+    'mobile-web-app-capable': 'yes',
   },
   openGraph: {
     title: 'Liftline',
@@ -44,7 +47,7 @@ export const metadata: Metadata = {
         url: '/og.png',
         width: 1734,
         height: 909,
-        alt: 'Liftline 12-week strength plan',
+        alt: 'Liftline strength training dashboard',
       },
     ],
   },
@@ -64,6 +67,28 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <link
+          rel="manifest"
+          href={installManifestHref}
+          crossOrigin="use-credentials"
+        />
+        {appleTouchIcons.map((icon) => (
+          <link
+            key={icon.sizes}
+            rel="apple-touch-icon"
+            sizes={icon.sizes}
+            type="image/png"
+            href={icon.href}
+          />
+        ))}
+        <link
+          rel="apple-touch-icon-precomposed"
+          sizes="180x180"
+          type="image/png"
+          href={appleTouchIcon180Href}
+        />
+      </head>
       <body className="antialiased">{children}</body>
     </html>
   );

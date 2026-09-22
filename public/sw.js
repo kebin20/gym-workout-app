@@ -1,4 +1,4 @@
-const cacheVersion = 'liftline-2026-09-14-2';
+const cacheVersion = 'liftline-2026-09-21-10';
 const shellCache = `${cacheVersion}-shell`;
 const assetCache = `${cacheVersion}-assets`;
 
@@ -6,15 +6,51 @@ const coreShell = [
   '/',
   '/manifest.webmanifest',
   '/manifest-v2.webmanifest',
-  '/favicon.svg',
-  '/favicon-v2.svg',
-  '/app-icon.svg',
+  '/manifest-v3.webmanifest',
+  '/manifest-v4.webmanifest',
+  '/manifest-v5.webmanifest',
+  '/manifest-v6.webmanifest',
+  '/manifest-v7.webmanifest',
+  '/liftline-app-icon-v7.svg',
+  '/favicon-v8-32.png',
+  '/favicon-v8.png',
   '/apple-touch-icon.png',
+  '/apple-touch-icon-180x180.png',
   '/icon-192.png',
   '/icon-512.png',
   '/liftline-apple-touch-icon-v2.png',
   '/liftline-icon-192-v2.png',
   '/liftline-icon-512-v2.png',
+  '/liftline-apple-touch-icon-v3.png',
+  '/liftline-icon-192-v3.png',
+  '/liftline-icon-512-v3.png',
+  '/liftline-apple-touch-icon-v4.png',
+  '/liftline-icon-192-v4.png',
+  '/liftline-icon-512-v4.png',
+  '/liftline-apple-touch-icon-120-v6.png',
+  '/liftline-apple-touch-icon-152-v6.png',
+  '/liftline-apple-touch-icon-167-v6.png',
+  '/liftline-apple-touch-icon-v6.png',
+  '/liftline-icon-192-v6.png',
+  '/liftline-icon-512-v6.png',
+  '/liftline-icon-512-maskable-v6.png',
+  '/liftline-apple-touch-icon-120-v7.png',
+  '/liftline-apple-touch-icon-152-v7.png',
+  '/liftline-apple-touch-icon-167-v7.png',
+  '/liftline-apple-touch-icon-v7.png',
+  '/liftline-icon-192-v7.png',
+  '/liftline-icon-512-v7.png',
+  '/liftline-icon-512-maskable-v7.png',
+  '/liftline-icon-master-v9.png',
+  '/favicon-v9-32.png',
+  '/favicon-v9.png',
+  '/liftline-apple-touch-icon-120-v9.png',
+  '/liftline-apple-touch-icon-152-v9.png',
+  '/liftline-apple-touch-icon-167-v9.png',
+  '/liftline-apple-touch-icon-v9.png',
+  '/liftline-icon-192-v9.png',
+  '/liftline-icon-512-v9.png',
+  '/liftline-icon-512-maskable-v9.png',
 ];
 
 function isCacheable(response) {
@@ -116,6 +152,8 @@ self.addEventListener('fetch', (event) => {
       (async () => {
         const cache = await caches.open(shellCache);
         const cached = await cache.match('/');
+        const preferFresh =
+          url.searchParams.has('v') || url.searchParams.get('source') === 'pwa';
         const refresh = (async () => {
           try {
             const response =
@@ -134,6 +172,13 @@ self.addEventListener('fetch', (event) => {
           }
         })();
 
+        if (preferFresh) {
+          const response = await refresh;
+          if (response) return response;
+          if (cached) return cached;
+          return Response.error();
+        }
+
         if (cached) {
           event.waitUntil(refresh);
           return cached;
@@ -151,7 +196,7 @@ self.addEventListener('fetch', (event) => {
 
   const cacheableAsset =
     url.pathname.startsWith('/_next/static/') ||
-    url.pathname === '/manifest.webmanifest' ||
+    url.pathname.endsWith('.webmanifest') ||
     url.pathname.endsWith('.png') ||
     url.pathname.endsWith('.svg') ||
     url.pathname.endsWith('.woff2');

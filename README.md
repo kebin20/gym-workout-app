@@ -10,9 +10,18 @@ Made with ChatGPT Codex
 
 The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgpt.site](https://liftline-strength-plan.ktanzyl.chatgpt.site). Access is restricted to the site owner.
 
-Current app version: **v3.3.0**
+Current production version: **v3.6.2**
 
 ## Features
+
+### v3.6 — Liftline monogram icon
+
+- Recreated the selected minimal monogram as an edge-to-edge cobalt-to-violet app icon with a softly folded white and lavender L.
+- Added matching in-app, notification, favicon, multi-size Apple touch, Chrome/Android, and maskable assets.
+- Preserved credential-aware manifest loading for the private Site, plus the root Apple icon fallback, so both Safari and Chrome on iOS can retrieve the updated artwork.
+- Increased the week picker's padding, control height, and spacing between its label, dropdown, and date for a calmer mobile layout.
+- Simplified the header status to a green online or red offline dot beside the save state, removing the redundant connectivity label.
+- Refreshed the repository banner with the current Liftline monogram, redesigned workout dashboard, and matching training illustration.
 
 - Two complete 12-week plans with Day A, B, and C workouts
 - Locked Phase 2 transition after all 36 Phase 1 sessions are complete
@@ -35,7 +44,7 @@ Current app version: **v3.3.0**
 - Visible device-save and Google Sheet sync status with manual retry controls
 - Review-first import from and automatic mirroring to the original Google Sheet layout
 - Fast database-first saves with Google Sheet mirroring completed in the background
-- Previous-session recall beside each exercise, including the logged date, weights, reps, and RIR
+- Previous-session recall beside each exercise, including the logged date, weights, reps, RIR, and saved note
 - Optional one-tap copying of previous-session weights and reps
 - Fresh weight and rep inputs for each new week, without copying the previous workout into the new record
 - Session-only exercise substitution, reordering, skipping, and custom exercise additions
@@ -50,6 +59,30 @@ Current app version: **v3.3.0**
 ## Version history
 
 Minor fixes, visual refinements, and deployment maintenance are grouped into the nearest feature release so this history focuses on meaningful product changes.
+
+### v3.5 — Lift Path identity (21 September 2026)
+
+- Replaced the previous glossy icon with the selected Lift Path concept: one clean, rising L-shaped silhouette designed to remain recognizable at favicon size.
+- Standardized the in-app header mark, browser favicon, rest-timer notification icon, Apple touch icons, and Chrome/Android install icons around the same blue-to-violet identity.
+- Added separate rounded browser artwork and full-bleed mask-safe home-screen artwork so the mark keeps balanced spacing without nested frames, white gutters, or doubled corner treatments.
+- Versioned the install manifest and offline icon cache so newly added home-screen shortcuts receive the refreshed artwork instead of a stale saved icon.
+- Made the private install manifest credential-aware so iOS Chrome can retrieve the real Lift Path artwork instead of generating a fallback letter tile.
+- Centralized the app version, artwork revision, Apple touch icon, and install icons in one release registry. Every production build now verifies the icon files and dimensions and blocks publishing if the protected manifest loses its credential setting.
+
+### v3.4 — Liftline visual redesign (20 September 2026)
+
+- Promoted the tested beta redesign to the main Liftline app while retaining all existing workout records and integrations.
+- Reworked the visual system around deep navy typography, airy white surfaces, blue-to-violet gradients, larger corner radii, and soft layered shadows inspired by the supplied mobile fitness reference.
+- Added a compact three-ring training overview for weekly sessions, logged volume, and overall phase completion.
+- Added lightweight, minimal exercise illustrations to the Today and Plan views, using transparent artwork and lazy loading to retain the beta's responsive feel.
+- Increased the week selector's arrow spacing for clearer desktop and mobile interaction.
+- Added saved notes to the previous-session card so exercise-specific context from the last completed week is visible while training.
+- Refreshed the in-app brand mark, browser favicon, iOS home-screen icon, Chrome/Android install icons, maskable icon, and notification icon with the new glossy blue-violet Liftline design.
+- Cropped the supplied icon artwork to its coloured boundary so it fills each app-icon container without the original white outer margin.
+- Rebuilt the icon as fully opaque, edge-to-edge artwork with dedicated Apple touch sizes and a root `apple-touch-icon.png` fallback for reliable iOS and Chrome home-screen installation.
+- Restored the original glossy Liftline mark in the app header and applied the same artwork to dedicated transparent-corner favicon assets.
+- Rebuilt the Chrome/PWA and Apple home-screen icon chain with versioned, full-bleed 192 px, 512 px, maskable, and device-specific touch assets to prevent stale or missing install icons.
+- Refined the brand header, week picker, workout surfaces, desktop side rail, and mobile navigation while retaining all existing training, history, timer, nutrition, Holiday mode, and Google Sheet tools.
 
 ### v3.3 — Holiday training mode (14 September 2026)
 

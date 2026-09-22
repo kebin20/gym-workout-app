@@ -1,12 +1,12 @@
 {
   "name": "Liftline",
   "short_name": "Liftline",
+  "description": "A strength tracker for logging sets, reps, RIR, notes, volume, and weekly progress across two training phases.",
   "id": "/",
-  "description": "A private strength workout tracker for two progressive training phases.",
   "start_url": "/?source=pwa&icon=v5",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#F7F9FF",
+  "background_color": "#f6f9ff",
   "theme_color": "#2554E8",
   "icons": [
     {

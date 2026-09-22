@@ -1,0 +1,48 @@
+{
+  "appVersion": "3.6.2",
+  "artworkRevision": "v9",
+  "manifestPath": "/manifest.webmanifest",
+  "sourceArtworkPath": "/liftline-icon-master-v9.png",
+  "appleTouchIcons": [
+    {
+      "src": "/liftline-apple-touch-icon-120-v9.png",
+      "sizes": "120x120"
+    },
+    {
+      "src": "/liftline-apple-touch-icon-152-v9.png",
+      "sizes": "152x152"
+    },
+    {
+      "src": "/liftline-apple-touch-icon-167-v9.png",
+      "sizes": "167x167"
+    },
+    {
+      "src": "/liftline-apple-touch-icon-v9.png",
+      "sizes": "180x180"
+    }
+  ],
+  "brandMarkPath": "/liftline-icon-192-v9.png",
+  "notificationIconPath": "/liftline-icon-192-v9.png",
+  "favicon32Path": "/favicon-v9-32.png",
+  "favicon64Path": "/favicon-v9.png",
+  "icons": [
+    {
+      "src": "/liftline-icon-192-v9.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/liftline-icon-512-v9.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/liftline-icon-512-maskable-v9.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
