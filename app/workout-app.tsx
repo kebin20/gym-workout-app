@@ -5,12 +5,12 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type ChangeEvent,
   type CSSProperties,
-  type ReactNode,
 } from 'react';
 import {
   AlertCircle,
@@ -82,7 +82,6 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   days,
   displayWeekNumber,
-  phase2Emphasis,
   routineForWeek,
   targetLabel,
   workingSetsForWeek,
@@ -348,6 +347,9 @@ const ExerciseDemoDialog = lazy(() => import('./exercise-demo-dialog'));
 const TrainingToolsDialog = lazy(() => import('./training-tools-dialog'));
 const AdvancedInsights = lazy(() => import('./advanced-insights'));
 const HolidayWorkout = lazy(() => import('./holiday-workout'));
+const NutritionView = lazy(() => import('./nutrition-view'));
+const TrainingGuideView = lazy(() => import('./training-guide-view'));
+const PlanView = lazy(() => import('./plan-view'));
 const Checkbox = lazy(() =>
   import('@/components/ui/checkbox').then((module) => ({
     default: module.Checkbox,
@@ -766,56 +768,6 @@ function DashboardMetric({
   );
 }
 
-function NutritionList({
-  items,
-  ordered = false,
-}: {
-  items: string[];
-  ordered?: boolean;
-}) {
-  const List = ordered ? 'ol' : 'ul';
-  return (
-    <List
-      className={`space-y-2 pl-5 font-sans text-sm leading-relaxed text-muted-foreground ${ordered ? 'list-decimal' : 'list-disc'} marker:font-semibold marker:text-primary`}
-    >
-      {items.map((item) => (
-        <li key={item} className="pl-1">
-          {item}
-        </li>
-      ))}
-    </List>
-  );
-}
-
-function NutritionGuideCard({
-  number,
-  title,
-  children,
-  defaultOpen = false,
-}: {
-  number: string;
-  title: string;
-  children: ReactNode;
-  defaultOpen?: boolean;
-}) {
-  return (
-    <Card id={`nutrition-${number}`} className="scroll-mt-24 overflow-hidden">
-      <details open={defaultOpen} className="group">
-        <summary className="flex min-h-16 cursor-pointer list-none items-center gap-3 px-4 py-3 font-sans sm:px-5 [&::-webkit-details-marker]:hidden">
-          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-success-soft text-sm font-bold text-success">
-            {number}
-          </span>
-          <span className="flex-1 font-semibold">{title}</span>
-          <ChevronRight className="size-5 text-muted-foreground transition-transform group-open:rotate-90" />
-        </summary>
-        <CardContent className="space-y-4 border-t border-border/70 pt-4 font-sans">
-          {children}
-        </CardContent>
-      </details>
-    </Card>
-  );
-}
-
 function HistoryWeekDisclosure({
   entry,
   displayName,
@@ -883,6 +835,44 @@ function HistoryWeekDisclosure({
         </div>
       )}
     </div>
+  );
+}
+
+function EarlierHistoryDisclosure({
+  entries,
+  displayName,
+}: {
+  entries: WorkoutEntry[];
+  displayName: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <details
+      className="group overflow-hidden rounded-xl border border-border/80 bg-muted/35"
+      onToggle={(event) => setExpanded(event.currentTarget.open)}
+    >
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 font-sans text-xs font-semibold [&::-webkit-details-marker]:hidden">
+        <History className="size-4 text-muted-foreground" />
+        Earlier weeks
+        <Badge variant="outline" className="ml-auto bg-card font-sans">
+          {entries.length}
+        </Badge>
+        <ChevronRight className="size-4 text-muted-foreground transition-transform group-open:rotate-90" />
+      </summary>
+      {expanded && (
+        <div className="space-y-2 border-t border-border/70 p-2">
+          {entries.map((entry) => (
+            <HistoryWeekDisclosure
+              key={`${entry.id ?? entry.week}-${entry.exerciseOrder}`}
+              entry={entry}
+              displayName={displayName}
+              defaultExpanded={false}
+            />
+          ))}
+        </div>
+      )}
+    </details>
   );
 }
 
@@ -1079,34 +1069,40 @@ export function WorkoutApp() {
     };
   }, [programmeMenuOpen]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     let cancelled = false;
     const cachedSnapshot = readCachedWorkoutEntries();
     const cachedEntries = cachedSnapshot?.entries ?? null;
     const cachedSessionExercises = readCachedSessionExercises();
-    queueMicrotask(() => {
-      if (cancelled) return;
-      if (cachedEntries) setEntries(cachedEntries);
-      if (cachedSessionExercises.length > 0)
-        setSessionExercises(cachedSessionExercises);
-      setIsOnline(navigator.onLine);
-      setPendingWorkoutCount(readPendingWorkouts().length);
-      setNotificationAlertsAvailable('Notification' in window);
-      setRestAlertsEnabled(
-        'Notification' in window && Notification.permission === 'granted',
+    if (cachedEntries) {
+      setEntries(cachedEntries);
+      setActiveDay(
+        firstIncompleteDayForWeek(
+          cachedEntries,
+          cachedSessionExercises,
+          initialWeek,
+        ),
       );
-      refreshWorkoutData(cachedEntries ?? undefined, cachedSnapshot?.syncedAt)
-        .then(() => {
-          if (!cancelled) setError('');
-        })
-        .catch((loadError: Error) => {
-          if (!cancelled && !cachedEntries) setError(loadError.message);
-        })
-        .finally(() => {
-          if (!cancelled) setLoading(false);
-        });
-      if (navigator.onLine) void flushPendingWorkouts();
-    });
+    }
+    if (cachedSessionExercises.length > 0)
+      setSessionExercises(cachedSessionExercises);
+    setIsOnline(navigator.onLine);
+    setPendingWorkoutCount(readPendingWorkouts().length);
+    setNotificationAlertsAvailable('Notification' in window);
+    setRestAlertsEnabled(
+      'Notification' in window && Notification.permission === 'granted',
+    );
+    refreshWorkoutData(cachedEntries ?? undefined, cachedSnapshot?.syncedAt)
+      .then(() => {
+        if (!cancelled) setError('');
+      })
+      .catch((loadError: Error) => {
+        if (!cancelled && !cachedEntries) setError(loadError.message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    if (navigator.onLine) void flushPendingWorkouts();
 
     const handleOnline = () => {
       setIsOnline(true);
@@ -1120,7 +1116,7 @@ export function WorkoutApp() {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [flushPendingWorkouts, refreshWorkoutData]);
+  }, [flushPendingWorkouts, initialWeek, refreshWorkoutData]);
 
   useEffect(() => {
     if (
@@ -1246,7 +1242,7 @@ export function WorkoutApp() {
       }
     };
     tick();
-    const timer = window.setInterval(tick, 250);
+    const timer = window.setInterval(tick, 1000);
     return () => window.clearInterval(timer);
   }, [exercise.name, restTimerRunning]);
 
@@ -1266,7 +1262,7 @@ export function WorkoutApp() {
   );
   const phaseTwoUnlocked = phaseOneSessions === 36;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (loading || startupWeekApplied.current) return;
     startupWeekApplied.current = true;
     const scheduledWeek = scheduledWeekForToday(schedule, phaseTwoUnlocked);
@@ -1275,12 +1271,9 @@ export function WorkoutApp() {
       sessionExercises,
       scheduledWeek,
     );
-    const restore = window.setTimeout(() => {
-      setActiveWeek(scheduledWeek);
-      setActiveDay(scheduledDay);
-      setActiveIndex(0);
-    }, 0);
-    return () => window.clearTimeout(restore);
+    setActiveWeek(scheduledWeek);
+    setActiveDay(scheduledDay);
+    setActiveIndex(0);
   }, [entries, loading, phaseTwoUnlocked, schedule, sessionExercises]);
 
   const currentSummary = weeklySummaries[activeDisplayWeek - 1];
@@ -2317,11 +2310,12 @@ export function WorkoutApp() {
                 </div>
                 <div className="beta-training-spotlight-art" aria-hidden="true">
                   <img
-                    src="/illustrations/goblet-squat.png"
+                    src="/illustrations/goblet-squat.webp"
                     alt=""
                     width={512}
                     height={768}
-                    loading="lazy"
+                    loading="eager"
+                    fetchPriority="high"
                     decoding="async"
                   />
                 </div>
@@ -3013,122 +3007,27 @@ export function WorkoutApp() {
         )}
 
         {view === 'plan' && (
-          <section>
-            <div className="beta-plan-intro mb-6">
-              <div className="beta-plan-intro-copy">
-                <p className="font-sans text-sm font-semibold text-primary">
-                  PHASE {activePhase} ROUTINE
-                </p>
-                <h1 className="font-sans text-2xl font-bold tracking-tight sm:text-3xl">
-                  {activePhase === 1
-                    ? 'Three balanced full-body days.'
-                    : 'Specialized full-body progression.'}
-                </h1>
-                <p className="mt-1 max-w-xl font-sans text-sm text-muted-foreground sm:text-base">
-                  Tap any day to start logging it for week {activeDisplayWeek}.
-                </p>
-              </div>
-              <div className="beta-plan-art" aria-hidden="true">
-                <img
-                  src="/illustrations/reverse-lunge.png"
-                  alt=""
-                  width={512}
-                  height={768}
-                  loading="lazy"
-                  decoding="async"
-                />
-              </div>
-            </div>
-            <div className="grid gap-5 lg:grid-cols-3">
-              {days.map((day) => {
-                const sessionPlan = planForSession(
-                  sessionExercises,
-                  activeWeek,
-                  day,
-                );
-                return (
-                  <Card
-                    key={day}
-                    className={
-                      day === 'A'
-                        ? 'ring-blue-200'
-                        : day === 'B'
-                          ? 'ring-emerald-200'
-                          : 'ring-violet-200'
-                    }
-                  >
-                    <CardHeader>
-                      <Badge
-                        className={`mb-2 font-sans ${day === 'A' ? 'bg-blue-100 text-blue-700' : day === 'B' ? 'bg-emerald-100 text-emerald-700' : 'bg-violet-100 text-violet-700'}`}
-                      >
-                        Day {day}
-                      </Badge>
-                      <CardTitle className="font-sans">
-                        {sessionPlan.filter((item) => !item.skipped).length}{' '}
-                        active exercises
-                      </CardTitle>
-                      <CardDescription className="font-sans">
-                        {activePhase === 2 && (
-                          <span className="mb-1 block font-semibold text-foreground">
-                            {phase2Emphasis[day]}
-                          </span>
-                        )}
-                        Week {activeDisplayWeek} · changes apply only to this
-                        session
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-2">
-                      {sessionPlan.map((item, index) => (
-                        <div
-                          key={item.order}
-                          className={`flex gap-3 rounded-xl border border-border/75 p-3 ${item.skipped ? 'opacity-55' : ''}`}
-                        >
-                          <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-secondary font-sans text-xs font-bold">
-                            {index + 1}
-                          </span>
-                          <div>
-                            <p
-                              className={`font-sans text-sm font-semibold leading-snug ${item.skipped ? 'line-through' : ''}`}
-                            >
-                              {item.name}
-                            </p>
-                            <p className="mt-1 font-sans text-xs text-muted-foreground">
-                              {item.skipped
-                                ? 'Skipped this session'
-                                : `${targetLabel(item)} · ${item.rest}`}
-                            </p>
-                            <p className="mt-1 font-sans text-[11px] text-muted-foreground">
-                              {item.custom
-                                ? 'Custom exercise'
-                                : `Alt: ${item.alternative}`}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
-                      <Button
-                        className="mt-2 h-11 w-full font-sans"
-                        onClick={() => chooseDay(day)}
-                      >
-                        Start Day {day}
-                        <ChevronRight />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        className="h-10 w-full font-sans"
-                        onClick={() => {
-                          setActiveDay(day);
-                          setActiveIndex(0);
-                          openProgramEditor(day);
-                        }}
-                      >
-                        <Settings2 /> Edit Week {activeDisplayWeek}
-                      </Button>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          </section>
+          <Suspense
+            fallback={
+              <section
+                aria-label="Loading training plan"
+                className="min-h-[32rem] animate-pulse rounded-3xl bg-card/70"
+              />
+            }
+          >
+            <PlanView
+              activePhase={activePhase}
+              activeDisplayWeek={activeDisplayWeek}
+              activeWeek={activeWeek}
+              sessionExercises={sessionExercises}
+              onChooseDay={chooseDay}
+              onEditDay={(day) => {
+                setActiveDay(day);
+                setActiveIndex(0);
+                openProgramEditor(day);
+              }}
+            />
+          </Suspense>
         )}
 
         {view === 'progress' && (
@@ -3551,7 +3450,7 @@ export function WorkoutApp() {
                                 return (
                                   <article
                                     key={`${day}-${item.order}`}
-                                    className="flex min-h-56 flex-col rounded-xl border border-border/70 bg-card p-3 sm:p-4"
+                                    className="workout-history-card flex min-h-56 flex-col rounded-xl border border-border/70 bg-card p-3 sm:p-4"
                                   >
                                     <div className="flex items-start gap-3">
                                       <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-secondary font-sans text-xs font-bold">
@@ -3580,31 +3479,10 @@ export function WorkoutApp() {
                                             />
                                           ))}
                                         {exerciseEntries.length > 3 && (
-                                          <details className="group overflow-hidden rounded-xl border border-border/80 bg-muted/35">
-                                            <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 font-sans text-xs font-semibold [&::-webkit-details-marker]:hidden">
-                                              <History className="size-4 text-muted-foreground" />
-                                              Earlier weeks
-                                              <Badge
-                                                variant="outline"
-                                                className="ml-auto bg-card font-sans"
-                                              >
-                                                {exerciseEntries.length - 3}
-                                              </Badge>
-                                              <ChevronRight className="size-4 text-muted-foreground transition-transform group-open:rotate-90" />
-                                            </summary>
-                                            <div className="space-y-2 border-t border-border/70 p-2">
-                                              {exerciseEntries
-                                                .slice(3)
-                                                .map((entry) => (
-                                                  <HistoryWeekDisclosure
-                                                    key={`${entry.id ?? entry.week}-${entry.exerciseOrder}`}
-                                                    entry={entry}
-                                                    displayName={displayName}
-                                                    defaultExpanded={false}
-                                                  />
-                                                ))}
-                                            </div>
-                                          </details>
+                                          <EarlierHistoryDisclosure
+                                            entries={exerciseEntries.slice(3)}
+                                            displayName={displayName}
+                                          />
                                         )}
                                       </div>
                                     ) : (
@@ -3638,550 +3516,29 @@ export function WorkoutApp() {
         )}
 
         {view === 'nutrition' && (
-          <section className="space-y-5">
-            <div className="overflow-hidden rounded-3xl bg-[linear-gradient(145deg,#0f8f63_0%,#17a673_50%,#3171f5_140%)] p-5 text-white shadow-lg shadow-success/10 sm:p-7">
-              <div className="flex items-start gap-4">
-                <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-white/15 ring-1 ring-white/25">
-                  <Apple className="size-6" />
-                </span>
-                <div>
-                  <p className="font-sans text-sm font-semibold text-white/80">
-                    NUTRITION
-                  </p>
-                  <h1 className="mt-1 font-sans text-3xl font-bold tracking-tight">
-                    Eat to get leaner and stronger.
-                  </h1>
-                  <p className="mt-2 max-w-2xl font-sans text-sm leading-relaxed text-white/85 sm:text-base">
-                    A practical two-meal guide for gradual fat loss, muscle
-                    retention or gain, and steady strength progress.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="font-sans">Daily targets</CardTitle>
-                <CardDescription className="font-sans">
-                  Treat these as working ranges. Weekly consistency matters more
-                  than one meal or one day.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                  {[
-                    ['1,900–2,200', 'kcal / day'],
-                    ['110–125 g', 'protein / day'],
-                    ['25–30 g', 'fibre / day'],
-                    ['2–2.5 L', 'water / day'],
-                  ].map(([value, label]) => (
-                    <div
-                      key={label}
-                      className="rounded-2xl border border-success/15 bg-success-soft p-4"
-                    >
-                      <p className="font-sans text-xl font-bold text-success sm:text-2xl">
-                        {value}
-                      </p>
-                      <p className="mt-1 font-sans text-xs font-medium text-success/80">
-                        {label}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-                <p className="mt-4 font-sans text-sm leading-relaxed text-muted-foreground">
-                  Estimated maintenance is roughly 2,300–2,500 kcal. Aim for
-                  about 50–70 g fat, then use the remaining calories for
-                  carbohydrates—often around 180–250 g, with more flexibility on
-                  training and hiking days. Drink more on hot, sweaty or
-                  especially active days.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="border-primary/15 bg-accent/35">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 font-sans">
-                  <CheckCircle2 className="size-5 text-primary" /> Quick rules
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {[
-                    'Alternate toast and granola; do not normally stack both.',
-                    'Average 1,900–2,200 kcal instead of chasing the lowest number.',
-                    'Aim for 110–125 g protein every day, including rest days.',
-                    'Make the second main meal protein-centred.',
-                    'Use shakes to fill gaps, not replace most whole foods.',
-                    'Keep vegetables, fruit and fibre in the diet.',
-                    'Restaurant meals, kebabs, burgers and small desserts can fit.',
-                    'Do not punish higher-calorie days with fasting or excessive cardio.',
-                    'Judge progress over 4–8 weeks, not day to day.',
-                  ].map((rule) => (
-                    <div
-                      key={rule}
-                      className="flex gap-2 rounded-xl bg-card/80 p-3 font-sans text-sm leading-relaxed"
-                    >
-                      <Check className="mt-0.5 size-4 shrink-0 text-success" />
-                      <span>{rule}</span>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            <div className="grid gap-4 lg:grid-cols-2">
-              <NutritionGuideCard
-                number="2"
-                title="Breakfast template"
-                defaultOpen
-              >
-                <p className="text-sm leading-relaxed text-muted-foreground">
-                  Keep this normal base: 130 ml soy milk, one banana, 200 ml
-                  Kagome vegetable/fruit juice, 80 g full-milk yoghurt with 5–8
-                  g honey, and a 250 ml homemade whole-milk latte.
-                </p>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  {[
-                    [
-                      'Toast',
-                      '2 slices rye or wheatmeal',
-                      '790–800 kcal · 29–30 g protein',
-                    ],
-                    [
-                      'Granola',
-                      "50 g Kellogg's granola",
-                      '690–700 kcal · 21–22 g protein',
-                    ],
-                    [
-                      'Both',
-                      'Toast + granola',
-                      '~1,000 kcal · 33–34 g protein',
-                    ],
-                  ].map(([name, choice, total]) => (
-                    <div
-                      key={name}
-                      className="rounded-xl border border-border/70 p-3"
-                    >
-                      <p className="font-semibold">{name}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {choice}
-                      </p>
-                      <p className="mt-2 text-xs font-medium text-primary">
-                        {total}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-                <p className="rounded-xl bg-warning-soft p-3 text-sm leading-relaxed text-warning-foreground">
-                  The two toast slices contribute about 11.6 g protein and 8.2 g
-                  fibre. Both toast and granola are fine occasionally, but leave
-                  less room later. Count margarine, marmalade and other spreads
-                  separately.
-                </p>
-              </NutritionGuideCard>
-
-              <NutritionGuideCard
-                number="3"
-                title="Two-meal structure"
-                defaultOpen
-              >
-                <p className="text-sm leading-relaxed text-muted-foreground">
-                  Two main meals work well if they suit your hunger pattern. You
-                  do not need a mandatory dinner when the two meals and a
-                  protein top-up meet your needs.
-                </p>
-                <NutritionList
-                  items={[
-                    'Breakfast: about 700–800 kcal and 20–30 g protein.',
-                    'Main meal: about 700–900 kcal and 40–60 g protein.',
-                    'Protein top-up: shake, yoghurt, eggs, salad chicken or similar as needed.',
-                    'Optional snack: fruit, yoghurt, oats or a small dessert if calories and hunger allow.',
-                  ]}
-                />
-              </NutritionGuideCard>
-
-              <NutritionGuideCard number="4" title="Protein guide">
-                <p className="text-sm leading-relaxed text-muted-foreground">
-                  Keep protein at 110–125 g on training and rest days because
-                  repair and adaptation continue between workouts.
-                </p>
-                <NutritionList
-                  items={[
-                    'Chicken breast or salad chicken; eggs; fish and sashimi; lean beef or pork.',
-                    'Tofu, natto, soy milk and yoghurt.',
-                    'Protein powder or SAVAS drinks when food alone leaves a gap.',
-                    'A shake with 20–30 g protein is usually enough; one daily suits most days.',
-                    'A second shake is fine on protein-light days, but keep whole foods as the base.',
-                    'Timing is flexible. Total daily protein matters more than a narrow post-training window.',
-                  ]}
-                />
-              </NutritionGuideCard>
-
-              <NutritionGuideCard number="5" title="Main meals & restaurants">
-                <NutritionList
-                  ordered
-                  items={[
-                    'Start with a clear protein source.',
-                    'Add vegetables or salad.',
-                    'Choose a sensible carbohydrate portion.',
-                    'Fit sauces and fried extras to hunger and the day’s calorie budget.',
-                  ]}
-                />
-                <p className="text-sm font-semibold">Easy choices</p>
-                <NutritionList
-                  items={[
-                    'Chicken or kebab rice bowl with a generous meat portion and moderate sauce.',
-                    'Chicken breast with rice and spinach or vegetables.',
-                    'Grilled fish with rice and vegetables, or sashimi with rice and tofu.',
-                    'Saizeriya chicken steak with spinach, plus bread or rice according to hunger.',
-                    'Salad chicken, bagged salad and eggs for a very light option.',
-                  ]}
-                />
-                <p className="rounded-xl bg-accent/50 p-3 text-sm leading-relaxed text-muted-foreground">
-                  A kebab rice bowl is roughly 650–850 kcal and 35–45 g protein,
-                  depending on meat, rice and sauce. A 900–1,100 kcal restaurant
-                  meal is not “bad”; keep the rest of the day lighter instead of
-                  forcing another full meal.
-                </p>
-              </NutritionGuideCard>
-
-              <NutritionGuideCard number="6" title="Snacks, desserts & sauces">
-                <p className="text-sm leading-relaxed text-muted-foreground">
-                  Snacks and dessert do not need to be banned. Flexible options
-                  include fruit, yoghurt, oats with yoghurt and a little honey,
-                  a protein bar or drink, a small ice cream, or boiled eggs.
-                </p>
-                <p className="text-sm leading-relaxed text-muted-foreground">
-                  Treats fit when portions are controlled. Prefer a flexible or
-                  maintenance-calorie day to an unrestricted “cheat day.” Sauces
-                  do not directly cause fat gain, but can be calorie-dense—use
-                  enough for flavour without needing to remove them completely.
-                </p>
-              </NutritionGuideCard>
-
-              <NutritionGuideCard number="7" title="Training vs rest days">
-                <NutritionList
-                  items={[
-                    'Keep protein roughly the same every day.',
-                    'Calories can be slightly higher on hard training, hiking or very active days when hunger rises.',
-                    'Carbohydrates are useful around training and do not need to be avoided.',
-                    'Do not slash rest-day calories; recovery still needs energy and protein.',
-                  ]}
-                />
-              </NutritionGuideCard>
-
-              <NutritionGuideCard number="8" title="Progress targets">
-                <p className="text-sm leading-relaxed text-muted-foreground">
-                  Aim for slow fat loss while strength stays stable or improves.
-                  Use a seven-day weight average and compare four-week trends,
-                  rather than judging one weigh-in.
-                </p>
-                <NutritionList
-                  items={[
-                    'Average body weight falls slowly—about 0.2–0.4 kg per week at most.',
-                    'Waist measurement trends down while gym reps and loads trend up.',
-                    'InBody or body-fat estimates trend down over months, not days.',
-                    'Energy, sleep and recovery remain good.',
-                  ]}
-                />
-                <div className="rounded-xl bg-warning-soft p-3 text-sm leading-relaxed text-warning-foreground">
-                  If weight and waist have not moved after 4–6 consistent weeks,
-                  reduce intake by roughly 100–200 kcal or add a little easy
-                  activity—avoid a large cut. If strength, recovery or sleep
-                  worsens, or hunger becomes extreme, increase calories slightly
-                  and reassess.
-                </div>
-              </NutritionGuideCard>
-
-              <NutritionGuideCard number="9" title="Example: toast day">
-                <NutritionList
-                  items={[
-                    'Fixed breakfast base + 2 slices bread: 790–800 kcal and 29–30 g protein.',
-                    'Chicken or kebab rice bowl: 700–850 kcal and 35–45 g protein.',
-                    'Protein shake with soy milk: 25–30 g protein.',
-                    'Small yoghurt, eggs or fruit if needed.',
-                    'Typical total: 1,900–2,200 kcal and about 105–125+ g protein, depending on portions.',
-                  ]}
-                />
-              </NutritionGuideCard>
-
-              <NutritionGuideCard number="10" title="Example: granola day">
-                <NutritionList
-                  items={[
-                    'Fixed breakfast base + 50 g granola: 690–700 kcal and 21–22 g protein.',
-                    'Protein-focused restaurant or home meal: 750–950 kcal and 40–60 g protein.',
-                    'Protein shake: 20–30 g protein.',
-                    'Yoghurt, eggs or salad chicken if protein is still short.',
-                    'Typical total: 1,850–2,150 kcal, depending on the main meal and snacks.',
-                  ]}
-                />
-              </NutritionGuideCard>
-            </div>
-
-            <Card className="border-success/20 bg-success-soft">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 font-sans text-success">
-                  <Sparkles className="size-5" /> The core strategy
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 font-sans text-sm leading-relaxed text-success/90">
-                <p>
-                  Three resistance-training days each week, normal walking or
-                  cardio, a moderate calorie deficit and consistent protein. The
-                  goal is to become leaner and stronger—not simply make the
-                  scale fall as quickly as possible.
-                </p>
-                <p className="border-t border-success/15 pt-3 text-xs">
-                  Calorie and protein figures are practical estimates based on
-                  the product labels and portions supplied. Restaurant and
-                  homemade portions vary, so use ranges rather than treating
-                  them as laboratory measurements.
-                </p>
-              </CardContent>
-            </Card>
-
-            <p className="px-1 text-center font-sans text-xs text-muted-foreground">
-              Adapted from Kevin’s Fat Loss + Muscle Gain Dietary Guide.
-            </p>
-          </section>
+          <Suspense
+            fallback={
+              <section
+                aria-label="Loading nutrition guide"
+                className="min-h-[34rem] animate-pulse rounded-3xl bg-card/70"
+              />
+            }
+          >
+            <NutritionView />
+          </Suspense>
         )}
 
-        {view === 'guide' && activePhase === 2 && (
-          <section>
-            <div className="mb-6">
-              <p className="font-sans text-sm font-semibold text-primary">
-                PHASE 2 GUIDE
-              </p>
-              <h1 className="font-sans text-3xl font-bold tracking-tight">
-                Specialize without losing balance.
-              </h1>
-              <p className="mt-1 max-w-3xl font-sans text-muted-foreground">
-                Keep the proven three-day habit, add targeted volume, and build
-                free-weight skill gradually while every major muscle still gets
-                trained at least twice each week.
-              </p>
-            </div>
-            <div className="grid gap-5 lg:grid-cols-2">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="font-sans">How to progress</CardTitle>
-                  <CardDescription className="font-sans">
-                    Double progression · most compounds at 1–3 RIR
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {[
-                    [
-                      'Build reps first',
-                      'Keep the same load while repetitions improve inside the prescribed range.',
-                    ],
-                    [
-                      'Earn the load increase',
-                      'Add the smallest practical increment when all sets reach the top with stable technique and target RIR.',
-                    ],
-                    [
-                      'Never require failure',
-                      'A set ends when technique changes significantly, even if another rough repetition is possible.',
-                    ],
-                    [
-                      'Use appropriate jumps',
-                      'Upper-body compounds often rise by 1–2.5 kg total; lower-body compounds by 2.5–5 kg when equipment allows.',
-                    ],
-                  ].map(([title, description], index) => (
-                    <div
-                      key={title}
-                      className="flex gap-3 rounded-xl border border-border/70 p-3"
-                    >
-                      <span className="grid size-8 shrink-0 place-items-center rounded-full bg-accent font-sans text-sm font-bold text-primary">
-                        {index + 1}
-                      </span>
-                      <div>
-                        <p className="font-sans font-semibold">{title}</p>
-                        <p className="mt-1 font-sans text-sm leading-relaxed text-muted-foreground">
-                          {description}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-
-              <div className="space-y-5">
-                <Card className="bg-accent/35 ring-primary/15">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2 font-sans">
-                      <Dumbbell className="size-5 text-primary" /> Free-weight
-                      transition
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2 font-sans text-sm leading-relaxed text-muted-foreground">
-                    <p>
-                      Weeks 1–2: use about one major free-weight movement per
-                      session with conservative loads and 2–4 ramp sets.
-                    </p>
-                    <p>
-                      Weeks 3–4: move toward two major free-weight movements
-                      when technique and recovery are good. Keep machines and
-                      cables for controlled accessory work.
-                    </p>
-                    <p className="font-medium text-foreground">
-                      Machine, barbell and dumbbell loads are not directly
-                      interchangeable.
-                    </p>
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-warning-soft ring-warning/20">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2 font-sans text-warning-foreground">
-                      <ShieldCheck className="size-5" /> Recovery guardrails
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2 font-sans text-sm leading-relaxed text-warning-foreground/85">
-                    <p>
-                      Separate lifting days when practical. If performance falls
-                      across two sessions alongside poor sleep, soreness or
-                      joint discomfort, reduce accessory work first.
-                    </p>
-                    <p>
-                      If fatigue persists, deload by cutting working sets about
-                      30–50%, using moderate loads, and finishing around 3–4
-                      RIR.
-                    </p>
-                    <p>
-                      Keep incline cardio conversational for 20–40 minutes and
-                      avoid hard hill work before a lower-body-heavy day.
-                    </p>
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
-          </section>
-        )}
-
-        {view === 'guide' && activePhase === 1 && (
-          <section>
-            <div className="mb-6">
-              <p className="font-sans text-sm font-semibold text-primary">
-                START HERE
-              </p>
-              <h1 className="font-sans text-3xl font-bold tracking-tight">
-                Train simply. Progress steadily.
-              </h1>
-              <p className="mt-1 font-sans text-muted-foreground">
-                The guidance from your spreadsheet, organized for quick
-                reference at the gym.
-              </p>
-            </div>
-            <div className="grid gap-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(300px,.7fr)]">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="font-sans">
-                    How to use Liftline
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {[
-                    [
-                      'Train 3× per week',
-                      'Do Day A, B and C, ideally with at least one rest or easy day between hard sessions.',
-                    ],
-                    [
-                      'Warm up',
-                      'Add 3–5 minutes of easy movement, then 1–3 lighter warm-up sets before the first big lift.',
-                    ],
-                    [
-                      'Choose your load',
-                      'Finish most working sets with about 2 reps in reserve. Technique comes before load.',
-                    ],
-                    [
-                      'Progress gradually',
-                      'Reach the top of the rep range on every working set with clean form and RIR 1–2, then add the smallest practical load.',
-                    ],
-                    [
-                      'Rest enough',
-                      'Use 2–3 minutes for demanding compound lifts and 60–90 seconds for smaller movements.',
-                    ],
-                    [
-                      'Ramp in',
-                      'Weeks 1–2 use two working sets at RIR ~3. Weeks 3–4 move toward the listed sets. Week 5 onward uses the full plan.',
-                    ],
-                    [
-                      'Keep cardio',
-                      'Running, walking and hiking can stay. Reduce leg volume if another activity leaves your legs heavily fatigued.',
-                    ],
-                    [
-                      'Use machines freely',
-                      'For unfamiliar barbell lifts, use a machine or Smith alternative until technique feels comfortable.',
-                    ],
-                  ].map(([title, description], index) => (
-                    <div
-                      key={title}
-                      className="flex gap-3 rounded-xl border border-border/70 p-3"
-                    >
-                      <span className="grid size-8 shrink-0 place-items-center rounded-full bg-accent font-sans text-sm font-bold text-primary">
-                        {index + 1}
-                      </span>
-                      <div>
-                        <p className="font-sans font-semibold">{title}</p>
-                        <p className="mt-1 font-sans text-sm leading-relaxed text-muted-foreground">
-                          {description}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-              <div className="space-y-5">
-                <Card className="bg-success-soft ring-success/20">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2 font-sans text-success">
-                      <Sparkles className="size-4" /> Balanced week
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2 font-sans text-sm text-success/90">
-                    {[
-                      'Mon · Gym A',
-                      'Tue · Walk / easy run',
-                      'Wed · Gym B',
-                      'Thu · Rest / walk',
-                      'Fri · Gym C',
-                      'Weekend · Rest, hike or easy run',
-                    ].map((item) => (
-                      <p
-                        key={item}
-                        className="rounded-lg bg-white/55 px-3 py-2"
-                      >
-                        {item}
-                      </p>
-                    ))}
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="font-sans">Recovery notes</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3 font-sans text-sm text-muted-foreground">
-                    <p>
-                      <strong className="text-foreground">Sleep:</strong>{' '}
-                      Consistent, adequate sleep matters more once you lift
-                      three times weekly.
-                    </p>
-                    <p>
-                      <strong className="text-foreground">Fat loss:</strong>{' '}
-                      Keep the deficit modest. Strength stable or rising while
-                      waist and weight trend down is excellent.
-                    </p>
-                    <p>
-                      <strong className="text-foreground">Pain rule:</strong>{' '}
-                      Stop and reassess sharp joint pain, dizziness, chest pain,
-                      or unusual symptoms.
-                    </p>
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
-          </section>
+        {view === 'guide' && (
+          <Suspense
+            fallback={
+              <section
+                aria-label="Loading training guide"
+                className="min-h-[30rem] animate-pulse rounded-3xl bg-card/70"
+              />
+            }
+          >
+            <TrainingGuideView activePhase={activePhase} />
+          </Suspense>
         )}
       </div>
 
