@@ -14,25 +14,6 @@ Current production version: **v3.7.0**
 
 ## Features
 
-### v3.7 — Performance and startup stability
-
-- Reduced the offline shell from dozens of obsolete icon generations to the current install assets and critical Today artwork, so updates install with far less cache work.
-- Re-encoded the workout illustrations as right-sized WebP assets and prioritized the above-the-fold Today illustration for faster painting.
-- Restored cached workout data and the first unfinished day before paint to reduce startup movement while preserving calendar-aware navigation.
-- Reduced rest-timer wakeups from four per second to one per second without changing the visible countdown.
-- Deferred older workout-history rows until “Earlier weeks” is expanded, keeping the Progress screen's initial DOM much smaller.
-- Kept charts, movement guides, programme tools, advanced insights, Holiday mode, dialogs, and secondary controls split into on-demand chunks instead of the startup path.
-- Removed superseded icon and manifest generations from the production package while retaining the verified v9 favicon and iOS/PWA install chain.
-
-### v3.6 — Liftline monogram icon
-
-- Recreated the selected minimal monogram as an edge-to-edge cobalt-to-violet app icon with a softly folded white and lavender L.
-- Added matching in-app, notification, favicon, multi-size Apple touch, Chrome/Android, and maskable assets.
-- Preserved credential-aware manifest loading for the private Site, plus the root Apple icon fallback, so both Safari and Chrome on iOS can retrieve the updated artwork.
-- Increased the week picker's padding, control height, and spacing between its label, dropdown, and date for a calmer mobile layout.
-- Simplified the header status to a green online or red offline dot beside the save state, removing the redundant connectivity label.
-- Refreshed the repository banner with the current Liftline monogram, redesigned workout dashboard, and matching training illustration.
-
 - Two complete 12-week plans with Day A, B, and C workouts
 - Locked Phase 2 transition after all 36 Phase 1 sessions are complete
 - Specialized Phase 2 programming with chest/quad, back/posterior-chain, and shoulders/arms emphasis
@@ -69,6 +50,25 @@ Current production version: **v3.7.0**
 ## Version history
 
 Minor fixes, visual refinements, and deployment maintenance are grouped into the nearest feature release so this history focuses on meaningful product changes.
+
+### v3.7 — Performance and startup stability
+
+- Reduced the offline shell from dozens of obsolete icon generations to the current install assets and critical Today artwork, so updates install with far less cache work.
+- Re-encoded the workout illustrations as right-sized WebP assets and prioritized the above-the-fold Today illustration for faster painting.
+- Restored cached workout data and the first unfinished day before paint to reduce startup movement while preserving calendar-aware navigation.
+- Reduced rest-timer wakeups from four per second to one per second without changing the visible countdown.
+- Deferred older workout-history rows until “Earlier weeks” is expanded, keeping the Progress screen's initial DOM much smaller.
+- Split Plan, Nutrition, and Training Guide into on-demand chunks, alongside the existing lazy-loaded charts, movement guides, programme tools, advanced insights, Holiday mode, and dialogs.
+- Removed superseded icon and manifest generations from the production package while retaining the verified v9 favicon and iOS/PWA install chain.
+
+### v3.6 — Liftline monogram icon
+
+- Recreated the selected minimal monogram as an edge-to-edge cobalt-to-violet app icon with a softly folded white and lavender L.
+- Added matching in-app, notification, favicon, multi-size Apple touch, Chrome/Android, and maskable assets.
+- Preserved credential-aware manifest loading for the private Site, plus the root Apple icon fallback, so both Safari and Chrome on iOS can retrieve the updated artwork.
+- Increased the week picker's padding, control height, and spacing between its label, dropdown, and date for a calmer mobile layout.
+- Simplified the header status to a green online or red offline dot beside the save state, removing the redundant connectivity label.
+- Refreshed the repository banner with the current Liftline monogram, redesigned workout dashboard, and matching training illustration.
 
 ### v3.5 — Lift Path identity (21 September 2026)
 
