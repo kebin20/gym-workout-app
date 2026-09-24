@@ -69,6 +69,13 @@ export default function RootLayout({
     <html lang="en">
       <head>
         <link
+          rel="preload"
+          as="image"
+          type="image/webp"
+          href="/illustrations/goblet-squat.webp"
+          fetchPriority="high"
+        />
+        <link
           rel="manifest"
           href={installManifestHref}
           crossOrigin="use-credentials"

@@ -1,56 +1,15 @@
-const cacheVersion = 'liftline-2026-09-21-10';
+const cacheVersion = 'liftline-3.7.0-1';
 const shellCache = `${cacheVersion}-shell`;
 const assetCache = `${cacheVersion}-assets`;
 
 const coreShell = [
   '/',
   '/manifest.webmanifest',
-  '/manifest-v2.webmanifest',
-  '/manifest-v3.webmanifest',
-  '/manifest-v4.webmanifest',
-  '/manifest-v5.webmanifest',
-  '/manifest-v6.webmanifest',
-  '/manifest-v7.webmanifest',
-  '/liftline-app-icon-v7.svg',
-  '/favicon-v8-32.png',
-  '/favicon-v8.png',
-  '/apple-touch-icon.png',
-  '/apple-touch-icon-180x180.png',
-  '/icon-192.png',
-  '/icon-512.png',
-  '/liftline-apple-touch-icon-v2.png',
-  '/liftline-icon-192-v2.png',
-  '/liftline-icon-512-v2.png',
-  '/liftline-apple-touch-icon-v3.png',
-  '/liftline-icon-192-v3.png',
-  '/liftline-icon-512-v3.png',
-  '/liftline-apple-touch-icon-v4.png',
-  '/liftline-icon-192-v4.png',
-  '/liftline-icon-512-v4.png',
-  '/liftline-apple-touch-icon-120-v6.png',
-  '/liftline-apple-touch-icon-152-v6.png',
-  '/liftline-apple-touch-icon-167-v6.png',
-  '/liftline-apple-touch-icon-v6.png',
-  '/liftline-icon-192-v6.png',
-  '/liftline-icon-512-v6.png',
-  '/liftline-icon-512-maskable-v6.png',
-  '/liftline-apple-touch-icon-120-v7.png',
-  '/liftline-apple-touch-icon-152-v7.png',
-  '/liftline-apple-touch-icon-167-v7.png',
-  '/liftline-apple-touch-icon-v7.png',
-  '/liftline-icon-192-v7.png',
-  '/liftline-icon-512-v7.png',
-  '/liftline-icon-512-maskable-v7.png',
-  '/liftline-icon-master-v9.png',
   '/favicon-v9-32.png',
   '/favicon-v9.png',
-  '/liftline-apple-touch-icon-120-v9.png',
-  '/liftline-apple-touch-icon-152-v9.png',
-  '/liftline-apple-touch-icon-167-v9.png',
-  '/liftline-apple-touch-icon-v9.png',
+  '/apple-touch-icon.png',
   '/liftline-icon-192-v9.png',
-  '/liftline-icon-512-v9.png',
-  '/liftline-icon-512-maskable-v9.png',
+  '/illustrations/goblet-squat.webp',
 ];
 
 function isCacheable(response) {
@@ -198,6 +157,7 @@ self.addEventListener('fetch', (event) => {
     url.pathname.startsWith('/_next/static/') ||
     url.pathname.endsWith('.webmanifest') ||
     url.pathname.endsWith('.png') ||
+    url.pathname.endsWith('.webp') ||
     url.pathname.endsWith('.svg') ||
     url.pathname.endsWith('.woff2');
 
