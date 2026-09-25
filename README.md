@@ -10,7 +10,7 @@ Made with ChatGPT Codex
 
 The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgpt.site](https://liftline-strength-plan.ktanzyl.chatgpt.site). Access is restricted to the site owner.
 
-Current production version: **v3.7.0**
+Current production version: **v3.7.1**
 
 ## Features
 
@@ -53,6 +53,7 @@ Minor fixes, visual refinements, and deployment maintenance are grouped into the
 
 ### v3.7 — Performance and startup stability
 
+- Softened the decorative progress-card ring so it stays behind the training controls without visually cutting through them.
 - Reduced the offline shell from dozens of obsolete icon generations to the current install assets and critical Today artwork, so updates install with far less cache work.
 - Re-encoded the workout illustrations as right-sized WebP assets and prioritized the above-the-fold Today illustration for faster painting.
 - Restored cached workout data and the first unfinished day before paint to reduce startup movement while preserving calendar-aware navigation.
