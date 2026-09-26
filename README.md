@@ -10,7 +10,7 @@ Made with ChatGPT Codex
 
 The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgpt.site](https://liftline-strength-plan.ktanzyl.chatgpt.site). Access is restricted to the site owner.
 
-Current production version: **v3.7.1**
+Current production version: **v3.7.2**
 
 ## Features
 
@@ -53,6 +53,9 @@ Minor fixes, visual refinements, and deployment maintenance are grouped into the
 
 ### v3.7 — Performance and startup stability
 
+- Added iPhone 17 safe-area handling for the Dynamic Island, rounded display edges, and home indicator in browser and installed-app layouts.
+- Increased frequently used mobile controls to a 44-point touch target and reorganized set entry into comfortable stacked weight and rep controls on narrow screens.
+- Raised native select sizing to prevent iOS focus zoom and improved small dashboard-label legibility.
 - Softened the decorative progress-card ring so it stays behind the training controls without visually cutting through them.
 - Reduced the offline shell from dozens of obsolete icon generations to the current install assets and critical Today artwork, so updates install with far less cache work.
 - Re-encoded the workout illustrations as right-sized WebP assets and prioritized the above-the-fold Today illustration for faster painting.

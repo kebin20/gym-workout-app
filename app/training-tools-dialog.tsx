@@ -620,7 +620,7 @@ export default function TrainingToolsDialog({
                 Source
                 <select
                   id="metric-source"
-                  className="h-9 w-full rounded-lg border bg-transparent px-3 font-sans text-sm"
+                  className="h-11 w-full rounded-lg border bg-transparent px-3 font-sans text-base"
                   value={metricDraft.source}
                   onChange={(event) =>
                     setMetricDraft((current) => ({
