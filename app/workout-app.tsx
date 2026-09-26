@@ -98,6 +98,7 @@ import {
   totalPersonalRecords,
   workoutMetrics,
 } from '@/lib/workout-metrics';
+import { findStartupWeek } from '@/lib/startup-week';
 import type { SessionExercise, WorkoutEntry } from '@/lib/workout-types';
 import type { ProgramSchedule } from './training-tools-dialog';
 
@@ -659,6 +660,44 @@ function firstIncompleteDayForWeek(
   );
 }
 
+function startupSessionForWeek(
+  entries: WorkoutEntry[],
+  sessionExercises: SessionExercise[],
+  scheduledWeek: number,
+) {
+  const completedEntries = entries.filter((entry) => entry.completed);
+  const startupWeek = findStartupWeek(
+    scheduledWeek,
+    (week) => completedEntries.some((entry) => entry.week === week),
+    (week) =>
+      days.every((day) => {
+        const required = planForSession(sessionExercises, week, day).filter(
+          (item) => !item.skipped,
+        );
+        return (
+          required.length > 0 &&
+          required.every((item) =>
+            completedEntries.some(
+              (entry) =>
+                entry.week === week &&
+                entry.day === day &&
+                entry.exerciseOrder === item.order,
+            ),
+          )
+        );
+      }),
+  );
+
+  return {
+    week: startupWeek,
+    day: firstIncompleteDayForWeek(
+      completedEntries,
+      sessionExercises,
+      startupWeek,
+    ),
+  };
+}
+
 function visibleSetsForEntry(
   entry: WorkoutEntry | undefined,
   fallback: number,
@@ -1076,13 +1115,13 @@ export function WorkoutApp() {
     const cachedSessionExercises = readCachedSessionExercises();
     if (cachedEntries) {
       setEntries(cachedEntries);
-      setActiveDay(
-        firstIncompleteDayForWeek(
-          cachedEntries,
-          cachedSessionExercises,
-          initialWeek,
-        ),
+      const startupSession = startupSessionForWeek(
+        cachedEntries,
+        cachedSessionExercises,
+        initialWeek,
       );
+      setActiveWeek(startupSession.week);
+      setActiveDay(startupSession.day);
     }
     if (cachedSessionExercises.length > 0)
       setSessionExercises(cachedSessionExercises);
@@ -1266,13 +1305,13 @@ export function WorkoutApp() {
     if (loading || startupWeekApplied.current) return;
     startupWeekApplied.current = true;
     const scheduledWeek = scheduledWeekForToday(schedule, phaseTwoUnlocked);
-    const scheduledDay = firstIncompleteDayForWeek(
+    const startupSession = startupSessionForWeek(
       entries,
       sessionExercises,
       scheduledWeek,
     );
-    setActiveWeek(scheduledWeek);
-    setActiveDay(scheduledDay);
+    setActiveWeek(startupSession.week);
+    setActiveDay(startupSession.day);
     setActiveIndex(0);
   }, [entries, loading, phaseTwoUnlocked, schedule, sessionExercises]);
 
