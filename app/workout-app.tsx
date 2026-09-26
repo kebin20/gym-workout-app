@@ -2029,9 +2029,9 @@ export function WorkoutApp() {
   }
 
   return (
-    <main className="liftline-beta min-h-screen bg-background pb-24 font-sans text-foreground md:pb-10">
+    <main className="liftline-beta min-h-screen bg-background pb-[calc(6rem+env(safe-area-inset-bottom))] font-sans text-foreground md:pb-10">
       <header className="beta-app-header sticky top-0 z-30 border-b border-border/70 bg-card/90 backdrop-blur-xl">
-        <div className="beta-header-inner mx-auto flex min-h-18 max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
+        <div className="beta-header-inner mx-auto flex min-h-18 max-w-6xl items-center justify-between gap-3 pb-3 pt-[calc(.75rem+env(safe-area-inset-top))]">
           <button
             type="button"
             onClick={() => setView('today')}
@@ -2226,7 +2226,7 @@ export function WorkoutApp() {
         </div>
       </header>
 
-      <div className="beta-app-content mx-auto max-w-6xl px-4 py-5 sm:px-6 md:py-8">
+      <div className="beta-app-content mx-auto max-w-6xl py-5 md:py-8">
         {(error || notice) && (
           <Alert
             className={`mb-5 ${error ? 'border-destructive/30 bg-destructive/5 text-destructive' : 'border-success/25 bg-success-soft text-success'}`}
@@ -2269,7 +2269,7 @@ export function WorkoutApp() {
                         onChange={(event) =>
                           selectWeek(Number(event.target.value))
                         }
-                        className="h-11 appearance-none rounded-2xl border bg-card py-2 pl-4 pr-12 text-sm font-semibold shadow-sm outline-none focus:ring-3 focus:ring-ring/30"
+                        className="h-11 appearance-none rounded-2xl border bg-card py-2 pl-4 pr-12 text-base font-semibold shadow-sm outline-none focus:ring-3 focus:ring-ring/30"
                       >
                         {Array.from({ length: 12 }, (_, index) => (
                           <option
@@ -2377,7 +2377,7 @@ export function WorkoutApp() {
                     value={weeklyPercent}
                     className="h-2 w-full appearance-none overflow-hidden rounded-full bg-black/20 [&::-moz-progress-bar]:rounded-full [&::-moz-progress-bar]:bg-white [&::-webkit-progress-bar]:rounded-full [&::-webkit-progress-bar]:bg-black/20 [&::-webkit-progress-value]:rounded-full [&::-webkit-progress-value]:bg-white"
                   />
-                  <div className="mt-3 grid grid-cols-3 gap-2 text-xs font-medium">
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-sm font-medium">
                     {days.map((day) => {
                       const complete = entries.some(
                         (entry) =>
@@ -2488,10 +2488,9 @@ export function WorkoutApp() {
                     <Button
                       type="button"
                       variant="outline"
-                      size="sm"
                       aria-label={`Show an animated movement guide for ${exercise.name}`}
                       onClick={() => setExerciseDemoOpen(true)}
-                      className="border-primary/20 bg-background font-sans text-xs font-semibold text-primary hover:bg-accent hover:text-primary"
+                      className="border-primary/20 bg-background font-sans text-sm font-semibold text-primary hover:bg-accent hover:text-primary"
                     >
                       <CirclePlay className="size-4" /> See movement
                     </Button>
@@ -2522,7 +2521,6 @@ export function WorkoutApp() {
                         <Button
                           type="button"
                           variant="ghost"
-                          size="sm"
                           onClick={enableRestAlerts}
                         >
                           <Bell /> Alerts
@@ -2531,7 +2529,6 @@ export function WorkoutApp() {
                       <Button
                         type="button"
                         variant={restTimerRunning ? 'secondary' : 'default'}
-                        size="sm"
                         onClick={toggleRestTimer}
                       >
                         {restTimerRunning ? <Pause /> : <Play />}
@@ -2594,7 +2591,8 @@ export function WorkoutApp() {
                               <Button
                                 type="button"
                                 variant="outline"
-                                size="xs"
+                                size="sm"
+                                className="text-sm"
                                 onClick={usePreviousSession}
                               >
                                 <Copy /> Use previous
@@ -2654,7 +2652,7 @@ export function WorkoutApp() {
                     </div>
                   ) : (
                     <>
-                      <div className="grid grid-cols-[34px_minmax(0,1fr)_minmax(0,1fr)_34px] items-center gap-1.5 border-b py-2 font-sans text-[11px] font-semibold uppercase tracking-wide text-muted-foreground sm:grid-cols-[42px_1fr_1fr_64px] sm:gap-2 sm:text-xs">
+                      <div className="hidden grid-cols-[42px_1fr_1fr_64px] items-center gap-2 border-b py-2 font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:grid">
                         <span>Set</span>
                         <span>Weight (kg)</span>
                         <span>
@@ -2676,9 +2674,9 @@ export function WorkoutApp() {
                           return (
                             <div
                               key={index}
-                              className="grid grid-cols-[34px_minmax(0,1fr)_minmax(0,1fr)_34px] items-center gap-1.5 border-b border-border/70 py-3 last:border-0 sm:grid-cols-[42px_1fr_1fr_64px] sm:gap-2"
+                              className="grid grid-cols-[2rem_minmax(0,1fr)_2.75rem] items-center gap-x-2 gap-y-3 border-b border-border/70 py-3 last:border-0 sm:grid-cols-[42px_1fr_1fr_64px] sm:gap-2"
                             >
-                              <span className="relative grid size-8 place-items-center rounded-full bg-secondary font-sans text-sm font-bold">
+                              <span className="relative row-span-2 grid size-8 place-items-center self-center rounded-full bg-secondary font-sans text-sm font-bold sm:row-span-1">
                                 {index + 1}
                                 {setLabel && (
                                   <span className="absolute -right-3 -top-2 rounded bg-warning-soft px-1 font-sans text-[8px] text-warning-foreground">
@@ -2686,82 +2684,104 @@ export function WorkoutApp() {
                                   </span>
                                 )}
                               </span>
-                              <div className="flex items-center gap-1">
-                                <Button
-                                  variant="outline"
-                                  size="icon-sm"
-                                  aria-label={`Decrease set ${index + 1} weight`}
-                                  onClick={() => stepSet(index, 'weight', -2.5)}
-                                >
-                                  <Minus />
-                                </Button>
-                                <Input
-                                  aria-label={`Set ${index + 1} weight in kilograms`}
-                                  inputMode="decimal"
-                                  type="number"
-                                  value={set.weight}
-                                  placeholder={
-                                    exercise.name === 'Plank' ? 'Optional' : '0'
-                                  }
-                                  onFocus={(event) =>
-                                    event.currentTarget.select()
-                                  }
-                                  onChange={(event) =>
-                                    updateSet(
-                                      index,
-                                      'weight',
-                                      event.target.value,
-                                    )
-                                  }
-                                  className="h-11 min-w-0 bg-background text-center font-sans text-lg font-semibold tabular-nums"
-                                />
-                                <Button
-                                  variant="outline"
-                                  size="icon-sm"
-                                  aria-label={`Increase set ${index + 1} weight`}
-                                  onClick={() => stepSet(index, 'weight', 2.5)}
-                                >
-                                  <Plus />
-                                </Button>
+                              <div className="col-start-2 row-start-1 min-w-0 sm:col-auto sm:row-auto">
+                                <span className="mb-1 block font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
+                                  Weight (kg)
+                                </span>
+                                <div className="flex items-center gap-2 sm:gap-1">
+                                  <Button
+                                    variant="outline"
+                                    size="icon-sm"
+                                    aria-label={`Decrease set ${index + 1} weight`}
+                                    onClick={() =>
+                                      stepSet(index, 'weight', -2.5)
+                                    }
+                                  >
+                                    <Minus />
+                                  </Button>
+                                  <Input
+                                    aria-label={`Set ${index + 1} weight in kilograms`}
+                                    inputMode="decimal"
+                                    type="number"
+                                    value={set.weight}
+                                    placeholder={
+                                      exercise.name === 'Plank'
+                                        ? 'Optional'
+                                        : '0'
+                                    }
+                                    onFocus={(event) =>
+                                      event.currentTarget.select()
+                                    }
+                                    onChange={(event) =>
+                                      updateSet(
+                                        index,
+                                        'weight',
+                                        event.target.value,
+                                      )
+                                    }
+                                    className="h-11 min-w-0 bg-background text-center font-sans text-lg font-semibold tabular-nums"
+                                  />
+                                  <Button
+                                    variant="outline"
+                                    size="icon-sm"
+                                    aria-label={`Increase set ${index + 1} weight`}
+                                    onClick={() =>
+                                      stepSet(index, 'weight', 2.5)
+                                    }
+                                  >
+                                    <Plus />
+                                  </Button>
+                                </div>
                               </div>
-                              <div className="flex items-center gap-1">
-                                <Button
-                                  variant="outline"
-                                  size="icon-sm"
-                                  aria-label={`Decrease set ${index + 1} repetitions`}
-                                  onClick={() => stepSet(index, 'reps', -1)}
-                                >
-                                  <Minus />
-                                </Button>
-                                <Input
-                                  aria-label={`Set ${index + 1} ${exercise.name === 'Plank' ? 'seconds' : 'repetitions'}`}
-                                  inputMode="numeric"
-                                  type="number"
-                                  value={set.reps}
-                                  placeholder="0"
-                                  onFocus={(event) =>
-                                    event.currentTarget.select()
-                                  }
-                                  onChange={(event) =>
-                                    updateSet(index, 'reps', event.target.value)
-                                  }
-                                  className="h-11 min-w-0 bg-background text-center font-sans text-lg font-semibold tabular-nums"
-                                />
-                                <Button
-                                  variant="outline"
-                                  size="icon-sm"
-                                  aria-label={`Increase set ${index + 1} repetitions`}
-                                  onClick={() => stepSet(index, 'reps', 1)}
-                                >
-                                  <Plus />
-                                </Button>
+                              <div className="col-start-2 row-start-2 min-w-0 sm:col-auto sm:row-auto">
+                                <span className="mb-1 block font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
+                                  {exercise.name === 'Plank'
+                                    ? 'Seconds'
+                                    : 'Reps'}
+                                </span>
+                                <div className="flex items-center gap-2 sm:gap-1">
+                                  <Button
+                                    variant="outline"
+                                    size="icon-sm"
+                                    aria-label={`Decrease set ${index + 1} repetitions`}
+                                    onClick={() => stepSet(index, 'reps', -1)}
+                                  >
+                                    <Minus />
+                                  </Button>
+                                  <Input
+                                    aria-label={`Set ${index + 1} ${exercise.name === 'Plank' ? 'seconds' : 'repetitions'}`}
+                                    inputMode="numeric"
+                                    type="number"
+                                    value={set.reps}
+                                    placeholder="0"
+                                    onFocus={(event) =>
+                                      event.currentTarget.select()
+                                    }
+                                    onChange={(event) =>
+                                      updateSet(
+                                        index,
+                                        'reps',
+                                        event.target.value,
+                                      )
+                                    }
+                                    className="h-11 min-w-0 bg-background text-center font-sans text-lg font-semibold tabular-nums"
+                                  />
+                                  <Button
+                                    variant="outline"
+                                    size="icon-sm"
+                                    aria-label={`Increase set ${index + 1} repetitions`}
+                                    onClick={() => stepSet(index, 'reps', 1)}
+                                  >
+                                    <Plus />
+                                  </Button>
+                                </div>
                               </div>
                               <button
                                 type="button"
                                 onClick={() => toggleSetComplete(index)}
                                 aria-label={`${set.done ? 'Reopen' : 'Complete'} set ${index + 1}`}
                                 aria-pressed={set.done}
-                                className={`mx-auto grid size-8 place-items-center rounded-full border-2 transition-colors ${set.done ? 'border-success bg-success text-white' : 'border-border bg-background text-transparent hover:border-primary'}`}
+                                className={`col-start-3 row-span-2 row-start-1 mx-auto grid size-11 place-items-center self-center rounded-full border-2 transition-colors sm:col-auto sm:row-span-1 sm:row-auto sm:size-8 ${set.done ? 'border-success bg-success text-white' : 'border-border bg-background text-transparent hover:border-primary'}`}
                               >
                                 <Check className="size-4" />
                               </button>
@@ -3245,7 +3265,7 @@ export function WorkoutApp() {
                       setProgressExerciseKey(event.target.value)
                     }
                     aria-label="Exercise progress selection"
-                    className="h-10 max-w-[260px] rounded-lg border bg-card px-3 font-sans text-sm font-medium outline-none focus:ring-3 focus:ring-ring/30"
+                    className="h-11 max-w-[260px] rounded-lg border bg-card px-3 font-sans text-base font-medium outline-none focus:ring-3 focus:ring-ring/30"
                   >
                     {days.map((day) => (
                       <optgroup key={day} label={`Day ${day}`}>

@@ -155,6 +155,16 @@
     @apply bg-background text-foreground;
     font-family: var(--font-sans);
   }
+
+  @media (max-width: 900px) {
+    main :where(button, [role='button']) {
+      min-height: 2.75rem;
+    }
+
+    main :where(button, [role='button'])[aria-label] {
+      min-width: 2.75rem;
+    }
+  }
   button,
   input,
   textarea,
@@ -212,6 +222,8 @@
 
   .beta-header-inner {
     min-height: 5rem;
+    padding-right: max(1rem, env(safe-area-inset-right));
+    padding-left: max(1rem, env(safe-area-inset-left));
   }
 
   .beta-brand-mark {
@@ -238,6 +250,8 @@
 
   .beta-app-content {
     position: relative;
+    padding-right: max(1rem, env(safe-area-inset-right));
+    padding-left: max(1rem, env(safe-area-inset-left));
   }
 
   .beta-eyebrow {
@@ -476,8 +490,18 @@
   .beta-bottom-nav {
     border-color: rgb(61 89 155 / 10%);
     background: rgb(255 255 255 / 88%);
+    padding-right: max(0.5rem, env(safe-area-inset-right));
+    padding-left: max(0.5rem, env(safe-area-inset-left));
     box-shadow: 0 -14px 40px rgb(29 55 118 / 10%);
     backdrop-filter: blur(24px);
+  }
+
+  @media (min-width: 640px) {
+    .beta-header-inner,
+    .beta-app-content {
+      padding-right: max(1.5rem, env(safe-area-inset-right));
+      padding-left: max(1.5rem, env(safe-area-inset-left));
+    }
   }
 
   .beta-nav-icon {
@@ -560,8 +584,14 @@
       font-size: 1rem;
     }
 
+    .beta-metric-label,
+    .beta-metric-detail,
+    .beta-eyebrow {
+      font-size: 0.75rem;
+    }
+
     .beta-metric-detail {
-      font-size: 0.62rem;
+      white-space: normal;
     }
 
     .liftline-beta [data-slot='card'] {

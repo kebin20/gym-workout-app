@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import {
   appRelease,
   appleTouchIcon180Href,
@@ -58,6 +58,12 @@ export const metadata: Metadata = {
       'Log every set, follow your 3-day routine, and track progress across two training phases.',
     images: ['/og.png'],
   },
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({
