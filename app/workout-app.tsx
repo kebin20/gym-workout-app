@@ -2717,14 +2717,16 @@ export function WorkoutApp() {
                               key={index}
                               className="grid grid-cols-[2rem_minmax(0,1fr)_2.75rem] items-center gap-x-2 border-b border-border/70 py-3 last:border-0 md:grid-cols-[42px_minmax(0,1fr)_64px] md:gap-2"
                             >
-                              <span className="relative grid size-8 place-items-center self-center rounded-full bg-secondary font-sans text-sm font-bold">
-                                {index + 1}
-                                {setLabel && (
-                                  <span className="absolute -right-3 -top-2 rounded bg-warning-soft px-1 font-sans text-[8px] text-warning-foreground">
-                                    {setLabel}
-                                  </span>
-                                )}
-                              </span>
+                              <div className="flex items-center justify-center self-center min-[32rem]:h-11 min-[32rem]:self-end md:self-center">
+                                <span className="relative grid size-8 place-items-center rounded-full bg-secondary font-sans text-sm font-bold">
+                                  {index + 1}
+                                  {setLabel && (
+                                    <span className="absolute -right-3 -top-2 rounded bg-warning-soft px-1 font-sans text-[8px] text-warning-foreground">
+                                      {setLabel}
+                                    </span>
+                                  )}
+                                </span>
+                              </div>
                               <div className="col-start-2 min-w-0">
                                 <div className="grid gap-3 min-[32rem]:grid-cols-2">
                                   <div className="min-w-0">
@@ -2825,7 +2827,7 @@ export function WorkoutApp() {
                                   </div>
                                 </div>
                               </div>
-                              <div className="col-start-3 flex h-full items-center justify-center">
+                              <div className="col-start-3 flex h-full items-center justify-center min-[32rem]:h-11 min-[32rem]:self-end md:self-center">
                                 <button
                                   type="button"
                                   onClick={() => toggleSetComplete(index)}
