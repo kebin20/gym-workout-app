@@ -2691,12 +2691,14 @@ export function WorkoutApp() {
                     </div>
                   ) : (
                     <>
-                      <div className="hidden grid-cols-[42px_1fr_1fr_64px] items-center gap-2 border-b py-2 font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground md:grid">
+                      <div className="hidden grid-cols-[42px_minmax(0,1fr)_64px] items-center gap-2 border-b py-2 font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground md:grid">
                         <span>Set</span>
-                        <span>Weight (kg)</span>
-                        <span>
-                          {exercise.name === 'Plank' ? 'Seconds' : 'Reps'}
-                        </span>
+                        <div className="grid grid-cols-2 gap-3">
+                          <span>Weight (kg)</span>
+                          <span>
+                            {exercise.name === 'Plank' ? 'Seconds' : 'Reps'}
+                          </span>
+                        </div>
                         <span className="text-center">
                           <span className="sr-only sm:not-sr-only">Status</span>
                         </span>
@@ -2713,9 +2715,9 @@ export function WorkoutApp() {
                           return (
                             <div
                               key={index}
-                              className="grid grid-cols-[2rem_minmax(0,1fr)_2.75rem] items-stretch gap-x-2 gap-y-3 border-b border-border/70 py-3 last:border-0 md:grid-cols-[42px_1fr_1fr_64px] md:items-center md:gap-2"
+                              className="grid grid-cols-[2rem_minmax(0,1fr)_2.75rem] items-center gap-x-2 border-b border-border/70 py-3 last:border-0 md:grid-cols-[42px_minmax(0,1fr)_64px] md:gap-2"
                             >
-                              <span className="relative row-span-2 grid size-8 place-items-center self-center rounded-full bg-secondary font-sans text-sm font-bold md:row-span-1">
+                              <span className="relative grid size-8 place-items-center self-center rounded-full bg-secondary font-sans text-sm font-bold">
                                 {index + 1}
                                 {setLabel && (
                                   <span className="absolute -right-3 -top-2 rounded bg-warning-soft px-1 font-sans text-[8px] text-warning-foreground">
@@ -2723,99 +2725,107 @@ export function WorkoutApp() {
                                   </span>
                                 )}
                               </span>
-                              <div className="col-start-2 row-start-1 min-w-0 md:col-auto md:row-auto">
-                                <span className="mb-1 block font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground md:hidden">
-                                  Weight (kg)
-                                </span>
-                                <div className="grid w-full max-w-60 grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center gap-2 md:max-w-none md:gap-1">
-                                  <Button
-                                    variant="outline"
-                                    size="icon-sm"
-                                    aria-label={`Decrease set ${index + 1} weight`}
-                                    onClick={() =>
-                                      stepSet(index, 'weight', -2.5)
-                                    }
-                                  >
-                                    <Minus />
-                                  </Button>
-                                  <Input
-                                    aria-label={`Set ${index + 1} weight in kilograms`}
-                                    inputMode="decimal"
-                                    type="number"
-                                    value={set.weight}
-                                    placeholder={
-                                      exercise.name === 'Plank'
-                                        ? 'Optional'
-                                        : '0'
-                                    }
-                                    onFocus={(event) =>
-                                      event.currentTarget.select()
-                                    }
-                                    onChange={(event) =>
-                                      updateSet(
-                                        index,
-                                        'weight',
-                                        event.target.value,
-                                      )
-                                    }
-                                    className="h-11 min-w-0 bg-background text-center font-sans text-lg font-semibold text-foreground tabular-nums placeholder:font-medium placeholder:text-muted-foreground/35"
-                                  />
-                                  <Button
-                                    variant="outline"
-                                    size="icon-sm"
-                                    aria-label={`Increase set ${index + 1} weight`}
-                                    onClick={() =>
-                                      stepSet(index, 'weight', 2.5)
-                                    }
-                                  >
-                                    <Plus />
-                                  </Button>
+                              <div className="col-start-2 min-w-0">
+                                <div className="grid gap-3 min-[32rem]:grid-cols-2">
+                                  <div className="min-w-0">
+                                    <span className="mb-1 block font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground md:hidden">
+                                      Weight (kg)
+                                    </span>
+                                    <div className="grid w-full max-w-60 grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center gap-2 min-[32rem]:max-w-none min-[32rem]:gap-1">
+                                      <Button
+                                        variant="outline"
+                                        size="icon-sm"
+                                        aria-label={`Decrease set ${index + 1} weight`}
+                                        onClick={() =>
+                                          stepSet(index, 'weight', -2.5)
+                                        }
+                                      >
+                                        <Minus />
+                                      </Button>
+                                      <Input
+                                        aria-label={`Set ${index + 1} weight in kilograms`}
+                                        inputMode="decimal"
+                                        type="number"
+                                        value={set.weight}
+                                        placeholder={
+                                          exercise.name === 'Plank'
+                                            ? 'Optional'
+                                            : '0'
+                                        }
+                                        onFocus={(event) =>
+                                          event.currentTarget.select()
+                                        }
+                                        onChange={(event) =>
+                                          updateSet(
+                                            index,
+                                            'weight',
+                                            event.target.value,
+                                          )
+                                        }
+                                        className="h-11 min-w-0 bg-background text-center font-sans text-lg font-semibold text-foreground tabular-nums placeholder:font-medium placeholder:text-muted-foreground/35"
+                                      />
+                                      <Button
+                                        variant="outline"
+                                        size="icon-sm"
+                                        aria-label={`Increase set ${index + 1} weight`}
+                                        onClick={() =>
+                                          stepSet(index, 'weight', 2.5)
+                                        }
+                                      >
+                                        <Plus />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                  <div className="min-w-0">
+                                    <span className="mb-1 block font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground md:hidden">
+                                      {exercise.name === 'Plank'
+                                        ? 'Seconds'
+                                        : 'Reps'}
+                                    </span>
+                                    <div className="grid w-full max-w-60 grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center gap-2 min-[32rem]:max-w-none min-[32rem]:gap-1">
+                                      <Button
+                                        variant="outline"
+                                        size="icon-sm"
+                                        aria-label={`Decrease set ${index + 1} repetitions`}
+                                        onClick={() =>
+                                          stepSet(index, 'reps', -1)
+                                        }
+                                      >
+                                        <Minus />
+                                      </Button>
+                                      <Input
+                                        aria-label={`Set ${index + 1} ${exercise.name === 'Plank' ? 'seconds' : 'repetitions'}`}
+                                        inputMode="numeric"
+                                        type="number"
+                                        value={set.reps}
+                                        placeholder="0"
+                                        onFocus={(event) =>
+                                          event.currentTarget.select()
+                                        }
+                                        onChange={(event) =>
+                                          updateSet(
+                                            index,
+                                            'reps',
+                                            event.target.value,
+                                          )
+                                        }
+                                        className="h-11 min-w-0 bg-background text-center font-sans text-lg font-semibold text-foreground tabular-nums placeholder:font-medium placeholder:text-muted-foreground/35"
+                                      />
+                                      <Button
+                                        variant="outline"
+                                        size="icon-sm"
+                                        aria-label={`Increase set ${index + 1} repetitions`}
+                                        onClick={() =>
+                                          stepSet(index, 'reps', 1)
+                                        }
+                                      >
+                                        <Plus />
+                                      </Button>
+                                    </div>
+                                  </div>
                                 </div>
                               </div>
-                              <div className="col-start-2 row-start-2 min-w-0 md:col-auto md:row-auto">
-                                <span className="mb-1 block font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground md:hidden">
-                                  {exercise.name === 'Plank'
-                                    ? 'Seconds'
-                                    : 'Reps'}
-                                </span>
-                                <div className="grid w-full max-w-60 grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center gap-2 md:max-w-none md:gap-1">
-                                  <Button
-                                    variant="outline"
-                                    size="icon-sm"
-                                    aria-label={`Decrease set ${index + 1} repetitions`}
-                                    onClick={() => stepSet(index, 'reps', -1)}
-                                  >
-                                    <Minus />
-                                  </Button>
-                                  <Input
-                                    aria-label={`Set ${index + 1} ${exercise.name === 'Plank' ? 'seconds' : 'repetitions'}`}
-                                    inputMode="numeric"
-                                    type="number"
-                                    value={set.reps}
-                                    placeholder="0"
-                                    onFocus={(event) =>
-                                      event.currentTarget.select()
-                                    }
-                                    onChange={(event) =>
-                                      updateSet(
-                                        index,
-                                        'reps',
-                                        event.target.value,
-                                      )
-                                    }
-                                    className="h-11 min-w-0 bg-background text-center font-sans text-lg font-semibold text-foreground tabular-nums placeholder:font-medium placeholder:text-muted-foreground/35"
-                                  />
-                                  <Button
-                                    variant="outline"
-                                    size="icon-sm"
-                                    aria-label={`Increase set ${index + 1} repetitions`}
-                                    onClick={() => stepSet(index, 'reps', 1)}
-                                  >
-                                    <Plus />
-                                  </Button>
-                                </div>
-                              </div>
-                              <div className="col-start-3 row-start-1 row-end-3 flex h-full items-center justify-center md:col-start-4 md:row-start-1 md:row-end-2">
+                              <div className="col-start-3 flex h-full items-center justify-center">
                                 <button
                                   type="button"
                                   onClick={() => toggleSetComplete(index)}
