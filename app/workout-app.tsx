@@ -2589,77 +2589,77 @@ export function WorkoutApp() {
                     </div>
                   </div>
                   <div className="mt-3 rounded-xl border border-primary/15 bg-background/90 p-3 shadow-sm shadow-slate-900/5">
-                    <div className="flex items-start gap-3">
+                    <div className="flex items-center gap-3">
                       <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-accent text-primary">
                         <History className="size-4" />
                       </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                          <p className="font-sans text-sm font-semibold">
-                            Previous session
-                          </p>
-                          {previousEntry && (
-                            <p className="font-sans text-xs font-medium text-muted-foreground">
-                              {formatWorkoutDate(
-                                previousEntry.completedAt ??
-                                  previousEntry.updatedAt,
-                              )}{' '}
-                              · Week {displayWeekNumber(previousEntry.week)}
-                            </p>
-                          )}
-                        </div>
-                        {previousEntry ? (
-                          <div className="mt-2">
-                            <div className="flex flex-wrap gap-2">
-                              {loggedSets(previousEntry).map((set) => (
-                                <span
-                                  key={set.set}
-                                  className="rounded-lg bg-secondary px-2.5 py-1.5 font-sans text-xs font-medium tabular-nums"
-                                >
-                                  Set {set.set}:{' '}
-                                  {set.weight == null
-                                    ? `${set.reps} ${exercise.name === 'Plank' ? 'sec' : 'reps'}`
-                                    : `${set.weight} kg × ${set.reps}`}
-                                </span>
-                              ))}
-                              {previousEntry.rir != null && (
-                                <span className="rounded-lg bg-success-soft px-2.5 py-1.5 font-sans text-xs font-medium text-success">
-                                  RIR {previousEntry.rir}
-                                </span>
-                              )}
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="text-sm"
-                                onClick={usePreviousSession}
-                              >
-                                <Copy /> Use previous
-                              </Button>
-                            </div>
-                            {(previousEntry.notes ?? '').trim() && (
-                              <div className="mt-2.5 flex items-start gap-2 rounded-lg border border-primary/10 bg-background/65 px-3 py-2.5">
-                                <NotebookPen
-                                  className="mt-0.5 size-4 shrink-0 text-primary"
-                                  aria-hidden="true"
-                                />
-                                <p className="min-w-0 break-words font-sans text-xs leading-relaxed text-muted-foreground">
-                                  <span className="font-semibold text-foreground">
-                                    Previous note:
-                                  </span>{' '}
-                                  {previousEntry.notes.trim()}
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <p className="mt-1 font-sans text-xs leading-relaxed text-muted-foreground">
-                            No earlier session for this exercise yet. Your last
-                            sets and date will appear here from Week 2 onward.
+                      <div className="flex min-w-0 flex-1 flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                        <p className="font-sans text-sm font-semibold">
+                          Previous session
+                        </p>
+                        {previousEntry && (
+                          <p className="font-sans text-xs font-medium text-muted-foreground">
+                            {formatWorkoutDate(
+                              previousEntry.completedAt ??
+                                previousEntry.updatedAt,
+                            )}{' '}
+                            · Week {displayWeekNumber(previousEntry.week)}
                           </p>
                         )}
                       </div>
                     </div>
+                    {previousEntry ? (
+                      <div className="mt-2.5">
+                        <div className="flex flex-wrap gap-1.5">
+                          {loggedSets(previousEntry).map((set) => (
+                            <span
+                              key={set.set}
+                              className="rounded-lg bg-secondary px-2 py-1.5 font-sans text-xs font-medium tabular-nums"
+                            >
+                              Set {set.set}:{' '}
+                              {set.weight == null
+                                ? `${set.reps} ${exercise.name === 'Plank' ? 'sec' : 'reps'}`
+                                : `${set.weight} kg × ${set.reps}`}
+                            </span>
+                          ))}
+                        </div>
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          {previousEntry.rir != null && (
+                            <span className="rounded-lg bg-success-soft px-2.5 py-1.5 font-sans text-xs font-medium text-success">
+                              RIR {previousEntry.rir}
+                            </span>
+                          )}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="text-sm"
+                            onClick={usePreviousSession}
+                          >
+                            <Copy /> Use previous
+                          </Button>
+                        </div>
+                        {(previousEntry.notes ?? '').trim() && (
+                          <div className="mt-2.5 flex items-start gap-2 rounded-lg border border-primary/10 bg-background/65 px-3 py-2.5">
+                            <NotebookPen
+                              className="mt-0.5 size-4 shrink-0 text-primary"
+                              aria-hidden="true"
+                            />
+                            <p className="min-w-0 break-words font-sans text-xs leading-relaxed text-muted-foreground">
+                              <span className="font-semibold text-foreground">
+                                Previous note:
+                              </span>{' '}
+                              {previousEntry.notes.trim()}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="mt-2 font-sans text-xs leading-relaxed text-muted-foreground">
+                        No earlier session for this exercise yet. Your last sets
+                        and date will appear here from Week 2 onward.
+                      </p>
+                    )}
                   </div>
                 </CardHeader>
                 <CardContent className="py-(--card-spacing)">
@@ -2691,7 +2691,7 @@ export function WorkoutApp() {
                     </div>
                   ) : (
                     <>
-                      <div className="hidden grid-cols-[42px_1fr_1fr_64px] items-center gap-2 border-b py-2 font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:grid">
+                      <div className="hidden grid-cols-[42px_1fr_1fr_64px] items-center gap-2 border-b py-2 font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground md:grid">
                         <span>Set</span>
                         <span>Weight (kg)</span>
                         <span>
@@ -2713,9 +2713,9 @@ export function WorkoutApp() {
                           return (
                             <div
                               key={index}
-                              className="grid grid-cols-[2rem_minmax(0,1fr)_2.75rem] items-center gap-x-2 gap-y-3 border-b border-border/70 py-3 last:border-0 sm:grid-cols-[42px_1fr_1fr_64px] sm:gap-2"
+                              className="grid grid-cols-[2rem_minmax(0,1fr)_2.75rem] items-stretch gap-x-2 gap-y-3 border-b border-border/70 py-3 last:border-0 md:grid-cols-[42px_1fr_1fr_64px] md:items-center md:gap-2"
                             >
-                              <span className="relative row-span-2 grid size-8 place-items-center self-center rounded-full bg-secondary font-sans text-sm font-bold sm:row-span-1">
+                              <span className="relative row-span-2 grid size-8 place-items-center self-center rounded-full bg-secondary font-sans text-sm font-bold md:row-span-1">
                                 {index + 1}
                                 {setLabel && (
                                   <span className="absolute -right-3 -top-2 rounded bg-warning-soft px-1 font-sans text-[8px] text-warning-foreground">
@@ -2723,11 +2723,11 @@ export function WorkoutApp() {
                                   </span>
                                 )}
                               </span>
-                              <div className="col-start-2 row-start-1 min-w-0 sm:col-auto sm:row-auto">
-                                <span className="mb-1 block font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
+                              <div className="col-start-2 row-start-1 min-w-0 md:col-auto md:row-auto">
+                                <span className="mb-1 block font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground md:hidden">
                                   Weight (kg)
                                 </span>
-                                <div className="flex items-center gap-2 sm:gap-1">
+                                <div className="grid w-full max-w-60 grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center gap-2 md:max-w-none md:gap-1">
                                   <Button
                                     variant="outline"
                                     size="icon-sm"
@@ -2758,7 +2758,7 @@ export function WorkoutApp() {
                                         event.target.value,
                                       )
                                     }
-                                    className="h-11 min-w-0 bg-background text-center font-sans text-lg font-semibold tabular-nums"
+                                    className="h-11 min-w-0 bg-background text-center font-sans text-lg font-semibold text-foreground tabular-nums placeholder:font-medium placeholder:text-muted-foreground/35"
                                   />
                                   <Button
                                     variant="outline"
@@ -2772,13 +2772,13 @@ export function WorkoutApp() {
                                   </Button>
                                 </div>
                               </div>
-                              <div className="col-start-2 row-start-2 min-w-0 sm:col-auto sm:row-auto">
-                                <span className="mb-1 block font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
+                              <div className="col-start-2 row-start-2 min-w-0 md:col-auto md:row-auto">
+                                <span className="mb-1 block font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground md:hidden">
                                   {exercise.name === 'Plank'
                                     ? 'Seconds'
                                     : 'Reps'}
                                 </span>
-                                <div className="flex items-center gap-2 sm:gap-1">
+                                <div className="grid w-full max-w-60 grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center gap-2 md:max-w-none md:gap-1">
                                   <Button
                                     variant="outline"
                                     size="icon-sm"
@@ -2803,7 +2803,7 @@ export function WorkoutApp() {
                                         event.target.value,
                                       )
                                     }
-                                    className="h-11 min-w-0 bg-background text-center font-sans text-lg font-semibold tabular-nums"
+                                    className="h-11 min-w-0 bg-background text-center font-sans text-lg font-semibold text-foreground tabular-nums placeholder:font-medium placeholder:text-muted-foreground/35"
                                   />
                                   <Button
                                     variant="outline"
@@ -2815,15 +2815,17 @@ export function WorkoutApp() {
                                   </Button>
                                 </div>
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => toggleSetComplete(index)}
-                                aria-label={`${set.done ? 'Reopen' : 'Complete'} set ${index + 1}`}
-                                aria-pressed={set.done}
-                                className={`col-start-3 row-span-2 row-start-1 mx-auto grid size-11 place-items-center self-center rounded-full border-2 transition-colors sm:col-auto sm:row-span-1 sm:row-auto sm:size-8 ${set.done ? 'border-success bg-success text-white' : 'border-border bg-background text-transparent hover:border-primary'}`}
-                              >
-                                <Check className="size-4" />
-                              </button>
+                              <div className="col-start-3 row-start-1 row-end-3 flex h-full items-center justify-center md:col-start-4 md:row-start-1 md:row-end-2">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleSetComplete(index)}
+                                  aria-label={`${set.done ? 'Reopen' : 'Complete'} set ${index + 1}`}
+                                  aria-pressed={set.done}
+                                  className={`grid size-11 place-items-center rounded-full border-2 transition-colors md:size-8 ${set.done ? 'border-success bg-success text-white' : 'border-border bg-background text-transparent hover:border-primary'}`}
+                                >
+                                  <Check className="size-4" />
+                                </button>
+                              </div>
                             </div>
                           );
                         })}
