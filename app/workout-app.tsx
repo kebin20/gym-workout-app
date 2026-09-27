@@ -2729,11 +2729,11 @@ export function WorkoutApp() {
                               </div>
                               <div className="col-start-2 min-w-0">
                                 <div className="grid gap-3 min-[32rem]:grid-cols-2">
-                                  <div className="min-w-0">
+                                  <div className="w-full max-w-60 min-w-0 justify-self-center min-[32rem]:max-w-none">
                                     <span className="mb-1 block font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground md:hidden">
                                       Weight (kg)
                                     </span>
-                                    <div className="grid w-full max-w-60 grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center gap-2 min-[32rem]:max-w-none min-[32rem]:gap-1">
+                                    <div className="grid w-full grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center gap-2 min-[32rem]:gap-1">
                                       <Button
                                         variant="outline"
                                         size="icon-sm"
@@ -2778,13 +2778,13 @@ export function WorkoutApp() {
                                       </Button>
                                     </div>
                                   </div>
-                                  <div className="min-w-0">
+                                  <div className="w-full max-w-60 min-w-0 justify-self-center min-[32rem]:max-w-none">
                                     <span className="mb-1 block font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground md:hidden">
                                       {exercise.name === 'Plank'
                                         ? 'Seconds'
                                         : 'Reps'}
                                     </span>
-                                    <div className="grid w-full max-w-60 grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center gap-2 min-[32rem]:max-w-none min-[32rem]:gap-1">
+                                    <div className="grid w-full grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center gap-2 min-[32rem]:gap-1">
                                       <Button
                                         variant="outline"
                                         size="icon-sm"
