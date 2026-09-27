@@ -2692,10 +2692,10 @@ export function WorkoutApp() {
                   ) : (
                     <>
                       <div className="hidden grid-cols-[42px_minmax(0,1fr)_64px] items-center gap-2 border-b py-2 font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground md:grid">
-                        <span>Set</span>
+                        <span className="text-center">Set</span>
                         <div className="grid grid-cols-2 gap-3">
-                          <span>Weight (kg)</span>
-                          <span>
+                          <span className="text-center">Weight (kg)</span>
+                          <span className="text-center">
                             {exercise.name === 'Plank' ? 'Seconds' : 'Reps'}
                           </span>
                         </div>
