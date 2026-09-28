@@ -2733,7 +2733,7 @@ export function WorkoutApp() {
                                     <span className="mb-1 block font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground md:hidden">
                                       Weight (kg)
                                     </span>
-                                    <div className="grid w-full grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center gap-2 min-[32rem]:gap-1">
+                                    <div className="grid w-full grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center justify-items-center gap-2 min-[32rem]:gap-1">
                                       <Button
                                         variant="outline"
                                         size="icon-sm"
@@ -2764,7 +2764,7 @@ export function WorkoutApp() {
                                             event.target.value,
                                           )
                                         }
-                                        className="h-11 min-w-0 bg-background text-center font-sans text-lg font-semibold text-foreground tabular-nums placeholder:font-medium placeholder:text-muted-foreground/35"
+                                        className="h-11 w-full min-w-0 bg-background text-center font-sans text-lg font-semibold text-foreground tabular-nums placeholder:font-medium placeholder:text-muted-foreground/35"
                                       />
                                       <Button
                                         variant="outline"
@@ -2784,7 +2784,7 @@ export function WorkoutApp() {
                                         ? 'Seconds'
                                         : 'Reps'}
                                     </span>
-                                    <div className="grid w-full grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center gap-2 min-[32rem]:gap-1">
+                                    <div className="grid w-full grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center justify-items-center gap-2 min-[32rem]:gap-1">
                                       <Button
                                         variant="outline"
                                         size="icon-sm"
@@ -2811,7 +2811,7 @@ export function WorkoutApp() {
                                             event.target.value,
                                           )
                                         }
-                                        className="h-11 min-w-0 bg-background text-center font-sans text-lg font-semibold text-foreground tabular-nums placeholder:font-medium placeholder:text-muted-foreground/35"
+                                        className="h-11 w-full min-w-0 bg-background text-center font-sans text-lg font-semibold text-foreground tabular-nums placeholder:font-medium placeholder:text-muted-foreground/35"
                                       />
                                       <Button
                                         variant="outline"

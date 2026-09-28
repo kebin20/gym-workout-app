@@ -10,7 +10,7 @@ Made with ChatGPT Codex
 
 The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgpt.site](https://liftline-strength-plan.ktanzyl.chatgpt.site). Access is restricted to the site owner.
 
-Current production version: **v3.7.8**
+Current production version: **v3.7.9**
 
 ## Features
 
@@ -53,6 +53,7 @@ Minor fixes, visual refinements, and deployment maintenance are grouped into the
 
 ### v3.7 — Performance and startup stability
 
+- Centered the numeric entry boxes between their minus and plus controls so the desktop Weight and Reps columns read as balanced units.
 - Centered the desktop set-table headings over their Set, Weight, Reps, and Status columns for precise horizontal alignment.
 - Centered the stacked mobile Weight/Reps control block between the set-number and completion circles for even horizontal spacing.
 - Aligned the set-number and completion circles to the numeric input row for a cleaner, consistent horizontal rhythm.
