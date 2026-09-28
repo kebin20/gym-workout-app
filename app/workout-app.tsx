@@ -19,7 +19,6 @@ import {
   ArrowDown,
   ArrowUp,
   BarChart3,
-  Bell,
   BookOpen,
   CalendarDays,
   Calculator,
@@ -41,16 +40,12 @@ import {
   Medal,
   Minus,
   NotebookPen,
-  Pause,
-  Play,
   Plus,
   RotateCcw,
   Scale,
   Settings2,
-  ShieldCheck,
   Sparkles,
   Target,
-  TimerReset,
   Trash2,
   TrendingUp,
   TreePalm,
@@ -58,6 +53,7 @@ import {
   Upload,
 } from 'lucide-react';
 import { appVersion, brandMarkHref, notificationIconHref } from './app-release';
+import RestTimer, { type RestTimerHandle } from './rest-timer';
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -346,6 +342,7 @@ const ProgressChart = lazy(() => import('./progress-chart'));
 const ExerciseProgressChart = lazy(() => import('./exercise-progress-chart'));
 const ExerciseDemoDialog = lazy(() => import('./exercise-demo-dialog'));
 const TrainingToolsDialog = lazy(() => import('./training-tools-dialog'));
+const DataManagementDialogs = lazy(() => import('./data-management-dialogs'));
 const AdvancedInsights = lazy(() => import('./advanced-insights'));
 const HolidayWorkout = lazy(() => import('./holiday-workout'));
 const NutritionView = lazy(() => import('./nutrition-view'));
@@ -562,18 +559,6 @@ function progressionAdvice(
   return exercise.name === 'Plank' ? 'Keep building' : 'Keep this load';
 }
 
-function sheetEntrySummary(entry: WorkoutEntry) {
-  const unit = entry.exercise === 'Plank' ? 'sec' : 'reps';
-  return ([1, 2, 3] as const)
-    .flatMap((set) => {
-      const weight = entry[`set${set}Weight`];
-      const reps = entry[`set${set}Reps`];
-      if (reps == null) return [];
-      return [weight == null ? `${reps} ${unit}` : `${weight} kg × ${reps}`];
-    })
-    .join(' · ');
-}
-
 function formatWorkoutDate(value?: string | null) {
   if (!value) return 'Date unavailable';
   const date = new Date(value);
@@ -717,11 +702,6 @@ function recommendedRestSeconds(rest: string) {
   const values = rest.match(/\d+/g)?.map(Number) ?? [60];
   const longest = values.at(-1) ?? 60;
   return rest.includes('min') ? longest * 60 : longest;
-}
-
-function formatTimer(seconds: number) {
-  const minutes = Math.floor(seconds / 60);
-  return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
 function NavButton({
@@ -943,13 +923,8 @@ export function WorkoutApp() {
   const [showNotes, setShowNotes] = useState(false);
   const [activeTipIndex, setActiveTipIndex] = useState(0);
   const [visibleSetCount, setVisibleSetCount] = useState(3);
-  const [restTimerSeconds, setRestTimerSeconds] = useState(120);
-  const [restTimerRunning, setRestTimerRunning] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [pendingWorkoutCount, setPendingWorkoutCount] = useState(0);
-  const [restAlertsEnabled, setRestAlertsEnabled] = useState(false);
-  const [notificationAlertsAvailable, setNotificationAlertsAvailable] =
-    useState(false);
   const [personalRecords, setPersonalRecords] = useState<string[]>([]);
   const [personalRecordOpen, setPersonalRecordOpen] = useState(false);
   const [sessionSummaryOpen, setSessionSummaryOpen] = useState(false);
@@ -972,13 +947,12 @@ export function WorkoutApp() {
     useState<TrainingTool | null>(null);
   const [schedule, setSchedule] = useState<ProgramSchedule>(defaultSchedule);
   const [progressExerciseKey, setProgressExerciseKey] = useState('A|1');
-  const restTimerEndsAt = useRef<number | null>(null);
+  const restTimerRef = useRef<RestTimerHandle>(null);
   const programmeMenuRef = useRef<HTMLDivElement>(null);
   const startupWeekApplied = useRef(false);
 
   const activePhase = activeWeek > 12 ? 2 : 1;
   const phaseStartWeek = activePhase === 1 ? 1 : 13;
-  const phaseEndWeek = phaseStartWeek + 11;
   const activeDisplayWeek = displayWeekNumber(activeWeek);
   const activeRoutine = routineForWeek(activeWeek);
   const activeTrainingTips =
@@ -994,6 +968,56 @@ export function WorkoutApp() {
     ],
     [schedule],
   );
+  const entryIndex = useMemo(() => {
+    const byWorkout = new Map<string, WorkoutEntry>();
+    const completedByExercise = new Map<string, WorkoutEntry[]>();
+    const completedBySession = new Map<string, WorkoutEntry[]>();
+    const byPhase = new Map<1 | 2, WorkoutEntry[]>([
+      [1, []],
+      [2, []],
+    ]);
+    const completedByPhaseDay = new Map<string, WorkoutEntry[]>();
+
+    entries.forEach((entry) => {
+      const phase = entry.week > 12 ? 2 : 1;
+      byWorkout.set(workoutKey(entry), entry);
+      byPhase.get(phase)?.push(entry);
+      if (!entry.completed) return;
+
+      const exerciseKey = `${phase}|${entry.day}|${entry.exerciseOrder}`;
+      const sessionKey = `${entry.week}|${entry.day}`;
+      const phaseDayKey = `${phase}|${entry.day}`;
+      const exerciseEntries = completedByExercise.get(exerciseKey);
+      if (exerciseEntries) exerciseEntries.push(entry);
+      else completedByExercise.set(exerciseKey, [entry]);
+      const sessionEntries = completedBySession.get(sessionKey);
+      if (sessionEntries) sessionEntries.push(entry);
+      else completedBySession.set(sessionKey, [entry]);
+      const phaseDayEntries = completedByPhaseDay.get(phaseDayKey);
+      if (phaseDayEntries) phaseDayEntries.push(entry);
+      else completedByPhaseDay.set(phaseDayKey, [entry]);
+    });
+
+    completedByExercise.forEach((indexedEntries) =>
+      indexedEntries.sort((left, right) => right.week - left.week),
+    );
+    completedByPhaseDay.forEach((indexedEntries) =>
+      indexedEntries.sort(
+        (left, right) =>
+          right.week - left.week ||
+          Date.parse(right.completedAt ?? right.updatedAt ?? '') -
+            Date.parse(left.completedAt ?? left.updatedAt ?? ''),
+      ),
+    );
+
+    return {
+      byWorkout,
+      completedByExercise,
+      completedBySession,
+      byPhase,
+      completedByPhaseDay,
+    };
+  }, [entries]);
 
   const dayExercises = useMemo(
     () => planForSession(sessionExercises, activeWeek, activeDay),
@@ -1001,24 +1025,19 @@ export function WorkoutApp() {
   );
   const exercise = (dayExercises[activeIndex] ?? dayExercises[0])!;
   const existingEntry = exercise
-    ? entries.find(
-        (entry) =>
-          entry.week === activeWeek &&
-          entry.day === activeDay &&
-          entry.exerciseOrder === exercise.order,
+    ? entryIndex.byWorkout.get(
+        workoutKey({
+          week: activeWeek,
+          day: activeDay,
+          exerciseOrder: exercise.order,
+        }),
       )
     : undefined;
-  const previousEntry = [...entries]
-    .filter(
-      (entry) =>
-        exercise &&
-        entry.completed &&
-        entry.week < activeWeek &&
-        entry.week >= phaseStartWeek &&
-        entry.day === activeDay &&
-        entry.exerciseOrder === exercise.order,
-    )
-    .sort((a, b) => b.week - a.week)[0];
+  const previousEntry = exercise
+    ? entryIndex.completedByExercise
+        .get(`${activePhase}|${activeDay}|${exercise.order}`)
+        ?.find((entry) => entry.week < activeWeek)
+    : undefined;
   const activeSets = exercise ? workingSetsForWeek(exercise, activeWeek) : 1;
   const suggestedRestSeconds = exercise
     ? recommendedRestSeconds(exercise.rest)
@@ -1127,10 +1146,6 @@ export function WorkoutApp() {
       setSessionExercises(cachedSessionExercises);
     setIsOnline(navigator.onLine);
     setPendingWorkoutCount(readPendingWorkouts().length);
-    setNotificationAlertsAvailable('Notification' in window);
-    setRestAlertsEnabled(
-      'Notification' in window && Notification.permission === 'granted',
-    );
     refreshWorkoutData(cachedEntries ?? undefined, cachedSnapshot?.syncedAt)
       .then(() => {
         if (!cancelled) setError('');
@@ -1223,67 +1238,19 @@ export function WorkoutApp() {
   }, [activeTrainingTips.length]);
 
   useEffect(() => {
-    const current = entries.find(
-      (entry) =>
-        entry.week === activeWeek &&
-        entry.day === activeDay &&
-        entry.exerciseOrder === exercise.order,
-    );
     let cancelled = false;
     queueMicrotask(() => {
       if (cancelled) return;
-      setDraft(draftFromEntry(current));
-      setVisibleSetCount(visibleSetsForEntry(current, exercise.targetSets));
-      setShowNotes(Boolean(current?.notes));
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [activeDay, activeWeek, entries, exercise.order, exercise.targetSets]);
-
-  useEffect(() => {
-    let cancelled = false;
-    queueMicrotask(() => {
-      if (cancelled) return;
-      restTimerEndsAt.current = null;
-      setRestTimerRunning(false);
-      setRestTimerSeconds(suggestedRestSeconds);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [activeDay, exercise.order, suggestedRestSeconds]);
-
-  useEffect(() => {
-    if (!restTimerRunning) return;
-    const tick = () => {
-      const remaining = Math.max(
-        0,
-        Math.ceil(
-          ((restTimerEndsAt.current ?? Date.now()) - Date.now()) / 1000,
-        ),
+      setDraft(draftFromEntry(existingEntry));
+      setVisibleSetCount(
+        visibleSetsForEntry(existingEntry, exercise.targetSets),
       );
-      setRestTimerSeconds(remaining);
-      if (remaining === 0) {
-        restTimerEndsAt.current = null;
-        setRestTimerRunning(false);
-        navigator.vibrate?.([160, 80, 160]);
-        if (
-          'Notification' in window &&
-          Notification.permission === 'granted' &&
-          document.hidden
-        ) {
-          new Notification('Liftline rest complete', {
-            body: `${exercise.name}: ready for your next set.`,
-            icon: notificationIconHref,
-          });
-        }
-      }
+      setShowNotes(Boolean(existingEntry?.notes));
+    });
+    return () => {
+      cancelled = true;
     };
-    tick();
-    const timer = window.setInterval(tick, 1000);
-    return () => window.clearInterval(timer);
-  }, [exercise.name, restTimerRunning]);
+  }, [existingEntry, exercise.targetSets]);
 
   const phaseOneWeeklySummaries = useMemo(
     () => weeklySummariesForPhase(entries, sessionExercises, 1),
@@ -1328,11 +1295,8 @@ export function WorkoutApp() {
     0,
   );
   const phaseEntries = useMemo(
-    () =>
-      entries.filter(
-        (entry) => entry.week >= phaseStartWeek && entry.week <= phaseEndWeek,
-      ),
-    [entries, phaseEndWeek, phaseStartWeek],
+    () => entryIndex.byPhase.get(activePhase) ?? [],
+    [activePhase, entryIndex],
   );
   const totalRecords = useMemo(
     () => totalPersonalRecords(phaseEntries),
@@ -1343,14 +1307,8 @@ export function WorkoutApp() {
     .slice(0, visibleSetCount)
     .every((set) => numberOrNull(set.reps) != null);
   const currentSessionEntries = useMemo(
-    () =>
-      entries.filter(
-        (entry) =>
-          entry.completed &&
-          entry.week === activeWeek &&
-          entry.day === activeDay,
-      ),
-    [activeDay, activeWeek, entries],
+    () => entryIndex.completedBySession.get(`${activeWeek}|${activeDay}`) ?? [],
+    [activeDay, activeWeek, entryIndex],
   );
   const currentSessionVolume = currentSessionEntries.reduce(
     (sum, entry) => sum + entryVolume(entry),
@@ -1366,14 +1324,10 @@ export function WorkoutApp() {
   );
   const previousSessionVolume =
     activeWeek > phaseStartWeek
-      ? entries
-          .filter(
-            (entry) =>
-              entry.completed &&
-              entry.week === activeWeek - 1 &&
-              entry.day === activeDay,
-          )
-          .reduce((sum, entry) => sum + entryVolume(entry), 0)
+      ? (
+          entryIndex.completedBySession.get(`${activeWeek - 1}|${activeDay}`) ??
+          []
+        ).reduce((sum, entry) => sum + entryVolume(entry), 0)
       : 0;
   const sessionTimes = currentSessionEntries
     .map((entry) => Date.parse(entry.completedAt ?? ''))
@@ -1410,16 +1364,12 @@ export function WorkoutApp() {
     progressExerciseOptions.find(
       (item) => `${item.day}|${item.order}` === progressExerciseKey,
     ) ?? progressExerciseOptions[0]!;
-  const selectedProgressData = entries
-    .filter(
-      (entry) =>
-        entry.completed &&
-        entry.week >= phaseStartWeek &&
-        entry.week <= phaseEndWeek &&
-        entry.day === selectedProgressExercise.day &&
-        entry.exerciseOrder === selectedProgressExercise.order,
-    )
-    .sort((left, right) => left.week - right.week)
+  const selectedProgressData = [
+    ...(entryIndex.completedByExercise.get(
+      `${activePhase}|${selectedProgressExercise.day}|${selectedProgressExercise.order}`,
+    ) ?? []),
+  ]
+    .reverse()
     .map((entry) => ({
       week: displayWeekNumber(entry.week),
       ...workoutMetrics(entry),
@@ -1495,32 +1445,6 @@ export function WorkoutApp() {
     setVisibleSetCount((count) => Math.max(1, count - 1));
   }
 
-  function toggleRestTimer() {
-    if (restTimerRunning) {
-      const remaining = Math.max(
-        0,
-        Math.ceil(
-          ((restTimerEndsAt.current ?? Date.now()) - Date.now()) / 1000,
-        ),
-      );
-      restTimerEndsAt.current = null;
-      setRestTimerSeconds(remaining);
-      setRestTimerRunning(false);
-      return;
-    }
-    const startingSeconds =
-      restTimerSeconds === 0 ? suggestedRestSeconds : restTimerSeconds;
-    setRestTimerSeconds(startingSeconds);
-    restTimerEndsAt.current = Date.now() + startingSeconds * 1000;
-    setRestTimerRunning(true);
-  }
-
-  function startRestTimer() {
-    setRestTimerSeconds(suggestedRestSeconds);
-    restTimerEndsAt.current = Date.now() + suggestedRestSeconds * 1000;
-    setRestTimerRunning(true);
-  }
-
   function toggleSetComplete(index: number) {
     const set = draft.sets[index];
     if (!set.done && numberOrNull(set.reps) == null) {
@@ -1536,19 +1460,7 @@ export function WorkoutApp() {
           : currentSet,
       ),
     }));
-    if (!set.done) startRestTimer();
-  }
-
-  async function enableRestAlerts() {
-    if (!('Notification' in window)) return;
-    const permission = await Notification.requestPermission();
-    setRestAlertsEnabled(permission === 'granted');
-  }
-
-  function resetRestTimer() {
-    restTimerEndsAt.current = null;
-    setRestTimerRunning(false);
-    setRestTimerSeconds(suggestedRestSeconds);
+    if (!set.done) restTimerRef.current?.start();
   }
 
   function usePreviousSession() {
@@ -2534,60 +2446,14 @@ export function WorkoutApp() {
                       <CirclePlay className="size-4" /> See movement
                     </Button>
                   </div>
-                  <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/15 bg-background/90 p-3 shadow-sm shadow-slate-900/5">
-                    <div className="flex items-center gap-3">
-                      <span
-                        className={`grid size-9 shrink-0 place-items-center rounded-lg ${restTimerSeconds === 0 ? 'bg-success-soft text-success' : 'bg-accent text-primary'}`}
-                      >
-                        <Clock3 className="size-4" />
-                      </span>
-                      <div>
-                        <p className="font-sans text-xs font-medium text-muted-foreground">
-                          {restTimerSeconds === 0
-                            ? 'Rest complete'
-                            : `Rest timer · ${exercise.rest}`}
-                        </p>
-                        <time
-                          className="font-sans text-xl font-bold tabular-nums"
-                          aria-live="polite"
-                        >
-                          {formatTimer(restTimerSeconds)}
-                        </time>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {!restAlertsEnabled && notificationAlertsAvailable && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          onClick={enableRestAlerts}
-                        >
-                          <Bell /> Alerts
-                        </Button>
-                      )}
-                      <Button
-                        type="button"
-                        variant={restTimerRunning ? 'secondary' : 'default'}
-                        onClick={toggleRestTimer}
-                      >
-                        {restTimerRunning ? <Pause /> : <Play />}
-                        {restTimerRunning
-                          ? 'Pause'
-                          : restTimerSeconds === 0
-                            ? 'Again'
-                            : 'Start'}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon-sm"
-                        aria-label="Reset rest timer"
-                        onClick={resetRestTimer}
-                      >
-                        <TimerReset />
-                      </Button>
-                    </div>
-                  </div>
+                  <RestTimer
+                    key={`${activeWeek}|${activeDay}|${exercise.order}|${suggestedRestSeconds}`}
+                    ref={restTimerRef}
+                    exerciseName={exercise.name}
+                    restLabel={exercise.rest}
+                    suggestedSeconds={suggestedRestSeconds}
+                    notificationIconHref={notificationIconHref}
+                  />
                   <div className="mt-3 rounded-xl border border-primary/15 bg-background/90 p-3 shadow-sm shadow-slate-900/5">
                     <div className="flex items-center gap-3">
                       <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-accent text-primary">
@@ -3407,13 +3273,10 @@ export function WorkoutApp() {
                 >
                   <CarouselContent>
                     {days.map((day) => {
-                      const dayEntries = entries.filter(
-                        (entry) =>
-                          entry.completed &&
-                          entry.week >= phaseStartWeek &&
-                          entry.week <= phaseEndWeek &&
-                          entry.day === day,
-                      );
+                      const dayEntries =
+                        entryIndex.completedByPhaseDay.get(
+                          `${activePhase}|${day}`,
+                        ) ?? [];
                       const sessionCount = new Set(
                         dayEntries.map((entry) => entry.week),
                       ).size;
@@ -3502,21 +3365,10 @@ export function WorkoutApp() {
 
                             <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
                               {dayExercises.map((item) => {
-                                const exerciseEntries = dayEntries
-                                  .filter(
-                                    (entry) =>
-                                      entry.exerciseOrder === item.order,
-                                  )
-                                  .sort(
-                                    (a, b) =>
-                                      b.week - a.week ||
-                                      Date.parse(
-                                        b.completedAt ?? b.updatedAt ?? '',
-                                      ) -
-                                        Date.parse(
-                                          a.completedAt ?? a.updatedAt ?? '',
-                                        ),
-                                  );
+                                const exerciseEntries =
+                                  entryIndex.completedByExercise.get(
+                                    `${activePhase}|${day}|${item.order}`,
+                                  ) ?? [];
                                 const displayName =
                                   exerciseEntries[0]?.exercise ?? item.name;
 
@@ -4122,279 +3974,30 @@ export function WorkoutApp() {
         </Suspense>
       )}
 
-      {backupOpen && (
+      {(backupOpen || importOpen) && (
         <Suspense fallback={null}>
-          <Dialog
-            open={backupOpen}
-            onOpenChange={(open) => {
-              if (!backupBusy) setBackupOpen(open);
+          <DataManagementDialogs
+            backup={{
+              open: backupOpen,
+              busy: backupBusy,
+              fileName: backupFileName,
+              summary: backupSummary,
+              onOpenChange: setBackupOpen,
+              onPreviewFile: previewBackupFile,
+              onRestore: restoreBackup,
             }}
-          >
-            <DialogContent className="sm:max-w-lg">
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2 font-sans">
-                  <Upload className="size-5 text-primary" /> Restore Liftline
-                  backup
-                </DialogTitle>
-                <DialogDescription className="font-sans">
-                  Choose a Liftline JSON backup. You will see exactly how many
-                  records it contains before anything changes.
-                </DialogDescription>
-              </DialogHeader>
-              <label className="grid cursor-pointer place-items-center rounded-xl border border-dashed border-primary/35 bg-accent/25 px-5 py-8 text-center">
-                {backupBusy ? (
-                  <Loader2 className="size-6 animate-spin text-primary" />
-                ) : (
-                  <Upload className="size-6 text-primary" />
-                )}
-                <span className="mt-2 font-sans text-sm font-semibold">
-                  {backupFileName || 'Choose backup file'}
-                </span>
-                <span className="mt-1 font-sans text-xs text-muted-foreground">
-                  JSON files exported by Liftline
-                </span>
-                <input
-                  type="file"
-                  accept="application/json,.json"
-                  className="sr-only"
-                  onChange={previewBackupFile}
-                  disabled={backupBusy}
-                />
-              </label>
-              {backupSummary && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-xl bg-success-soft p-3">
-                    <p className="font-sans text-xl font-bold text-success">
-                      {backupSummary.newWorkoutRecords}
-                    </p>
-                    <p className="font-sans text-xs text-success/80">
-                      New records
-                    </p>
-                  </div>
-                  <div className="rounded-xl bg-warning-soft p-3">
-                    <p className="font-sans text-xl font-bold text-warning-foreground">
-                      {backupSummary.replacedWorkoutRecords}
-                    </p>
-                    <p className="font-sans text-xs text-warning-foreground/80">
-                      Records replaced
-                    </p>
-                  </div>
-                  <div className="col-span-2 rounded-xl bg-secondary p-3">
-                    <p className="font-sans text-sm font-semibold">
-                      {backupSummary.sessionChanges} session customizations
-                      {(backupSummary.bodyMeasurements ?? 0) > 0 &&
-                        ` · ${backupSummary.bodyMeasurements} body measurements`}
-                      {(backupSummary.readinessChecks ?? 0) > 0 &&
-                        ` · ${backupSummary.readinessChecks} readiness checks`}
-                    </p>
-                    <p className="font-sans text-xs text-muted-foreground">
-                      Records not contained in the backup will be kept.
-                    </p>
-                  </div>
-                </div>
-              )}
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  onClick={() => setBackupOpen(false)}
-                  disabled={backupBusy}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={restoreBackup}
-                  disabled={!backupSummary || backupBusy}
-                >
-                  {backupBusy ? (
-                    <Loader2 className="animate-spin" />
-                  ) : (
-                    <Upload />
-                  )}{' '}
-                  Restore backup
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </Suspense>
-      )}
-
-      {importOpen && (
-        <Suspense fallback={null}>
-          <Dialog
-            open={importOpen}
-            onOpenChange={(open) => {
-              if (!importingSheet) setImportOpen(open);
+            sheetImport={{
+              open: importOpen,
+              loading: loadingImport,
+              importing: importingSheet,
+              preview: importPreview,
+              selectedKeys: selectedImportKeys,
+              error: sheetImportError,
+              onOpenChange: setImportOpen,
+              onToggleItem: toggleImportItem,
+              onImportSelected: importSelectedSheetEntries,
             }}
-          >
-            <DialogContent className="h-[calc(100dvh-1.5rem)] max-h-[760px] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden p-0 sm:max-w-2xl">
-              <DialogHeader className="px-5 pt-5">
-                <DialogTitle className="font-sans text-lg font-semibold">
-                  Preview Google Sheet import
-                </DialogTitle>
-                <DialogDescription className="font-sans">
-                  Nothing changes until you confirm. New entries are selected;
-                  existing Liftline records remain protected unless you select
-                  them.
-                </DialogDescription>
-              </DialogHeader>
-
-              <div className="min-h-0 overflow-y-auto px-5 pb-2">
-                {loadingImport && (
-                  <div className="grid min-h-52 place-items-center text-muted-foreground">
-                    <div className="flex items-center gap-2 font-sans">
-                      <Loader2 className="size-5 animate-spin" /> Reading
-                      Workout Log…
-                    </div>
-                  </div>
-                )}
-                {sheetImportError && (
-                  <Alert variant="destructive" className="my-3">
-                    <AlertCircle />
-                    <AlertTitle>Import preview unavailable</AlertTitle>
-                    <AlertDescription>{sheetImportError}</AlertDescription>
-                  </Alert>
-                )}
-
-                {importPreview && !loadingImport && (
-                  <div className="space-y-4 py-2">
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="rounded-xl bg-success-soft p-3">
-                        <p className="font-sans text-xl font-bold text-success">
-                          {importPreview.summary.new}
-                        </p>
-                        <p className="font-sans text-xs text-success/80">New</p>
-                      </div>
-                      <div className="rounded-xl bg-secondary p-3">
-                        <p className="font-sans text-xl font-bold">
-                          {importPreview.summary.unchanged}
-                        </p>
-                        <p className="font-sans text-xs text-muted-foreground">
-                          Already matches
-                        </p>
-                      </div>
-                      <div className="rounded-xl bg-warning-soft p-3">
-                        <p className="font-sans text-xl font-bold text-warning-foreground">
-                          {importPreview.summary.protected}
-                        </p>
-                        <p className="font-sans text-xs text-warning-foreground/80">
-                          Protected
-                        </p>
-                      </div>
-                    </div>
-
-                    {importPreview.items.some(
-                      (item) => item.status !== 'unchanged',
-                    ) ? (
-                      <div className="space-y-2">
-                        {importPreview.items
-                          .filter((item) => item.status !== 'unchanged')
-                          .map((item) => {
-                            const selected = selectedImportKeys.includes(
-                              item.key,
-                            );
-                            return (
-                              <label
-                                key={item.key}
-                                className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors ${selected ? 'border-primary/35 bg-accent/35' : 'border-border/80 bg-card'}`}
-                              >
-                                <Checkbox
-                                  checked={selected}
-                                  onCheckedChange={(checked) =>
-                                    toggleImportItem(item.key, checked === true)
-                                  }
-                                  aria-label={`Import ${item.source.exercise}`}
-                                  className="mt-0.5"
-                                />
-                                <span className="min-w-0 flex-1">
-                                  <span className="flex flex-wrap items-center gap-2">
-                                    <span className="font-sans text-sm font-semibold">
-                                      Week {item.source.week} · Day{' '}
-                                      {item.source.day} · {item.source.exercise}
-                                    </span>
-                                    <Badge
-                                      className={`font-sans text-[10px] ${item.status === 'new' ? 'bg-success-soft text-success' : 'bg-warning-soft text-warning-foreground'}`}
-                                    >
-                                      {item.status === 'new'
-                                        ? 'New'
-                                        : 'Existing record'}
-                                    </Badge>
-                                  </span>
-                                  <span className="mt-1 block font-sans text-xs text-muted-foreground">
-                                    {sheetEntrySummary(item.source) ||
-                                      'No set values'}
-                                    {item.source.rir == null
-                                      ? ''
-                                      : ` · RIR ${item.source.rir}`}
-                                  </span>
-                                  {item.status === 'protected' && (
-                                    <span className="mt-1.5 flex items-center gap-1 font-sans text-xs font-medium text-warning-foreground">
-                                      <ShieldCheck className="size-3.5" />{' '}
-                                      Selecting this will replace the Liftline
-                                      values.
-                                    </span>
-                                  )}
-                                </span>
-                              </label>
-                            );
-                          })}
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-3 rounded-xl border border-success/25 bg-success-soft p-4 text-success">
-                        <CheckCircle2 className="size-5" />
-                        <p className="font-sans text-sm font-medium">
-                          Liftline already matches every completed Google Sheet
-                          row.
-                        </p>
-                      </div>
-                    )}
-
-                    {selectedImportKeys.some((key) =>
-                      importPreview.items.some(
-                        (item) =>
-                          item.key === key && item.status === 'protected',
-                      ),
-                    ) && (
-                      <Alert className="border-warning/25 bg-warning-soft text-warning-foreground">
-                        <ShieldCheck />
-                        <AlertTitle>Replacement selected</AlertTitle>
-                        <AlertDescription className="text-warning-foreground/80">
-                          One or more existing Liftline records will be replaced
-                          with the Google Sheet values when you confirm.
-                        </AlertDescription>
-                      </Alert>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <DialogFooter className="m-0 px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-                <Button
-                  variant="outline"
-                  onClick={() => setImportOpen(false)}
-                  disabled={importingSheet}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={importSelectedSheetEntries}
-                  disabled={
-                    !importPreview ||
-                    selectedImportKeys.length === 0 ||
-                    importingSheet
-                  }
-                >
-                  {importingSheet ? (
-                    <Loader2 className="animate-spin" />
-                  ) : (
-                    <Download />
-                  )}
-                  {importingSheet
-                    ? 'Importing…'
-                    : `Import selected${selectedImportKeys.length > 0 ? ` (${selectedImportKeys.length})` : ''}`}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          />
         </Suspense>
       )}
 
