@@ -10,7 +10,7 @@ Made with ChatGPT Codex
 
 The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgpt.site](https://liftline-strength-plan.ktanzyl.chatgpt.site). Access is restricted to the site owner.
 
-Current production version: **v3.8.1**
+Current production version: **v3.9.0**
 
 ## Features
 
@@ -43,13 +43,19 @@ Current production version: **v3.8.1**
 - Fast installed-app startup with a cached interface and immediate device-local display of the latest synced workouts
 - In-app animated movement guides with exercise-specific form cues and alternate movement choices
 - A mobile-friendly nutrition guide with daily targets, meal templates, practical restaurant choices, and progress rules
-- A separate tropical-themed Holiday mode with alternating A/B bodyweight sessions, rep-or-time logging, optional travel-equipment loads, exercise history, and completion recaps
+- A separate tropical-themed Holiday mode with alternating A/B bodyweight sessions, rep-or-time logging, optional travel-equipment loads, exercise history, animated movement guides, and completion recaps
 - A dedicated `Holiday Log` Google Sheet tab that keeps travel training separate from the 12-week programme
 - Responsive Material-inspired interface using Geist typography
 
 ## Version history
 
 Minor fixes, visual refinements, and deployment maintenance are grouped into the nearest feature release so this history focuses on meaningful product changes.
+
+### v3.9 — Holiday movement guides
+
+- Added an on-demand animated movement guide to every Holiday mode exercise, matching the guide experience in the main training plan.
+- Included travel-aware form cues and alternate demonstrations for combined movements such as backpack/band rows, push-up variations, and front/side planks.
+- Kept the guide code and animations out of the initial Holiday screen bundle until the guide is opened.
 
 ### v3.8 — Leaner charts and smoother workout logging
 
