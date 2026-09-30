@@ -237,6 +237,164 @@ const exerciseDemos: Record<string, ExerciseDemo> = {
       ]),
     ],
   },
+  'Bulgarian Split Squat': {
+    variants: [
+      variant('Bulgarian split squat', 'qx4fgX7.gif', [
+        'Set the front foot far enough forward to keep it flat throughout.',
+        'Lower the back knee while the front knee tracks with the toes.',
+        'Drive through the front leg and keep your hips level.',
+      ]),
+    ],
+  },
+  'Push-Ups': {
+    variants: [
+      variant('Push-up', 'I4hDWkc.gif', [
+        'Place your hands just outside shoulder width and brace your trunk.',
+        'Lower your chest while keeping your head, hips, and heels in one line.',
+        'Press the floor away without letting your hips sag or twist.',
+      ]),
+    ],
+  },
+  'Backpack or Resistance-Band Row': {
+    variants: [
+      variant(
+        'Backpack row pattern',
+        'BJ0Hz5L.gif',
+        [
+          'Hinge at the hips and keep your spine steady as the load hangs down.',
+          'Pull toward your lower ribs while keeping your shoulders away from your ears.',
+          'Lower slowly until your arms are long without rounding your back.',
+        ],
+        'The animation uses dumbbells. Hold a securely closed backpack and use the same hinge and rowing path.',
+      ),
+      variant(
+        'Resistance-band row',
+        'km0sQC0.gif',
+        [
+          'Use a secure anchor intended to resist exercise-band tension.',
+          'Keep your torso still and pull your elbow toward your back pocket.',
+          'Return under control without letting the band pull your shoulder forward.',
+        ],
+        'The animation shows the single-arm version. Repeat on both sides, or use two arms if your band setup allows it.',
+      ),
+    ],
+  },
+  'Single-Leg Romanian Deadlift': {
+    variants: [
+      variant(
+        'Single-leg Romanian deadlift',
+        'gKozT8X.gif',
+        [
+          'Keep a soft bend in the planted knee and reach the free leg behind you.',
+          'Hinge from the hip while keeping both hip bones facing the floor.',
+          'Stop when the hamstring limits you, then stand by driving the hip forward.',
+        ],
+        'Use bodyweight, a backpack, or a suitcase; the balance and hip-hinge pattern stays the same.',
+      ),
+    ],
+  },
+  'Pike Push-Up': {
+    variants: [
+      variant(
+        'Pike push-up pattern',
+        'XPUDTt7.gif',
+        [
+          'Start in an inverted V with your hips high and your hands firmly planted.',
+          'Bend your elbows and lower your head forward between your hands.',
+          'Press back to the inverted-V start while keeping your trunk controlled.',
+        ],
+        'The animation continues into a cobra transition. For the programmed pike push-up, reverse the movement after the pike lowering phase.',
+      ),
+    ],
+  },
+  'Single-Leg Hip Thrust or Glute Bridge': {
+    variants: [
+      variant('Single-leg glute bridge', 'rmEukuS.gif', [
+        'Plant one foot close enough that the heel stays heavy.',
+        'Keep your pelvis level as you drive the hip upward.',
+        'Pause with the glute engaged, then lower without arching your back.',
+      ]),
+    ],
+  },
+  'Reverse Snow Angel or Prone Y-T-W': {
+    variants: [
+      variant(
+        'Prone shoulder pattern',
+        'Ion0XWz.gif',
+        [
+          'Lie face down with your neck long and your ribs gently braced.',
+          'Move your arms slowly while keeping your shoulders away from your ears.',
+          'Use a small, controlled range and squeeze between the shoulder blades.',
+        ],
+        'The animation uses light dumbbells for a prone raise. Perform your snow angel or Y-T-W unloaded unless your program says otherwise.',
+      ),
+    ],
+  },
+  'Plank or Side Plank': {
+    variants: [
+      variant(
+        'Front plank',
+        'VBAWRPG.gif',
+        [
+          'Brace as if preparing for a punch and keep breathing.',
+          'Keep your head, rib cage, pelvis, and heels in one long line.',
+          'End the set when your hips sag or your lower back takes over.',
+        ],
+        'The animation includes added load. Use the bodyweight version for your holiday session.',
+      ),
+      variant('Side plank', 'RKjH6Lt.gif', [
+        'Place your elbow under your shoulder and stack your hips.',
+        'Lift into one straight line from your head to your feet.',
+        'Keep breathing and stop before your hips rotate or drop.',
+      ]),
+    ],
+  },
+  'Reverse Lunge': {
+    variants: [
+      variant(
+        'Reverse lunge',
+        'SSsBDwB.gif',
+        [
+          'Step back far enough that the front foot stays planted.',
+          'Lower both knees while keeping the front knee tracking with the toes.',
+          'Drive through the front leg to return to standing without rushing.',
+        ],
+        'The animation uses dumbbells. Perform it with bodyweight or a securely closed backpack as programmed.',
+      ),
+    ],
+  },
+  'Feet-Elevated or Standard Push-Up': {
+    variants: [
+      variant('Feet-elevated push-up', 'i5cEhka.gif', [
+        'Use a stable surface and keep your hands just outside shoulder width.',
+        'Brace so your shoulders, hips, and heels move as one unit.',
+        'Lower with control, then press the floor away without shrugging.',
+      ]),
+      variant('Standard push-up', 'I4hDWkc.gif', [
+        'Place your hands just outside shoulder width and brace your trunk.',
+        'Lower your chest while keeping your head, hips, and heels in one line.',
+        'Press the floor away without letting your hips sag or twist.',
+      ]),
+    ],
+  },
+  'Single-Leg Glute Bridge': {
+    variants: [
+      variant('Single-leg glute bridge', 'rmEukuS.gif', [
+        'Plant one foot close enough that the heel stays heavy.',
+        'Keep your pelvis level as you drive the hip upward.',
+        'Pause with the glute engaged, then lower without arching your back.',
+      ]),
+    ],
+  },
+  'Side Plank': {
+    variants: [
+      variant('Side plank', 'RKjH6Lt.gif', [
+        'Place your elbow under your shoulder and stack your hips.',
+        'Lift into one straight line from your head to your feet.',
+        'Keep breathing and stop before your hips rotate or drop.',
+      ]),
+    ],
+  },
   Plank: {
     variants: [
       variant(

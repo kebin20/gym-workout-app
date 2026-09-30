@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
   Backpack,
@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleAlert,
+  CirclePlay,
   Dumbbell,
   History,
   Loader2,
@@ -45,6 +46,8 @@ import type {
   HolidaySessionType,
   HolidayWorkoutEntry,
 } from '@/lib/holiday-workout-types';
+
+const ExerciseDemoDialog = lazy(() => import('./exercise-demo-dialog'));
 
 type HolidayExercise = {
   order: number;
@@ -297,6 +300,7 @@ export default function HolidayWorkout({
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [completeOpen, setCompleteOpen] = useState(false);
+  const [exerciseDemoOpen, setExerciseDemoOpen] = useState(false);
 
   const plan = holidayPlans[sessionType];
   const exercise = plan[exerciseIndex] ?? plan[0];
@@ -698,9 +702,21 @@ export default function HolidayWorkout({
                     </Badge>
                   )}
                 </div>
-                <CardDescription className="mt-2 text-[#52706e]">
-                  {exercise.muscles} · {exercise.cue}
-                </CardDescription>
+                <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <CardDescription className="text-[#52706e]">
+                    {exercise.muscles} · {exercise.cue}
+                  </CardDescription>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    aria-label={`Show an animated movement guide for ${exercise.name}`}
+                    onClick={() => setExerciseDemoOpen(true)}
+                    className="shrink-0 self-start border-teal-800/20 bg-white text-teal-800 hover:bg-teal-50 hover:text-teal-900 sm:self-auto"
+                  >
+                    <CirclePlay className="size-4" /> See movement
+                  </Button>
+                </div>
                 <div className="mt-3 h-2 overflow-hidden rounded-full bg-teal-100">
                   <div
                     className="h-full rounded-full bg-[linear-gradient(90deg,#0f766e,#14b8a6)] transition-[width]"
@@ -1043,6 +1059,17 @@ export default function HolidayWorkout({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {exerciseDemoOpen && (
+        <Suspense fallback={null}>
+          <ExerciseDemoDialog
+            key={exercise.name}
+            exerciseName={exercise.name}
+            open={exerciseDemoOpen}
+            onOpenChange={setExerciseDemoOpen}
+          />
+        </Suspense>
+      )}
     </main>
   );
 }
