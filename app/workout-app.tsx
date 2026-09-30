@@ -653,7 +653,6 @@ function startupSessionForWeek(
   const completedEntries = entries.filter((entry) => entry.completed);
   const startupWeek = findStartupWeek(
     scheduledWeek,
-    (week) => completedEntries.some((entry) => entry.week === week),
     (week) =>
       days.every((day) => {
         const required = planForSession(sessionExercises, week, day).filter(
