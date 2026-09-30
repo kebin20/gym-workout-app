@@ -10,7 +10,7 @@ Made with ChatGPT Codex
 
 The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgpt.site](https://liftline-strength-plan.ktanzyl.chatgpt.site). Access is restricted to the site owner.
 
-Current production version: **v3.8.0**
+Current production version: **v3.8.1**
 
 ## Features
 
@@ -53,6 +53,7 @@ Minor fixes, visual refinements, and deployment maintenance are grouped into the
 
 ### v3.8 — Leaner charts and smoother workout logging
 
+- Keep startup on the earliest incomplete programme week through today's scheduled week, including weeks with no logged exercises, so Liftline never skips an untouched week.
 - Replaced the general-purpose charting library with accessible native SVG progress charts, removing the largest optional JavaScript dependency while preserving weekly volume, top-weight, and estimated-max views.
 - Isolated the rest timer into its own component so each one-second countdown update no longer rerenders the full workout dashboard.
 - Moved backup restore and Google Sheet import dialogs into an on-demand chunk that loads only when either tool is opened.
