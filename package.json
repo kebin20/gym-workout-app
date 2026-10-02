@@ -1,6 +1,6 @@
 {
   "name": "sites-project",
-  "version": "3.9.0",
+  "version": "3.10.0",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
@@ -13,7 +13,8 @@
     "lint": "oxlint",
     "format": "oxfmt",
     "db:generate": "drizzle-kit generate",
-    "verify:brand": "node scripts/verify-brand-assets.mjs"
+    "verify:brand": "node scripts/verify-brand-assets.mjs",
+    "test:workout": "node --test scripts/test-workout-reliability.mjs"
   },
   "dependencies": {
     "react": "19.2.6",

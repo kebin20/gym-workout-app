@@ -10,7 +10,7 @@ Made with ChatGPT Codex
 
 The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgpt.site](https://liftline-strength-plan.ktanzyl.chatgpt.site). Access is restricted to the site owner.
 
-Current production version: **v3.9.0**
+Current production version: **v3.10.0**
 
 ## Features
 
@@ -23,6 +23,9 @@ Current production version: **v3.9.0**
 - Exercise-aware rest timer with pause, resume, reset, and completion vibration where supported
 - Automatic rest-timer start when a set is marked complete, with optional background notifications
 - Per-set completion tracking and exercise notes
+- Device-local draft recovery for unfinished main-plan and Holiday inputs, including notes, RIR, and set counts
+- Optional persistent Workout focus view for quick access to exercise logging without the dashboard
+- Accurate day completion indicators that distinguish partial exercise progress from a finished session
 - Automatic volume totals and next-session progression guidance
 - Personal-record detection for weight, reps, volume, and estimated strength
 - Weekly session progress plus selectable per-exercise progress charts
@@ -50,6 +53,16 @@ Current production version: **v3.9.0**
 ## Version history
 
 Minor fixes, visual refinements, and deployment maintenance are grouped into the nearest feature release so this history focuses on meaningful product changes.
+
+### v3.10 — Recoverable drafts and focused workouts
+
+- Recover unfinished exercise inputs when navigating between exercises or reopening the app, with separate main-plan and Holiday drafts and clear device-save status.
+- Resume the most recently edited draft in the earliest unfinished main-plan day; never jump past an untouched week.
+- Add an optional Workout focus view that hides dashboard artwork, metrics, and side panels while retaining exercise controls, rest timer, movement guides, and day navigation. The preference stays on the device.
+- Show partial exercise counts on day tabs, with a checkmark only when every non-skipped exercise is complete.
+- Bound installed-app network-first startup to one second when an offline shell exists, while refreshing in the background. Explicit version URLs remain network-first, and sign-in routes are never served from the workout-shell cache.
+- Make cached workout logs, programme dates, and recovered drafts immediately usable while the server refresh runs in the background, without changing the selected exercise mid-session.
+- Keep local drafts separate from saved workout records. Drafts expire after 30 days, are capped at 32 exercises, and are removed after a successful save or accepted main-plan offline queue submission.
 
 ### v3.9 — Holiday movement guides
 
@@ -242,6 +255,7 @@ npm run start        # Run the built Worker locally with Wrangler
 npm run lint         # Run oxlint
 npm run format       # Format the project with oxfmt
 npm run db:generate  # Generate a Drizzle migration after schema changes
+npm run test:workout # Run draft, completion and installed-startup regression checks
 ```
 
 ## Release workflow
