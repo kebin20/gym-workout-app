@@ -1,4 +1,4 @@
-const cacheVersion = 'liftline-3.9.0-1';
+const cacheVersion = 'liftline-3.10.0-1';
 const shellCache = `${cacheVersion}-shell`;
 const assetCache = `${cacheVersion}-assets`;
 
@@ -107,12 +107,14 @@ self.addEventListener('fetch', (event) => {
     return;
 
   if (request.mode === 'navigate') {
+    // Authentication and other platform routes must never be replaced by the
+    // cached workout interface or overwrite its root shell.
+    if (url.pathname !== '/') return;
     event.respondWith(
       (async () => {
         const cache = await caches.open(shellCache);
         const cached = await cache.match('/');
-        const preferFresh =
-          url.searchParams.has('v') || url.searchParams.get('source') === 'pwa';
+        const preferFresh = url.searchParams.has('v');
         const refresh = (async () => {
           try {
             const response =
@@ -130,6 +132,25 @@ self.addEventListener('fetch', (event) => {
             return null;
           }
         })();
+
+        if (
+          !preferFresh &&
+          cached &&
+          url.searchParams.get('source') === 'pwa'
+        ) {
+          // Give fast connections a chance to validate the private Site, but
+          // don't hold an installed launch behind a slow network indefinitely.
+          event.waitUntil(refresh);
+          let timer;
+          const response = await Promise.race([
+            refresh,
+            new Promise((resolve) => {
+              timer = setTimeout(() => resolve(null), 1000);
+            }),
+          ]);
+          clearTimeout(timer);
+          return response ?? cached;
+        }
 
         if (preferFresh) {
           const response = await refresh;

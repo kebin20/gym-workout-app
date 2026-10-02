@@ -299,6 +299,12 @@
     min-height: 7.5rem;
   }
 
+  .beta-workout-focus .beta-today-layout {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 48rem;
+    margin-inline: auto;
+  }
+
   .workout-history-card {
     content-visibility: auto;
     contain-intrinsic-size: auto 22rem;

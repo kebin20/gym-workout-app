@@ -33,6 +33,7 @@ import {
   Download,
   Dumbbell,
   FileSpreadsheet,
+  Focus,
   History,
   Home,
   Loader2,
@@ -95,6 +96,9 @@ import {
   workoutMetrics,
 } from '@/lib/workout-metrics';
 import { findStartupWeek } from '@/lib/startup-week';
+import { latestDraftKey } from '@/lib/exercise-drafts';
+import { sessionProgress } from '@/lib/session-progress';
+import { useExerciseDraft } from './use-exercise-draft';
 import type { SessionExercise, WorkoutEntry } from '@/lib/workout-types';
 import type { ProgramSchedule } from './training-tools-dialog';
 
@@ -167,6 +171,7 @@ type SheetImportPreview = {
 const workoutCacheKey = 'liftline.workout-entries.v1';
 const sessionExerciseCacheKey = 'liftline.session-exercises.v1';
 const pendingWorkoutKey = 'liftline.pending-workouts.v1';
+const scheduleCacheKey = 'liftline.programme-schedule.v1';
 const setNumbers = [1, 2, 3, 4, 5] as const;
 const emptyDraft: Draft = {
   sets: Array.from({ length: 5 }, () => ({
@@ -257,6 +262,53 @@ function cacheSessionExercises(exercises: SessionExercise[]) {
   }
 }
 
+function readCachedSchedule(): ProgramSchedule | null {
+  try {
+    const value = JSON.parse(
+      window.localStorage.getItem(scheduleCacheKey) ?? 'null',
+    );
+    const validDate = (date: unknown) =>
+      typeof date === 'string' &&
+      /^\d{4}-\d{2}-\d{2}$/.test(date) &&
+      Number.isFinite(Date.parse(date));
+    return value &&
+      validDate(value.phase1StartDate) &&
+      validDate(value.phase2StartDate)
+      ? value
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function cacheSchedule(schedule: ProgramSchedule) {
+  try {
+    window.localStorage.setItem(scheduleCacheKey, JSON.stringify(schedule));
+  } catch {
+    /* Server settings remain authoritative. */
+  }
+}
+
+function resumeDraftIndex(
+  plan: PlannedExercise[],
+  week: number,
+  day: TrainingDay,
+) {
+  try {
+    const key = latestDraftKey(`workout:${week}:${day}:`, window.localStorage);
+    return Math.max(
+      0,
+      plan.findIndex(
+        (item) =>
+          !item.skipped &&
+          key === `workout:${week}:${day}:${item.order}:${item.name}`,
+      ),
+    );
+  } catch {
+    return 0;
+  }
+}
+
 function readPendingWorkouts(): PendingWorkout[] {
   try {
     const value = window.localStorage.getItem(pendingWorkoutKey);
@@ -270,8 +322,9 @@ function readPendingWorkouts(): PendingWorkout[] {
 function cachePendingWorkouts(queue: PendingWorkout[]) {
   try {
     window.localStorage.setItem(pendingWorkoutKey, JSON.stringify(queue));
+    return true;
   } catch {
-    /* Best-effort offline queue. */
+    return false;
   }
 }
 
@@ -651,25 +704,23 @@ function startupSessionForWeek(
   scheduledWeek: number,
 ) {
   const completedEntries = entries.filter((entry) => entry.completed);
-  const startupWeek = findStartupWeek(
-    scheduledWeek,
-    (week) =>
-      days.every((day) => {
-        const required = planForSession(sessionExercises, week, day).filter(
-          (item) => !item.skipped,
-        );
-        return (
-          required.length > 0 &&
-          required.every((item) =>
-            completedEntries.some(
-              (entry) =>
-                entry.week === week &&
-                entry.day === day &&
-                entry.exerciseOrder === item.order,
-            ),
-          )
-        );
-      }),
+  const startupWeek = findStartupWeek(scheduledWeek, (week) =>
+    days.every((day) => {
+      const required = planForSession(sessionExercises, week, day).filter(
+        (item) => !item.skipped,
+      );
+      return (
+        required.length > 0 &&
+        required.every((item) =>
+          completedEntries.some(
+            (entry) =>
+              entry.week === week &&
+              entry.day === day &&
+              entry.exerciseOrder === item.order,
+          ),
+        )
+      );
+    }),
   );
 
   return {
@@ -905,7 +956,7 @@ export function WorkoutApp() {
   const [sessionExercises, setSessionExercises] = useState<SessionExercise[]>(
     [],
   );
-  const [draft, setDraft] = useState<Draft>(emptyDraft);
+  const [workoutFocus, setWorkoutFocus] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [syncingSheet, setSyncingSheet] = useState(false);
@@ -921,7 +972,6 @@ export function WorkoutApp() {
   const [notice, setNotice] = useState('');
   const [showNotes, setShowNotes] = useState(false);
   const [activeTipIndex, setActiveTipIndex] = useState(0);
-  const [visibleSetCount, setVisibleSetCount] = useState(3);
   const [isOnline, setIsOnline] = useState(true);
   const [pendingWorkoutCount, setPendingWorkoutCount] = useState(0);
   const [personalRecords, setPersonalRecords] = useState<string[]>([]);
@@ -1032,6 +1082,43 @@ export function WorkoutApp() {
         }),
       )
     : undefined;
+  const draftKey = `workout:${activeWeek}:${activeDay}:${exercise.order}:${exercise.name}`;
+  const exerciseDraft = useExerciseDraft(
+    draftKey,
+    {
+      ...draftFromEntry(existingEntry),
+      setCount: visibleSetsForEntry(existingEntry, exercise.targetSets),
+    },
+    !loading,
+  );
+  const draft = exerciseDraft.value;
+  const visibleSetCount = draft.setCount;
+  function setDraft(update: Draft | ((current: Draft) => Draft)) {
+    exerciseDraft.setValue((current) => ({
+      ...(typeof update === 'function' ? update(current) : update),
+      setCount: current.setCount,
+    }));
+  }
+  function setVisibleSetCount(update: number | ((current: number) => number)) {
+    exerciseDraft.setValue((current) => ({
+      ...current,
+      setCount:
+        typeof update === 'function' ? update(current.setCount) : update,
+    }));
+  }
+  const dayProgress = useMemo(
+    () =>
+      Object.fromEntries(
+        days.map((day) => [
+          day,
+          sessionProgress(
+            planForSession(sessionExercises, activeWeek, day),
+            entryIndex.completedBySession.get(`${activeWeek}|${day}`) ?? [],
+          ),
+        ]),
+      ) as Record<TrainingDay, ReturnType<typeof sessionProgress>>,
+    [activeWeek, entryIndex, sessionExercises],
+  );
   const previousEntry = exercise
     ? entryIndex.completedByExercise
         .get(`${activePhase}|${activeDay}|${exercise.order}`)
@@ -1071,7 +1158,10 @@ export function WorkoutApp() {
       );
       setEntries(freshEntries);
       setSessionExercises(freshSessionExercises);
-      if (data.schedule) setSchedule(data.schedule);
+      if (data.schedule) {
+        setSchedule(data.schedule);
+        cacheSchedule(data.schedule);
+      }
       cacheWorkoutEntries(freshEntries, data.serverTime);
       cacheSessionExercises(freshSessionExercises);
       return freshEntries;
@@ -1131,15 +1221,40 @@ export function WorkoutApp() {
     const cachedSnapshot = readCachedWorkoutEntries();
     const cachedEntries = cachedSnapshot?.entries ?? null;
     const cachedSessionExercises = readCachedSessionExercises();
+    const cachedSchedule = readCachedSchedule();
+    if (cachedSchedule) setSchedule(cachedSchedule);
     if (cachedEntries) {
       setEntries(cachedEntries);
+      const cachedPhaseTwoUnlocked = weeklySummariesForPhase(
+        cachedEntries,
+        cachedSessionExercises,
+        1,
+      ).every((week) => week.sessions === 3);
       const startupSession = startupSessionForWeek(
         cachedEntries,
         cachedSessionExercises,
-        initialWeek,
+        scheduledWeekForToday(
+          cachedSchedule ?? defaultSchedule,
+          cachedPhaseTwoUnlocked,
+        ),
       );
       setActiveWeek(startupSession.week);
       setActiveDay(startupSession.day);
+      setActiveIndex(
+        resumeDraftIndex(
+          planForSession(
+            cachedSessionExercises,
+            startupSession.week,
+            startupSession.day,
+          ),
+          startupSession.week,
+          startupSession.day,
+        ),
+      );
+      // Cached workouts are usable immediately; refresh the authoritative data
+      // without holding logging behind a slow connection or changing its cursor.
+      startupWeekApplied.current = true;
+      setLoading(false);
     }
     if (cachedSessionExercises.length > 0)
       setSessionExercises(cachedSessionExercises);
@@ -1237,19 +1352,29 @@ export function WorkoutApp() {
   }, [activeTrainingTips.length]);
 
   useEffect(() => {
-    let cancelled = false;
-    queueMicrotask(() => {
-      if (cancelled) return;
-      setDraft(draftFromEntry(existingEntry));
-      setVisibleSetCount(
-        visibleSetsForEntry(existingEntry, exercise.targetSets),
+    setShowNotes(false);
+  }, [draftKey]);
+
+  useLayoutEffect(() => {
+    try {
+      setWorkoutFocus(
+        window.localStorage.getItem('liftline.workout-focus.v1') === 'true',
       );
-      setShowNotes(Boolean(existingEntry?.notes));
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [existingEntry, exercise.targetSets]);
+    } catch {
+      /* An optional device preference. */
+    }
+  }, []);
+
+  function toggleWorkoutFocus() {
+    const next = !workoutFocus;
+    setWorkoutFocus(next);
+    try {
+      window.localStorage.setItem('liftline.workout-focus.v1', String(next));
+    } catch {
+      /* Focus still works without storage. */
+    }
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }
 
   const phaseOneWeeklySummaries = useMemo(
     () => weeklySummariesForPhase(entries, sessionExercises, 1),
@@ -1278,7 +1403,14 @@ export function WorkoutApp() {
     );
     setActiveWeek(startupSession.week);
     setActiveDay(startupSession.day);
-    setActiveIndex(0);
+    const startupPlan = planForSession(
+      sessionExercises,
+      startupSession.week,
+      startupSession.day,
+    );
+    setActiveIndex(
+      resumeDraftIndex(startupPlan, startupSession.week, startupSession.day),
+    );
   }, [entries, loading, phaseTwoUnlocked, schedule, sessionExercises]);
 
   const currentSummary = weeklySummaries[activeDisplayWeek - 1];
@@ -1373,11 +1505,7 @@ export function WorkoutApp() {
       week: displayWeekNumber(entry.week),
       ...workoutMetrics(entry),
     }));
-  const currentSessionComplete = dayExercises
-    .filter((item) => !item.skipped)
-    .every((item) =>
-      currentSessionEntries.some((entry) => entry.exerciseOrder === item.order),
-    );
+  const currentSessionComplete = dayProgress[activeDay].complete;
 
   function selectPhase(phase: 1 | 2) {
     if (phase === 2 && !phaseTwoUnlocked) {
@@ -1566,9 +1694,17 @@ export function WorkoutApp() {
         ...readPendingWorkouts().filter((item) => item.key !== key),
         { key, payload },
       ];
-      cachePendingWorkouts(queue);
+      if (!cachePendingWorkouts(queue)) {
+        setEntries(entries);
+        cacheWorkoutEntries(entries);
+        setSessionCelebrationPending(false);
+        setPersonalRecordOpen(false);
+        return false;
+      }
       setPendingWorkoutCount(queue.length);
       setIsOnline(navigator.onLine);
+      exerciseDraft.clear();
+      return true;
     };
 
     const advance = () => {
@@ -1579,7 +1715,13 @@ export function WorkoutApp() {
     };
 
     if (!navigator.onLine) {
-      queueForLater();
+      if (!queueForLater()) {
+        setError(
+          'Device storage is unavailable. Your inputs have not been logged. Keep this page open and reconnect before saving.',
+        );
+        setSaving(false);
+        return;
+      }
       setNotice(`${exercise.name} saved offline. It will sync automatically.`);
       setSaving(false);
       advance();
@@ -1612,12 +1754,18 @@ export function WorkoutApp() {
       setNotice(
         `${exercise.name} saved to Liftline${data.sheetSyncQueued ? ' · Sheet sync queued' : ''}`,
       );
+      exerciseDraft.clear();
       window.setTimeout(() => {
         void refreshWorkoutData().catch(() => undefined);
       }, 3500);
       advance();
     } catch (saveError) {
-      queueForLater();
+      if (!queueForLater()) {
+        setError(
+          'Unable to save online or keep an offline queue on this device. Your inputs remain here; keep this page open and try saving again.',
+        );
+        return;
+      }
       setNotice(
         `${exercise.name} is safe on this device and will retry automatically.`,
       );
@@ -1979,7 +2127,9 @@ export function WorkoutApp() {
   }
 
   return (
-    <main className="liftline-beta min-h-screen bg-background pb-[calc(6rem+env(safe-area-inset-bottom))] font-sans text-foreground md:pb-10">
+    <main
+      className={`liftline-beta ${workoutFocus ? 'beta-workout-focus' : ''} min-h-screen bg-background pb-[calc(6rem+env(safe-area-inset-bottom))] font-sans text-foreground md:pb-10`}
+    >
       <header className="beta-app-header sticky top-0 z-30 border-b border-border/70 bg-card/90 backdrop-blur-xl">
         <div className="beta-header-inner mx-auto flex min-h-18 max-w-6xl items-center justify-between gap-3 pb-3 pt-[calc(.75rem+env(safe-area-inset-top))]">
           <button
@@ -2004,7 +2154,11 @@ export function WorkoutApp() {
                 aria-label={`${isOnline ? 'Online' : 'Offline'}. ${
                   pendingWorkoutCount > 0
                     ? `${pendingWorkoutCount} changes pending`
-                    : 'Changes saved'
+                    : exerciseDraft.dirty
+                      ? exerciseDraft.persisted
+                        ? 'Draft saved on this device'
+                        : 'Unsaved draft'
+                      : 'Changes saved'
                 }`}
               >
                 <span
@@ -2013,7 +2167,11 @@ export function WorkoutApp() {
                 />
                 {pendingWorkoutCount > 0
                   ? `${pendingWorkoutCount} pending`
-                  : 'Changes saved'}
+                  : exerciseDraft.dirty
+                    ? exerciseDraft.persisted
+                      ? 'Draft on device'
+                      : 'Unsaved draft'
+                    : 'Changes saved'}
               </span>
             </span>
           </button>
@@ -2194,165 +2352,218 @@ export function WorkoutApp() {
         )}
 
         {view === 'today' && (
-          <div className="beta-today-layout grid gap-5 md:grid-cols-[minmax(0,1fr)_320px]">
+          <div
+            className={`beta-today-layout grid gap-5 ${workoutFocus ? 'mx-auto max-w-3xl' : 'md:grid-cols-[minmax(0,1fr)_320px]'}`}
+          >
             <section className="beta-workout-column min-w-0 space-y-5">
-              <div className="beta-dashboard-intro flex flex-wrap items-end justify-between gap-4">
-                <div className="min-w-0">
-                  <p className="beta-eyebrow">Training dashboard</p>
-                  <h1 className="font-sans text-2xl font-bold tracking-tight sm:text-3xl">
-                    Ready for your next set?
-                  </h1>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Pick up exactly where you left off.
-                  </p>
-                  <div className="beta-week-picker mt-5 flex flex-wrap items-center gap-x-3 gap-y-2">
-                    <label
-                      htmlFor="week"
-                      className="text-xs font-bold uppercase tracking-[0.14em] text-primary"
-                    >
-                      WEEK
-                    </label>
-                    <span className="relative inline-flex">
-                      <select
-                        id="week"
-                        value={activeWeek}
-                        onChange={(event) =>
-                          selectWeek(Number(event.target.value))
-                        }
-                        className="h-11 appearance-none rounded-2xl border bg-card py-2 pl-4 pr-12 text-base font-semibold shadow-sm outline-none focus:ring-3 focus:ring-ring/30"
-                      >
-                        {Array.from({ length: 12 }, (_, index) => (
-                          <option
-                            key={phaseStartWeek + index}
-                            value={phaseStartWeek + index}
-                          >
-                            Week {index + 1}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown
-                        aria-hidden="true"
-                        className="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-                      />
-                    </span>
-                    <span className="text-sm font-medium text-muted-foreground">
-                      · {weekDates[activeWeek - 1]}
-                    </span>
-                  </div>
-                </div>
-                <Badge
-                  variant="secondary"
-                  className="h-7 bg-success-soft px-3 text-success"
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-muted-foreground">
+                  Phase {activePhase} · Week {activeDisplayWeek} · Day{' '}
+                  {activeDay}
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  aria-pressed={workoutFocus}
+                  onClick={toggleWorkoutFocus}
                 >
-                  <CheckCircle2 /> {sessionsDone} of 3 sessions
-                </Badge>
+                  <Focus /> {workoutFocus ? 'Show overview' : 'Workout focus'}
+                </Button>
               </div>
-
-              <div className="beta-training-spotlight">
-                <div className="beta-training-spotlight-copy">
-                  <p className="beta-eyebrow">Move well today</p>
-                  <h2 className="font-sans text-lg font-bold tracking-tight sm:text-xl">
-                    {exercise.name}
-                  </h2>
-                  <p className="mt-1 max-w-sm font-sans text-sm text-muted-foreground">
-                    {targetLabel(exercise)} · {exercise.muscles}
-                  </p>
+              {workoutFocus && (
+                <div
+                  className="grid grid-cols-3 gap-2"
+                  aria-label="Training days"
+                >
+                  {days.map((day) => (
+                    <Button
+                      key={day}
+                      type="button"
+                      variant={day === activeDay ? 'default' : 'outline'}
+                      onClick={() => chooseDay(day)}
+                      aria-label={`Day ${day}, ${dayProgress[day].count} of ${dayProgress[day].total} exercises complete`}
+                    >
+                      Day {day}{' '}
+                      <span className="text-xs">
+                        {dayProgress[day].complete
+                          ? '✓'
+                          : `${dayProgress[day].count}/${dayProgress[day].total}`}
+                      </span>
+                    </Button>
+                  ))}
                 </div>
-                <div className="beta-training-spotlight-art" aria-hidden="true">
-                  <img
-                    src="/illustrations/goblet-squat.webp"
-                    alt=""
-                    width={512}
-                    height={768}
-                    loading="eager"
-                    fetchPriority="high"
-                    decoding="async"
-                  />
-                </div>
-              </div>
-
-              <div className="beta-metrics-grid" aria-label="Training overview">
-                <DashboardMetric
-                  icon={Activity}
-                  label="This week"
-                  value={`${sessionsDone}/3`}
-                  detail="sessions"
-                  progress={weeklyPercent}
-                  accent="#2164f3"
-                />
-                <DashboardMetric
-                  icon={TrendingUp}
-                  label="Volume"
-                  value={Math.round(currentSummary.volume).toLocaleString()}
-                  detail="kg logged"
-                  progress={Math.min(
-                    100,
-                    (currentSummary.volume / 12000) * 100,
-                  )}
-                  accent="#7357f6"
-                />
-                <DashboardMetric
-                  icon={Medal}
-                  label="Phase"
-                  value={`${totalSessions}/36`}
-                  detail="sessions"
-                  progress={(totalSessions / 36) * 100}
-                  accent="#9a4ff4"
-                />
-              </div>
-
-              <Card className="beta-week-card border-0 text-primary-foreground ring-0 shadow-xl shadow-primary/10 [background:var(--hero)]">
-                <CardHeader className="pb-1">
-                  <CardTitle className="font-sans text-lg font-semibold text-primary-foreground">
-                    Phase {activePhase} · Week {activeDisplayWeek} progress
-                  </CardTitle>
-                  <CardDescription className="font-sans text-primary-foreground/90">
-                    {sessionsDone === 3
-                      ? 'Week complete—excellent consistency.'
-                      : `${3 - sessionsDone} session${3 - sessionsDone === 1 ? '' : 's'} left this week.`}
-                  </CardDescription>
-                  <CardAction className="rounded-xl bg-black/15 px-3 py-2 text-right backdrop-blur-sm">
-                    <p className="font-sans text-xl font-bold text-primary-foreground">
-                      {weeklyPercent}%
-                    </p>
-                    <p className="font-sans text-[11px] text-primary-foreground/85">
-                      complete
-                    </p>
-                  </CardAction>
-                </CardHeader>
-                <CardContent>
-                  <progress
-                    aria-label="Week progress"
-                    max={100}
-                    value={weeklyPercent}
-                    className="h-2 w-full appearance-none overflow-hidden rounded-full bg-black/20 [&::-moz-progress-bar]:rounded-full [&::-moz-progress-bar]:bg-white [&::-webkit-progress-bar]:rounded-full [&::-webkit-progress-bar]:bg-black/20 [&::-webkit-progress-value]:rounded-full [&::-webkit-progress-value]:bg-white"
-                  />
-                  <div className="mt-3 grid grid-cols-3 gap-2 text-sm font-medium">
-                    {days.map((day) => {
-                      const complete = entries.some(
-                        (entry) =>
-                          entry.week === activeWeek &&
-                          entry.day === day &&
-                          entry.completed,
-                      );
-                      return (
-                        <button
-                          key={day}
-                          type="button"
-                          onClick={() => chooseDay(day)}
-                          className={`rounded-lg px-3 py-2 text-left font-sans transition-colors ${activeDay === day ? 'bg-white text-primary' : 'bg-black/15 text-white hover:bg-black/20'}`}
+              )}
+              {!workoutFocus && (
+                <>
+                  <div className="beta-dashboard-intro flex flex-wrap items-end justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="beta-eyebrow">Training dashboard</p>
+                      <h1 className="font-sans text-2xl font-bold tracking-tight sm:text-3xl">
+                        Ready for your next set?
+                      </h1>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Pick up exactly where you left off.
+                      </p>
+                      <div className="beta-week-picker mt-5 flex flex-wrap items-center gap-x-3 gap-y-2">
+                        <label
+                          htmlFor="week"
+                          className="text-xs font-bold uppercase tracking-[0.14em] text-primary"
                         >
-                          Day {day}
-                          <span className="float-right">
-                            {complete ? '✓' : activeDay === day ? '→' : '·'}
-                          </span>
-                        </button>
-                      );
-                    })}
+                          WEEK
+                        </label>
+                        <span className="relative inline-flex">
+                          <select
+                            id="week"
+                            value={activeWeek}
+                            onChange={(event) =>
+                              selectWeek(Number(event.target.value))
+                            }
+                            className="h-11 appearance-none rounded-2xl border bg-card py-2 pl-4 pr-12 text-base font-semibold shadow-sm outline-none focus:ring-3 focus:ring-ring/30"
+                          >
+                            {Array.from({ length: 12 }, (_, index) => (
+                              <option
+                                key={phaseStartWeek + index}
+                                value={phaseStartWeek + index}
+                              >
+                                Week {index + 1}
+                              </option>
+                            ))}
+                          </select>
+                          <ChevronDown
+                            aria-hidden="true"
+                            className="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                          />
+                        </span>
+                        <span className="text-sm font-medium text-muted-foreground">
+                          · {weekDates[activeWeek - 1]}
+                        </span>
+                      </div>
+                    </div>
+                    <Badge
+                      variant="secondary"
+                      className="h-7 bg-success-soft px-3 text-success"
+                    >
+                      <CheckCircle2 /> {sessionsDone} of 3 sessions
+                    </Badge>
                   </div>
-                </CardContent>
-              </Card>
 
+                  <div className="beta-training-spotlight">
+                    <div className="beta-training-spotlight-copy">
+                      <p className="beta-eyebrow">Move well today</p>
+                      <h2 className="font-sans text-lg font-bold tracking-tight sm:text-xl">
+                        {exercise.name}
+                      </h2>
+                      <p className="mt-1 max-w-sm font-sans text-sm text-muted-foreground">
+                        {targetLabel(exercise)} · {exercise.muscles}
+                      </p>
+                    </div>
+                    <div
+                      className="beta-training-spotlight-art"
+                      aria-hidden="true"
+                    >
+                      <img
+                        src="/illustrations/goblet-squat.webp"
+                        alt=""
+                        width={512}
+                        height={768}
+                        loading="eager"
+                        fetchPriority="high"
+                        decoding="async"
+                      />
+                    </div>
+                  </div>
+
+                  <div
+                    className="beta-metrics-grid"
+                    aria-label="Training overview"
+                  >
+                    <DashboardMetric
+                      icon={Activity}
+                      label="This week"
+                      value={`${sessionsDone}/3`}
+                      detail="sessions"
+                      progress={weeklyPercent}
+                      accent="#2164f3"
+                    />
+                    <DashboardMetric
+                      icon={TrendingUp}
+                      label="Volume"
+                      value={Math.round(currentSummary.volume).toLocaleString()}
+                      detail="kg logged"
+                      progress={Math.min(
+                        100,
+                        (currentSummary.volume / 12000) * 100,
+                      )}
+                      accent="#7357f6"
+                    />
+                    <DashboardMetric
+                      icon={Medal}
+                      label="Phase"
+                      value={`${totalSessions}/36`}
+                      detail="sessions"
+                      progress={(totalSessions / 36) * 100}
+                      accent="#9a4ff4"
+                    />
+                  </div>
+
+                  <Card className="beta-week-card border-0 text-primary-foreground ring-0 shadow-xl shadow-primary/10 [background:var(--hero)]">
+                    <CardHeader className="pb-1">
+                      <CardTitle className="font-sans text-lg font-semibold text-primary-foreground">
+                        Phase {activePhase} · Week {activeDisplayWeek} progress
+                      </CardTitle>
+                      <CardDescription className="font-sans text-primary-foreground/90">
+                        {sessionsDone === 3
+                          ? 'Week complete—excellent consistency.'
+                          : `${3 - sessionsDone} session${3 - sessionsDone === 1 ? '' : 's'} left this week.`}
+                      </CardDescription>
+                      <CardAction className="rounded-xl bg-black/15 px-3 py-2 text-right backdrop-blur-sm">
+                        <p className="font-sans text-xl font-bold text-primary-foreground">
+                          {weeklyPercent}%
+                        </p>
+                        <p className="font-sans text-[11px] text-primary-foreground/85">
+                          complete
+                        </p>
+                      </CardAction>
+                    </CardHeader>
+                    <CardContent>
+                      <progress
+                        aria-label="Week progress"
+                        max={100}
+                        value={weeklyPercent}
+                        className="h-2 w-full appearance-none overflow-hidden rounded-full bg-black/20 [&::-moz-progress-bar]:rounded-full [&::-moz-progress-bar]:bg-white [&::-webkit-progress-bar]:rounded-full [&::-webkit-progress-bar]:bg-black/20 [&::-webkit-progress-value]:rounded-full [&::-webkit-progress-value]:bg-white"
+                      />
+                      <div className="mt-3 grid grid-cols-3 gap-2 text-sm font-medium">
+                        {days.map((day) => {
+                          const { complete, count, total } = dayProgress[day];
+                          return (
+                            <button
+                              key={day}
+                              type="button"
+                              onClick={() => chooseDay(day)}
+                              aria-label={`Day ${day}, ${count} of ${total} exercises complete`}
+                              aria-current={
+                                activeDay === day ? 'step' : undefined
+                              }
+                              className={`rounded-lg px-3 py-2 text-left font-sans transition-colors ${activeDay === day ? 'bg-white text-primary' : 'bg-black/15 text-white hover:bg-black/20'}`}
+                            >
+                              Day {day}
+                              <span className="float-right">
+                                {complete
+                                  ? '✓'
+                                  : count > 0
+                                    ? `${count}/${total}`
+                                    : activeDay === day
+                                      ? '→'
+                                      : '·'}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </>
+              )}
               <div className="beta-exercise-heading flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <p className="font-sans text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
@@ -2453,494 +2664,506 @@ export function WorkoutApp() {
                     suggestedSeconds={suggestedRestSeconds}
                     notificationIconHref={notificationIconHref}
                   />
-                  <div className="mt-3 rounded-xl border border-primary/15 bg-background/90 p-3 shadow-sm shadow-slate-900/5">
-                    <div className="flex items-center gap-3">
-                      <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-accent text-primary">
-                        <History className="size-4" />
-                      </span>
-                      <div className="flex min-w-0 flex-1 flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                        <p className="font-sans text-sm font-semibold">
-                          Previous session
-                        </p>
-                        {previousEntry && (
-                          <p className="font-sans text-xs font-medium text-muted-foreground">
-                            {formatWorkoutDate(
-                              previousEntry.completedAt ??
-                                previousEntry.updatedAt,
-                            )}{' '}
-                            · Week {displayWeekNumber(previousEntry.week)}
+                  {(!workoutFocus || previousEntry) && (
+                    <details
+                      key={`${activeWeek}|${activeDay}|${exercise.order}|${workoutFocus}`}
+                      open={!workoutFocus}
+                      className="mt-3 rounded-xl border border-primary/15 bg-background/90 p-3 shadow-sm shadow-slate-900/5"
+                    >
+                      <summary className="flex cursor-pointer list-none items-center gap-3 [&::-webkit-details-marker]:hidden">
+                        <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-accent text-primary">
+                          <History className="size-4" />
+                        </span>
+                        <div className="flex min-w-0 flex-1 flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                          <p className="font-sans text-sm font-semibold">
+                            Previous session
                           </p>
-                        )}
-                      </div>
-                    </div>
-                    {previousEntry ? (
-                      <div className="mt-2.5">
-                        <div className="flex flex-wrap gap-1.5">
-                          {loggedSets(previousEntry).map((set) => (
-                            <span
-                              key={set.set}
-                              className="rounded-lg bg-secondary px-2 py-1.5 font-sans text-xs font-medium tabular-nums"
-                            >
-                              Set {set.set}:{' '}
-                              {set.weight == null
-                                ? `${set.reps} ${exercise.name === 'Plank' ? 'sec' : 'reps'}`
-                                : `${set.weight} kg × ${set.reps}`}
-                            </span>
-                          ))}
-                        </div>
-                        <div className="mt-2 flex flex-wrap items-center gap-2">
-                          {previousEntry.rir != null && (
-                            <span className="rounded-lg bg-success-soft px-2.5 py-1.5 font-sans text-xs font-medium text-success">
-                              RIR {previousEntry.rir}
-                            </span>
-                          )}
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="text-sm"
-                            onClick={usePreviousSession}
-                          >
-                            <Copy /> Use previous
-                          </Button>
-                        </div>
-                        {(previousEntry.notes ?? '').trim() && (
-                          <div className="mt-2.5 flex items-start gap-2 rounded-lg border border-primary/10 bg-background/65 px-3 py-2.5">
-                            <NotebookPen
-                              className="mt-0.5 size-4 shrink-0 text-primary"
-                              aria-hidden="true"
-                            />
-                            <p className="min-w-0 break-words font-sans text-xs leading-relaxed text-muted-foreground">
-                              <span className="font-semibold text-foreground">
-                                Previous note:
-                              </span>{' '}
-                              {previousEntry.notes.trim()}
+                          {previousEntry && (
+                            <p className="font-sans text-xs font-medium text-muted-foreground">
+                              {formatWorkoutDate(
+                                previousEntry.completedAt ??
+                                  previousEntry.updatedAt,
+                              )}{' '}
+                              · Week {displayWeekNumber(previousEntry.week)}
                             </p>
+                          )}
+                        </div>
+                        <ChevronDown
+                          className="size-4 shrink-0 text-muted-foreground"
+                          aria-hidden="true"
+                        />
+                      </summary>
+                      {previousEntry ? (
+                        <div className="mt-2.5">
+                          <div className="flex flex-wrap gap-1.5">
+                            {loggedSets(previousEntry).map((set) => (
+                              <span
+                                key={set.set}
+                                className="rounded-lg bg-secondary px-2 py-1.5 font-sans text-xs font-medium tabular-nums"
+                              >
+                                Set {set.set}:{' '}
+                                {set.weight == null
+                                  ? `${set.reps} ${exercise.name === 'Plank' ? 'sec' : 'reps'}`
+                                  : `${set.weight} kg × ${set.reps}`}
+                              </span>
+                            ))}
                           </div>
-                        )}
-                      </div>
-                    ) : (
-                      <p className="mt-2 font-sans text-xs leading-relaxed text-muted-foreground">
-                        No earlier session for this exercise yet. Your last sets
-                        and date will appear here from Week 2 onward.
-                      </p>
-                    )}
-                  </div>
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            {previousEntry.rir != null && (
+                              <span className="rounded-lg bg-success-soft px-2.5 py-1.5 font-sans text-xs font-medium text-success">
+                                RIR {previousEntry.rir}
+                              </span>
+                            )}
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="text-sm"
+                              onClick={usePreviousSession}
+                            >
+                              <Copy /> Use previous
+                            </Button>
+                          </div>
+                          {(previousEntry.notes ?? '').trim() && (
+                            <div className="mt-2.5 flex items-start gap-2 rounded-lg border border-primary/10 bg-background/65 px-3 py-2.5">
+                              <NotebookPen
+                                className="mt-0.5 size-4 shrink-0 text-primary"
+                                aria-hidden="true"
+                              />
+                              <p className="min-w-0 break-words font-sans text-xs leading-relaxed text-muted-foreground">
+                                <span className="font-semibold text-foreground">
+                                  Previous note:
+                                </span>{' '}
+                                {previousEntry.notes.trim()}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="mt-2 font-sans text-xs leading-relaxed text-muted-foreground">
+                          No earlier session for this exercise yet. Your last
+                          sets and date will appear here from Week 2 onward.
+                        </p>
+                      )}
+                    </details>
+                  )}
                 </CardHeader>
                 <CardContent className="py-(--card-spacing)">
-                  {exercise.skipped ? (
-                    <div className="grid min-h-52 place-items-center py-8 text-center">
-                      <div className="max-w-sm">
-                        <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-warning-soft text-warning-foreground">
-                          <Minus className="size-5" />
-                        </span>
-                        <h3 className="mt-3 font-sans text-lg font-semibold">
-                          Skipped for Week {activeDisplayWeek}
-                        </h3>
-                        <p className="mt-1 font-sans text-sm leading-relaxed text-muted-foreground">
-                          This exercise does not count against Day {activeDay}{' '}
-                          completion. You can bring it back from Edit session.
-                        </p>
-                        <Button
-                          className="mt-4"
-                          variant="outline"
-                          onClick={() =>
-                            setActiveIndex((index) =>
-                              Math.min(dayExercises.length - 1, index + 1),
-                            )
-                          }
-                        >
-                          Continue <ChevronRight />
-                        </Button>
+                  <fieldset
+                    disabled={loading || saving}
+                    className="min-w-0"
+                    aria-label={`Log ${exercise.name}`}
+                  >
+                    {exercise.skipped ? (
+                      <div className="grid min-h-52 place-items-center py-8 text-center">
+                        <div className="max-w-sm">
+                          <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-warning-soft text-warning-foreground">
+                            <Minus className="size-5" />
+                          </span>
+                          <h3 className="mt-3 font-sans text-lg font-semibold">
+                            Skipped for Week {activeDisplayWeek}
+                          </h3>
+                          <p className="mt-1 font-sans text-sm leading-relaxed text-muted-foreground">
+                            This exercise does not count against Day {activeDay}{' '}
+                            completion. You can bring it back from Edit session.
+                          </p>
+                          <Button
+                            className="mt-4"
+                            variant="outline"
+                            onClick={() =>
+                              setActiveIndex((index) =>
+                                Math.min(dayExercises.length - 1, index + 1),
+                              )
+                            }
+                          >
+                            Continue <ChevronRight />
+                          </Button>
+                        </div>
                       </div>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="hidden grid-cols-[42px_minmax(0,1fr)_64px] items-center gap-2 border-b py-2 font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground md:grid">
-                        <span className="text-center">Set</span>
-                        <div className="grid grid-cols-2 gap-3">
-                          <span className="text-center">Weight (kg)</span>
+                    ) : (
+                      <>
+                        <div className="hidden grid-cols-[42px_minmax(0,1fr)_64px] items-center gap-2 border-b py-2 font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground md:grid">
+                          <span className="text-center">Set</span>
+                          <div className="grid grid-cols-2 gap-3">
+                            <span className="text-center">Weight (kg)</span>
+                            <span className="text-center">
+                              {exercise.name === 'Plank' ? 'Seconds' : 'Reps'}
+                            </span>
+                          </div>
                           <span className="text-center">
-                            {exercise.name === 'Plank' ? 'Seconds' : 'Reps'}
+                            <span className="sr-only sm:not-sr-only">
+                              Status
+                            </span>
                           </span>
                         </div>
-                        <span className="text-center">
-                          <span className="sr-only sm:not-sr-only">Status</span>
-                        </span>
-                      </div>
-                      {draft.sets
-                        .slice(0, visibleSetCount)
-                        .map((set, index) => {
-                          const setLabel =
-                            index >= exercise.targetSets
-                              ? 'EXTRA'
-                              : index >= activeSets
-                                ? 'OPT'
-                                : '';
-                          return (
-                            <div
-                              key={index}
-                              className="grid grid-cols-[2rem_minmax(0,1fr)_2.75rem] items-center gap-x-2 border-b border-border/70 py-3 last:border-0 md:grid-cols-[42px_minmax(0,1fr)_64px] md:gap-2"
-                            >
-                              <div className="flex items-center justify-center self-center min-[32rem]:h-11 min-[32rem]:self-end md:self-center">
-                                <span className="relative grid size-8 place-items-center rounded-full bg-secondary font-sans text-sm font-bold">
-                                  {index + 1}
-                                  {setLabel && (
-                                    <span className="absolute -right-3 -top-2 rounded bg-warning-soft px-1 font-sans text-[8px] text-warning-foreground">
-                                      {setLabel}
-                                    </span>
-                                  )}
-                                </span>
-                              </div>
-                              <div className="col-start-2 min-w-0">
-                                <div className="grid gap-3 min-[32rem]:grid-cols-2">
-                                  <div className="w-full max-w-60 min-w-0 justify-self-center min-[32rem]:max-w-none">
-                                    <span className="mb-1 block font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground md:hidden">
-                                      Weight (kg)
-                                    </span>
-                                    <div className="grid w-full grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center justify-items-center gap-2 min-[32rem]:gap-1">
-                                      <Button
-                                        variant="outline"
-                                        size="icon-sm"
-                                        aria-label={`Decrease set ${index + 1} weight`}
-                                        onClick={() =>
-                                          stepSet(index, 'weight', -2.5)
-                                        }
-                                      >
-                                        <Minus />
-                                      </Button>
-                                      <Input
-                                        aria-label={`Set ${index + 1} weight in kilograms`}
-                                        inputMode="decimal"
-                                        type="number"
-                                        value={set.weight}
-                                        placeholder={
-                                          exercise.name === 'Plank'
-                                            ? 'Optional'
-                                            : '0'
-                                        }
-                                        onFocus={(event) =>
-                                          event.currentTarget.select()
-                                        }
-                                        onChange={(event) =>
-                                          updateSet(
-                                            index,
-                                            'weight',
-                                            event.target.value,
-                                          )
-                                        }
-                                        className="h-11 w-full min-w-0 bg-background text-center font-sans text-lg font-semibold text-foreground tabular-nums placeholder:font-medium placeholder:text-muted-foreground/35"
-                                      />
-                                      <Button
-                                        variant="outline"
-                                        size="icon-sm"
-                                        aria-label={`Increase set ${index + 1} weight`}
-                                        onClick={() =>
-                                          stepSet(index, 'weight', 2.5)
-                                        }
-                                      >
-                                        <Plus />
-                                      </Button>
+                        {draft.sets
+                          .slice(0, visibleSetCount)
+                          .map((set, index) => {
+                            const setLabel =
+                              index >= exercise.targetSets
+                                ? 'EXTRA'
+                                : index >= activeSets
+                                  ? 'OPT'
+                                  : '';
+                            return (
+                              <div
+                                key={index}
+                                className="grid grid-cols-[2rem_minmax(0,1fr)_2.75rem] items-center gap-x-2 border-b border-border/70 py-3 last:border-0 md:grid-cols-[42px_minmax(0,1fr)_64px] md:gap-2"
+                              >
+                                <div className="flex items-center justify-center self-center min-[32rem]:h-11 min-[32rem]:self-end md:self-center">
+                                  <span className="relative grid size-8 place-items-center rounded-full bg-secondary font-sans text-sm font-bold">
+                                    {index + 1}
+                                    {setLabel && (
+                                      <span className="absolute -right-3 -top-2 rounded bg-warning-soft px-1 font-sans text-[8px] text-warning-foreground">
+                                        {setLabel}
+                                      </span>
+                                    )}
+                                  </span>
+                                </div>
+                                <div className="col-start-2 min-w-0">
+                                  <div className="grid gap-3 min-[32rem]:grid-cols-2">
+                                    <div className="w-full max-w-60 min-w-0 justify-self-center min-[32rem]:max-w-none">
+                                      <span className="mb-1 block font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground md:hidden">
+                                        Weight (kg)
+                                      </span>
+                                      <div className="grid w-full grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center justify-items-center gap-2 min-[32rem]:gap-1">
+                                        <Button
+                                          variant="outline"
+                                          size="icon-sm"
+                                          aria-label={`Decrease set ${index + 1} weight`}
+                                          onClick={() =>
+                                            stepSet(index, 'weight', -2.5)
+                                          }
+                                        >
+                                          <Minus />
+                                        </Button>
+                                        <Input
+                                          aria-label={`Set ${index + 1} weight in kilograms`}
+                                          inputMode="decimal"
+                                          type="number"
+                                          value={set.weight}
+                                          placeholder={
+                                            exercise.name === 'Plank'
+                                              ? 'Optional'
+                                              : '0'
+                                          }
+                                          onFocus={(event) =>
+                                            event.currentTarget.select()
+                                          }
+                                          onChange={(event) =>
+                                            updateSet(
+                                              index,
+                                              'weight',
+                                              event.target.value,
+                                            )
+                                          }
+                                          className="h-11 w-full min-w-0 bg-background text-center font-sans text-lg font-semibold text-foreground tabular-nums placeholder:font-medium placeholder:text-muted-foreground/35"
+                                        />
+                                        <Button
+                                          variant="outline"
+                                          size="icon-sm"
+                                          aria-label={`Increase set ${index + 1} weight`}
+                                          onClick={() =>
+                                            stepSet(index, 'weight', 2.5)
+                                          }
+                                        >
+                                          <Plus />
+                                        </Button>
+                                      </div>
                                     </div>
-                                  </div>
-                                  <div className="w-full max-w-60 min-w-0 justify-self-center min-[32rem]:max-w-none">
-                                    <span className="mb-1 block font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground md:hidden">
-                                      {exercise.name === 'Plank'
-                                        ? 'Seconds'
-                                        : 'Reps'}
-                                    </span>
-                                    <div className="grid w-full grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center justify-items-center gap-2 min-[32rem]:gap-1">
-                                      <Button
-                                        variant="outline"
-                                        size="icon-sm"
-                                        aria-label={`Decrease set ${index + 1} repetitions`}
-                                        onClick={() =>
-                                          stepSet(index, 'reps', -1)
-                                        }
-                                      >
-                                        <Minus />
-                                      </Button>
-                                      <Input
-                                        aria-label={`Set ${index + 1} ${exercise.name === 'Plank' ? 'seconds' : 'repetitions'}`}
-                                        inputMode="numeric"
-                                        type="number"
-                                        value={set.reps}
-                                        placeholder="0"
-                                        onFocus={(event) =>
-                                          event.currentTarget.select()
-                                        }
-                                        onChange={(event) =>
-                                          updateSet(
-                                            index,
-                                            'reps',
-                                            event.target.value,
-                                          )
-                                        }
-                                        className="h-11 w-full min-w-0 bg-background text-center font-sans text-lg font-semibold text-foreground tabular-nums placeholder:font-medium placeholder:text-muted-foreground/35"
-                                      />
-                                      <Button
-                                        variant="outline"
-                                        size="icon-sm"
-                                        aria-label={`Increase set ${index + 1} repetitions`}
-                                        onClick={() =>
-                                          stepSet(index, 'reps', 1)
-                                        }
-                                      >
-                                        <Plus />
-                                      </Button>
+                                    <div className="w-full max-w-60 min-w-0 justify-self-center min-[32rem]:max-w-none">
+                                      <span className="mb-1 block font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground md:hidden">
+                                        {exercise.name === 'Plank'
+                                          ? 'Seconds'
+                                          : 'Reps'}
+                                      </span>
+                                      <div className="grid w-full grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center justify-items-center gap-2 min-[32rem]:gap-1">
+                                        <Button
+                                          variant="outline"
+                                          size="icon-sm"
+                                          aria-label={`Decrease set ${index + 1} repetitions`}
+                                          onClick={() =>
+                                            stepSet(index, 'reps', -1)
+                                          }
+                                        >
+                                          <Minus />
+                                        </Button>
+                                        <Input
+                                          aria-label={`Set ${index + 1} ${exercise.name === 'Plank' ? 'seconds' : 'repetitions'}`}
+                                          inputMode="numeric"
+                                          type="number"
+                                          value={set.reps}
+                                          placeholder="0"
+                                          onFocus={(event) =>
+                                            event.currentTarget.select()
+                                          }
+                                          onChange={(event) =>
+                                            updateSet(
+                                              index,
+                                              'reps',
+                                              event.target.value,
+                                            )
+                                          }
+                                          className="h-11 w-full min-w-0 bg-background text-center font-sans text-lg font-semibold text-foreground tabular-nums placeholder:font-medium placeholder:text-muted-foreground/35"
+                                        />
+                                        <Button
+                                          variant="outline"
+                                          size="icon-sm"
+                                          aria-label={`Increase set ${index + 1} repetitions`}
+                                          onClick={() =>
+                                            stepSet(index, 'reps', 1)
+                                          }
+                                        >
+                                          <Plus />
+                                        </Button>
+                                      </div>
                                     </div>
                                   </div>
                                 </div>
+                                <div className="col-start-3 flex h-full items-center justify-center min-[32rem]:h-11 min-[32rem]:self-end md:self-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleSetComplete(index)}
+                                    aria-label={`${set.done ? 'Reopen' : 'Complete'} set ${index + 1}`}
+                                    aria-pressed={set.done}
+                                    className={`grid size-11 place-items-center rounded-full border-2 transition-colors md:size-8 ${set.done ? 'border-success bg-success text-white' : 'border-border bg-background text-transparent hover:border-primary'}`}
+                                  >
+                                    <Check className="size-4" />
+                                  </button>
+                                </div>
                               </div>
-                              <div className="col-start-3 flex h-full items-center justify-center min-[32rem]:h-11 min-[32rem]:self-end md:self-center">
-                                <button
-                                  type="button"
-                                  onClick={() => toggleSetComplete(index)}
-                                  aria-label={`${set.done ? 'Reopen' : 'Complete'} set ${index + 1}`}
-                                  aria-pressed={set.done}
-                                  className={`grid size-11 place-items-center rounded-full border-2 transition-colors md:size-8 ${set.done ? 'border-success bg-success text-white' : 'border-border bg-background text-transparent hover:border-primary'}`}
-                                >
-                                  <Check className="size-4" />
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
 
-                      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-muted/55 p-2.5">
-                        <p className="px-1 font-sans text-xs text-muted-foreground">
-                          <strong className="text-foreground">
-                            {visibleSetCount}{' '}
-                            {visibleSetCount === 1 ? 'set' : 'sets'}
-                          </strong>{' '}
-                          · {activeSets} recommended this week
-                        </p>
-                        <div className="flex gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={visibleSetCount <= 1}
-                            onClick={removeSet}
-                          >
-                            <Minus /> Remove set
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={visibleSetCount >= 5}
-                            onClick={addSet}
-                          >
-                            <Plus /> Add set
-                          </Button>
-                        </div>
-                      </div>
-
-                      <div className="mt-4 grid grid-cols-[1fr_112px] items-end gap-3">
-                        <div>
-                          <label
-                            htmlFor="rir"
-                            className="mb-1.5 block font-sans text-sm font-medium"
-                          >
-                            Reps in reserve (RIR)
-                          </label>
-                          <p className="font-sans text-xs text-muted-foreground">
-                            {activeWeek <= 2
-                              ? 'Aim for about 3 during ramp-in.'
-                              : 'Aim for 1–2 with clean form.'}
+                        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-muted/55 p-2.5">
+                          <p className="px-1 font-sans text-xs text-muted-foreground">
+                            <strong className="text-foreground">
+                              {visibleSetCount}{' '}
+                              {visibleSetCount === 1 ? 'set' : 'sets'}
+                            </strong>{' '}
+                            · {activeSets} recommended this week
                           </p>
+                          <div className="flex gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={visibleSetCount <= 1}
+                              onClick={removeSet}
+                            >
+                              <Minus /> Remove set
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={visibleSetCount >= 5}
+                              onClick={addSet}
+                            >
+                              <Plus /> Add set
+                            </Button>
+                          </div>
                         </div>
-                        <Input
-                          id="rir"
-                          type="number"
-                          inputMode="numeric"
-                          value={draft.rir}
-                          placeholder="2"
-                          min="0"
-                          max="5"
-                          onFocus={(event) => event.currentTarget.select()}
-                          onChange={(event) =>
-                            setDraft((current) => ({
-                              ...current,
-                              rir: event.target.value,
-                            }))
-                          }
-                          className="h-11 bg-background text-center font-sans text-lg font-semibold"
-                        />
-                      </div>
 
-                      <div className="mt-4 flex items-center justify-between rounded-xl bg-secondary/70 p-3">
-                        <div>
-                          <p className="font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                            Next time
-                          </p>
-                          <p className="font-sans text-sm font-semibold">
-                            {advice}
-                          </p>
-                        </div>
-                        <TrendingUp className="size-5 text-primary" />
-                      </div>
-
-                      {showNotes ? (
-                        <div className="mt-4">
-                          <label
-                            htmlFor="notes"
-                            className="mb-1.5 block font-sans text-sm font-medium"
-                          >
-                            Notes
-                          </label>
-                          <Textarea
-                            id="notes"
-                            value={draft.notes}
+                        <div className="mt-4 grid grid-cols-[1fr_112px] items-end gap-3">
+                          <div>
+                            <label
+                              htmlFor="rir"
+                              className="mb-1.5 block font-sans text-sm font-medium"
+                            >
+                              Reps in reserve (RIR)
+                            </label>
+                            <p className="font-sans text-xs text-muted-foreground">
+                              {activeWeek <= 2
+                                ? 'Aim for about 3 during ramp-in.'
+                                : 'Aim for 1–2 with clean form.'}
+                            </p>
+                          </div>
+                          <Input
+                            id="rir"
+                            type="number"
+                            inputMode="numeric"
+                            value={draft.rir}
+                            placeholder="2"
+                            min="0"
+                            max="5"
+                            onFocus={(event) => event.currentTarget.select()}
                             onChange={(event) =>
                               setDraft((current) => ({
                                 ...current,
-                                notes: event.target.value,
+                                rir: event.target.value,
                               }))
                             }
-                            placeholder="Form cues, machine settings, anything to remember…"
-                            className="font-sans"
+                            className="h-11 bg-background text-center font-sans text-lg font-semibold"
                           />
                         </div>
-                      ) : (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          className="mt-3 font-sans text-muted-foreground"
-                          onClick={() => setShowNotes(true)}
-                        >
-                          <NotebookPen /> Add notes
-                        </Button>
-                      )}
 
-                      <Button
-                        size="lg"
-                        className="mt-4 h-12 w-full rounded-xl font-sans text-base shadow-md shadow-primary/20"
-                        disabled={saving || loading}
-                        onClick={saveExercise}
-                      >
-                        {saving ? (
-                          <Loader2 className="animate-spin" />
-                        ) : existingEntry?.completed ? (
-                          <RotateCcw />
-                        ) : (
-                          <CheckCircle2 />
+                        <div className="mt-4 flex items-center justify-between rounded-xl bg-secondary/70 p-3">
+                          <div>
+                            <p className="font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                              Next time
+                            </p>
+                            <p className="font-sans text-sm font-semibold">
+                              {advice}
+                            </p>
+                          </div>
+                          <TrendingUp className="size-5 text-primary" />
+                        </div>
+
+                        {exerciseDraft.dirty && (
+                          <p
+                            className="mt-3 text-xs text-muted-foreground"
+                            role="status"
+                          >
+                            {exerciseDraft.persisted
+                              ? `${exerciseDraft.recovered ? 'Draft recovered. ' : ''}Your inputs are saved on this device. Save & next to log this exercise.`
+                              : 'Device storage is unavailable. Keep this page open until you save the exercise.'}
+                          </p>
                         )}
-                        {saving
-                          ? 'Saving…'
-                          : existingEntry?.completed
-                            ? 'Update & continue'
-                            : 'Save & next'}
-                        {!saving && <ChevronRight data-icon="inline-end" />}
-                      </Button>
-                    </>
-                  )}
+                        {showNotes || Boolean(draft.notes) ? (
+                          <div className="mt-4">
+                            <label
+                              htmlFor="notes"
+                              className="mb-1.5 block font-sans text-sm font-medium"
+                            >
+                              Notes
+                            </label>
+                            <Textarea
+                              id="notes"
+                              value={draft.notes}
+                              onChange={(event) =>
+                                setDraft((current) => ({
+                                  ...current,
+                                  notes: event.target.value,
+                                }))
+                              }
+                              placeholder="Form cues, machine settings, anything to remember…"
+                              className="font-sans"
+                            />
+                          </div>
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            className="mt-3 font-sans text-muted-foreground"
+                            onClick={() => setShowNotes(true)}
+                          >
+                            <NotebookPen /> Add notes
+                          </Button>
+                        )}
+
+                        <Button
+                          size="lg"
+                          className="mt-4 h-12 w-full rounded-xl font-sans text-base shadow-md shadow-primary/20"
+                          disabled={saving || loading}
+                          onClick={saveExercise}
+                        >
+                          {saving ? (
+                            <Loader2 className="animate-spin" />
+                          ) : existingEntry?.completed ? (
+                            <RotateCcw />
+                          ) : (
+                            <CheckCircle2 />
+                          )}
+                          {saving
+                            ? 'Saving…'
+                            : existingEntry?.completed
+                              ? 'Update & continue'
+                              : 'Save & next'}
+                          {!saving && <ChevronRight data-icon="inline-end" />}
+                        </Button>
+                      </>
+                    )}
+                  </fieldset>
                 </CardContent>
               </Card>
             </section>
 
-            <aside className="beta-side-rail space-y-5">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="font-sans">
-                    Phase {activePhase} · Week {activeDisplayWeek}
-                  </CardTitle>
-                  <CardDescription className="font-sans">
-                    {weekDates[activeWeek - 1]}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {days.map((day) => {
-                    const sessionPlan = planForSession(
-                      sessionExercises,
-                      activeWeek,
-                      day,
-                    );
-                    const required = sessionPlan.filter(
-                      (item) => !item.skipped,
-                    );
-                    const count = required.filter((item) =>
-                      entries.some(
-                        (entry) =>
-                          entry.week === activeWeek &&
-                          entry.day === day &&
-                          entry.exerciseOrder === item.order &&
-                          entry.completed,
-                      ),
-                    ).length;
-                    const total = required.length;
-                    const complete = total > 0 && count === total;
-                    return (
-                      <button
-                        key={day}
-                        type="button"
-                        onClick={() => chooseDay(day)}
-                        className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-colors ${activeDay === day ? 'border-primary/35 bg-accent/45' : 'border-border/80 hover:bg-muted/60'}`}
-                      >
-                        <span
-                          className={`grid size-10 place-items-center rounded-xl font-sans font-bold ${complete ? 'bg-success-soft text-success' : day === activeDay ? 'bg-day-c text-day-c-foreground' : 'bg-secondary text-secondary-foreground'}`}
-                        >
-                          {day}
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block font-sans font-semibold">
-                            Day {day}
-                          </span>
-                          <span className="block font-sans text-xs text-muted-foreground">
-                            {count} of {total} exercises
-                          </span>
-                        </span>
-                        {complete ? (
-                          <CheckCircle2 className="size-5 text-success" />
-                        ) : (
-                          <ChevronRight className="size-5 text-muted-foreground" />
-                        )}
-                      </button>
-                    );
-                  })}
-                </CardContent>
-              </Card>
-              {currentSessionEntries.length > 0 && (
-                <Card className="bg-accent/35 ring-primary/15">
+            {!workoutFocus && (
+              <aside className="beta-side-rail space-y-5">
+                <Card>
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2 font-sans">
-                      <Sparkles className="size-4 text-primary" /> Day{' '}
-                      {activeDay} summary
+                    <CardTitle className="font-sans">
+                      Phase {activePhase} · Week {activeDisplayWeek}
                     </CardTitle>
                     <CardDescription className="font-sans">
-                      {currentSessionEntries.length} exercises ·{' '}
-                      {currentSessionSets} sets ·{' '}
-                      {Math.round(currentSessionVolume).toLocaleString()} kg
+                      {weekDates[activeWeek - 1]}
                     </CardDescription>
                   </CardHeader>
-                  <CardContent>
-                    <Button
-                      className="w-full"
-                      variant="outline"
-                      onClick={() => setSessionSummaryOpen(true)}
-                    >
-                      View session summary <ChevronRight />
-                    </Button>
+                  <CardContent className="space-y-3">
+                    {days.map((day) => {
+                      const { count, total, complete } = dayProgress[day];
+                      return (
+                        <button
+                          key={day}
+                          type="button"
+                          onClick={() => chooseDay(day)}
+                          className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-colors ${activeDay === day ? 'border-primary/35 bg-accent/45' : 'border-border/80 hover:bg-muted/60'}`}
+                        >
+                          <span
+                            className={`grid size-10 place-items-center rounded-xl font-sans font-bold ${complete ? 'bg-success-soft text-success' : day === activeDay ? 'bg-day-c text-day-c-foreground' : 'bg-secondary text-secondary-foreground'}`}
+                          >
+                            {day}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block font-sans font-semibold">
+                              Day {day}
+                            </span>
+                            <span className="block font-sans text-xs text-muted-foreground">
+                              {count} of {total} exercises
+                            </span>
+                          </span>
+                          {complete ? (
+                            <CheckCircle2 className="size-5 text-success" />
+                          ) : (
+                            <ChevronRight className="size-5 text-muted-foreground" />
+                          )}
+                        </button>
+                      );
+                    })}
                   </CardContent>
                 </Card>
-              )}
-              <Card
-                className="min-h-32 bg-warning-soft ring-warning/20"
-                aria-live="polite"
-                aria-atomic="true"
-              >
-                <CardHeader key={activeTrainingTips[activeTipIndex].title}>
-                  <CardTitle className="flex items-center gap-2 font-sans text-warning-foreground">
-                    <Target className="size-4" />{' '}
-                    {activeTrainingTips[activeTipIndex].title}
-                  </CardTitle>
-                  <CardDescription className="font-sans leading-relaxed text-warning-foreground/80">
-                    {activeTrainingTips[activeTipIndex].body}
-                  </CardDescription>
-                </CardHeader>
-              </Card>
-            </aside>
+                {currentSessionEntries.length > 0 && (
+                  <Card className="bg-accent/35 ring-primary/15">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2 font-sans">
+                        <Sparkles className="size-4 text-primary" /> Day{' '}
+                        {activeDay} summary
+                      </CardTitle>
+                      <CardDescription className="font-sans">
+                        {currentSessionEntries.length} exercises ·{' '}
+                        {currentSessionSets} sets ·{' '}
+                        {Math.round(currentSessionVolume).toLocaleString()} kg
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <Button
+                        className="w-full"
+                        variant="outline"
+                        onClick={() => setSessionSummaryOpen(true)}
+                      >
+                        View session summary <ChevronRight />
+                      </Button>
+                    </CardContent>
+                  </Card>
+                )}
+                <Card
+                  className="min-h-32 bg-warning-soft ring-warning/20"
+                  aria-live="polite"
+                  aria-atomic="true"
+                >
+                  <CardHeader key={activeTrainingTips[activeTipIndex].title}>
+                    <CardTitle className="flex items-center gap-2 font-sans text-warning-foreground">
+                      <Target className="size-4" />{' '}
+                      {activeTrainingTips[activeTipIndex].title}
+                    </CardTitle>
+                    <CardDescription className="font-sans leading-relaxed text-warning-foreground/80">
+                      {activeTrainingTips[activeTipIndex].body}
+                    </CardDescription>
+                  </CardHeader>
+                </Card>
+              </aside>
+            )}
           </div>
         )}
 
@@ -3560,7 +3783,10 @@ export function WorkoutApp() {
             activeWeek={activeWeek}
             activeDay={activeDay}
             currentWeight={numberOrNull(draft.sets[0]?.weight ?? '')}
-            onScheduleChange={setSchedule}
+            onScheduleChange={(next) => {
+              setSchedule(next);
+              cacheSchedule(next);
+            }}
             onClose={() => setActiveTrainingTool(null)}
           />
         </Suspense>

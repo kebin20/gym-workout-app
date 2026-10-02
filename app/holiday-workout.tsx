@@ -41,6 +41,8 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { latestDraftKey } from '@/lib/exercise-drafts';
+import { useExerciseDraft } from './use-exercise-draft';
 import type {
   HolidayMetric,
   HolidaySessionType,
@@ -294,7 +296,6 @@ export default function HolidayWorkout({
   const [sessionDate, setSessionDate] = useState(tokyoDate);
   const [sessionType, setSessionType] = useState<HolidaySessionType>('A');
   const [exerciseIndex, setExerciseIndex] = useState(0);
-  const [draft, setDraft] = useState(() => blankDraft(holidayPlans.A[0]));
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -313,6 +314,15 @@ export default function HolidayWorkout({
   const currentEntry = sessionEntries.find(
     (entry) => entry.exerciseOrder === exercise.order,
   );
+  const exerciseDraft = useExerciseDraft(
+    `holiday:${sessionId}:${sessionType}:${exercise.order}:${exercise.name}`,
+    currentEntry
+      ? draftFromEntry(currentEntry, exercise)
+      : blankDraft(exercise),
+    !loading && Boolean(sessionId),
+  );
+  const draft = exerciseDraft.value;
+  const setDraft = exerciseDraft.setValue;
   const hasSessionData = sessionEntries.length > 0;
 
   const previousEntry = useMemo(
@@ -348,6 +358,47 @@ export default function HolidayWorkout({
 
   useEffect(() => {
     let cancelled = false;
+    const restoreSession = (saved: {
+      sessionId: string;
+      sessionDate: string;
+      sessionType: HolidaySessionType;
+    }) => {
+      setSessionId(saved.sessionId);
+      setSessionDate(saved.sessionDate);
+      setSessionType(saved.sessionType);
+      try {
+        const key = latestDraftKey(
+          `holiday:${saved.sessionId}:${saved.sessionType}:`,
+          window.localStorage,
+        );
+        const index = holidayPlans[saved.sessionType].findIndex(
+          (item) =>
+            key ===
+            `holiday:${saved.sessionId}:${saved.sessionType}:${item.order}:${item.name}`,
+        );
+        setExerciseIndex(Math.max(0, index));
+        window.localStorage.setItem(activeSessionKey, JSON.stringify(saved));
+      } catch {
+        /* Session logging remains available without device storage. */
+      }
+    };
+    const cachedSession = () => {
+      try {
+        const saved = JSON.parse(
+          window.localStorage.getItem(activeSessionKey) ?? 'null',
+        );
+        return saved &&
+          typeof saved.sessionId === 'string' &&
+          saved.sessionId &&
+          typeof saved.sessionDate === 'string' &&
+          /^\d{4}-\d{2}-\d{2}$/.test(saved.sessionDate) &&
+          (saved.sessionType === 'A' || saved.sessionType === 'B')
+          ? saved
+          : null;
+      } catch {
+        return null;
+      }
+    };
     fetch('/api/holiday-workouts', { cache: 'no-store' })
       .then(async (response) => {
         const data = (await response.json()) as {
@@ -363,23 +414,10 @@ export default function HolidayWorkout({
         }));
         setEntries(loaded);
 
-        const cached = window.localStorage.getItem(activeSessionKey);
+        const cached = cachedSession();
         if (cached) {
-          try {
-            const saved = JSON.parse(cached) as {
-              sessionId?: string;
-              sessionDate?: string;
-              sessionType?: HolidaySessionType;
-            };
-            if (saved.sessionId && saved.sessionDate && saved.sessionType) {
-              setSessionId(saved.sessionId);
-              setSessionDate(saved.sessionDate);
-              setSessionType(saved.sessionType);
-              return;
-            }
-          } catch {
-            // A malformed local preference is replaced below.
-          }
+          restoreSession(cached);
+          return;
         }
 
         const partial = loaded.find((candidate) => {
@@ -401,12 +439,14 @@ export default function HolidayWorkout({
               sessionDate: tokyoDate(),
               sessionType: nextType,
             };
-        setSessionId(next.sessionId);
-        setSessionDate(next.sessionDate);
-        setSessionType(next.sessionType);
-        window.localStorage.setItem(activeSessionKey, JSON.stringify(next));
+        restoreSession(next);
       })
-      .catch((loadError: Error) => setError(loadError.message))
+      .catch((loadError: Error) => {
+        if (cancelled) return;
+        const cached = cachedSession();
+        if (cached) restoreSession(cached);
+        setError(loadError.message);
+      })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
@@ -417,29 +457,15 @@ export default function HolidayWorkout({
 
   useEffect(() => {
     if (!sessionId) return;
-    window.localStorage.setItem(
-      activeSessionKey,
-      JSON.stringify({ sessionId, sessionDate, sessionType }),
-    );
+    try {
+      window.localStorage.setItem(
+        activeSessionKey,
+        JSON.stringify({ sessionId, sessionDate, sessionType }),
+      );
+    } catch {
+      /* Device-local session resume is optional. */
+    }
   }, [sessionDate, sessionId, sessionType]);
-
-  useEffect(() => {
-    const entry = entries.find(
-      (candidate) =>
-        candidate.sessionId === sessionId &&
-        candidate.exerciseOrder === exercise.order,
-    );
-    let cancelled = false;
-    queueMicrotask(() => {
-      if (!cancelled)
-        setDraft(
-          entry ? draftFromEntry(entry, exercise) : blankDraft(exercise),
-        );
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [entries, exercise, sessionId]);
 
   function startNewSession(type: HolidaySessionType) {
     const next = {
@@ -451,7 +477,6 @@ export default function HolidayWorkout({
     setSessionDate(next.sessionDate);
     setSessionType(next.sessionType);
     setExerciseIndex(0);
-    setDraft(blankDraft(holidayPlans[type][0]));
     setError('');
     setNotice(`Holiday Session ${type} is ready.`);
   }
@@ -528,6 +553,7 @@ export default function HolidayWorkout({
       if (!response.ok || !data.entry)
         throw new Error(data.error ?? 'Unable to save this exercise.');
       const saved = { ...data.entry, completed: Boolean(data.entry.completed) };
+      exerciseDraft.clear();
       setEntries((current) => [
         saved,
         ...current.filter(
@@ -588,7 +614,13 @@ export default function HolidayWorkout({
                 <span
                   className={`size-1.5 rounded-full ${isOnline ? 'bg-emerald-600' : 'bg-amber-500'}`}
                 />
-                {isOnline ? 'Holiday records saved' : 'Offline'}
+                {exerciseDraft.dirty
+                  ? exerciseDraft.persisted
+                    ? 'Draft on device'
+                    : 'Unsaved draft'
+                  : isOnline
+                    ? 'Holiday records saved'
+                    : 'Offline'}
               </span>
             </span>
           </button>
@@ -596,6 +628,7 @@ export default function HolidayWorkout({
             type="button"
             variant="outline"
             onClick={onExit}
+            aria-label="Return to main plan"
             className="shrink-0 border-teal-800/20 bg-white text-teal-900 hover:bg-teal-50"
           >
             <ArrowLeft /> <span className="hidden sm:inline">Main plan</span>
@@ -726,182 +759,195 @@ export default function HolidayWorkout({
                   />
                 </div>
               </CardHeader>
-              <CardContent className="space-y-5 p-4 sm:p-6">
-                {previousEntry && (
-                  <div className="rounded-2xl border border-teal-900/10 bg-[#f0faf7] p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="flex items-center gap-2 font-semibold">
-                        <History className="size-4 text-teal-700" /> Previous
-                        holiday session
-                      </p>
-                      <span className="text-xs text-[#52706e]">
-                        {displayDate(previousEntry.sessionDate)} ·{' '}
-                        {previousEntry.sessionType}
-                      </span>
+              <CardContent className="p-4 sm:p-6">
+                <fieldset
+                  disabled={loading || saving || !sessionId}
+                  className="min-w-0 space-y-5"
+                  aria-label={`Log ${exercise.name}`}
+                >
+                  {previousEntry && (
+                    <div className="rounded-2xl border border-teal-900/10 bg-[#f0faf7] p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="flex items-center gap-2 font-semibold">
+                          <History className="size-4 text-teal-700" /> Previous
+                          holiday session
+                        </p>
+                        <span className="text-xs text-[#52706e]">
+                          {displayDate(previousEntry.sessionDate)} ·{' '}
+                          {previousEntry.sessionType}
+                        </span>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {Array.from(
+                          { length: previousEntry.setCount },
+                          (_, index) => {
+                            const set = index + 1;
+                            const weight =
+                              previousEntry[
+                                `set${set}Weight` as keyof HolidayWorkoutEntry
+                              ];
+                            const value =
+                              previousEntry[
+                                `set${set}Value` as keyof HolidayWorkoutEntry
+                              ];
+                            return (
+                              <span
+                                key={set}
+                                className="rounded-full bg-white px-3 py-1 text-xs ring-1 ring-teal-900/10"
+                              >
+                                Set {set}:{' '}
+                                {typeof weight === 'number' && weight > 0
+                                  ? `${weight} kg · `
+                                  : ''}
+                                {String(value)}{' '}
+                                {previousEntry.metric === 'seconds'
+                                  ? 'sec'
+                                  : 'reps'}
+                              </span>
+                            );
+                          },
+                        )}
+                      </div>
                     </div>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {Array.from(
-                        { length: previousEntry.setCount },
-                        (_, index) => {
-                          const set = index + 1;
-                          const weight =
-                            previousEntry[
-                              `set${set}Weight` as keyof HolidayWorkoutEntry
-                            ];
-                          const value =
-                            previousEntry[
-                              `set${set}Value` as keyof HolidayWorkoutEntry
-                            ];
-                          return (
-                            <span
-                              key={set}
-                              className="rounded-full bg-white px-3 py-1 text-xs ring-1 ring-teal-900/10"
-                            >
-                              Set {set}:{' '}
-                              {typeof weight === 'number' && weight > 0
-                                ? `${weight} kg · `
-                                : ''}
-                              {String(value)}{' '}
-                              {previousEntry.metric === 'seconds'
-                                ? 'sec'
-                                : 'reps'}
-                            </span>
-                          );
-                        },
-                      )}
-                    </div>
-                  </div>
-                )}
+                  )}
 
-                <div className="space-y-3">
-                  <div className="grid grid-cols-[2.25rem_minmax(0,1fr)_minmax(0,1fr)] gap-2 px-1 text-xs font-bold uppercase tracking-wide text-[#627977]">
-                    <span>Set</span>
-                    <span>Load kg (optional)</span>
-                    <span>
-                      {exercise.metric === 'seconds' ? 'Seconds' : 'Reps'}
-                    </span>
-                  </div>
-                  {draft.sets.slice(0, draft.setCount).map((set, index) => (
-                    <div
-                      key={index}
-                      className="grid grid-cols-[2.25rem_minmax(0,1fr)_minmax(0,1fr)] items-center gap-2"
-                    >
-                      <span className="grid size-9 place-items-center rounded-full bg-teal-50 text-sm font-bold text-teal-900">
-                        {index + 1}
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-[2.25rem_minmax(0,1fr)_minmax(0,1fr)] gap-2 px-1 text-xs font-bold uppercase tracking-wide text-[#627977]">
+                      <span>Set</span>
+                      <span>Load kg (optional)</span>
+                      <span>
+                        {exercise.metric === 'seconds' ? 'Seconds' : 'Reps'}
                       </span>
-                      <Input
-                        type="number"
-                        inputMode="decimal"
-                        min="0"
-                        step="0.5"
-                        value={set.weight}
-                        aria-label={`Set ${index + 1} optional load in kilograms`}
-                        onChange={(event) =>
-                          updateSet(index, 'weight', event.target.value)
+                    </div>
+                    {draft.sets.slice(0, draft.setCount).map((set, index) => (
+                      <div
+                        key={index}
+                        className="grid grid-cols-[2.25rem_minmax(0,1fr)_minmax(0,1fr)] items-center gap-2"
+                      >
+                        <span className="grid size-9 place-items-center rounded-full bg-teal-50 text-sm font-bold text-teal-900">
+                          {index + 1}
+                        </span>
+                        <Input
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          step="0.5"
+                          value={set.weight}
+                          aria-label={`Set ${index + 1} optional load in kilograms`}
+                          onChange={(event) =>
+                            updateSet(index, 'weight', event.target.value)
+                          }
+                          className="h-12 border-teal-900/15 bg-white text-center text-base font-semibold"
+                        />
+                        <Input
+                          type="number"
+                          inputMode="numeric"
+                          min="0"
+                          step="1"
+                          value={set.value}
+                          aria-label={`Set ${index + 1} ${exercise.metric}`}
+                          onChange={(event) =>
+                            updateSet(index, 'value', event.target.value)
+                          }
+                          className="h-12 border-teal-900/15 bg-white text-center text-base font-semibold"
+                        />
+                      </div>
+                    ))}
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={draft.setCount <= 1}
+                        onClick={() =>
+                          setDraft((current) => ({
+                            ...current,
+                            setCount: Math.max(1, current.setCount - 1),
+                          }))
                         }
-                        className="h-12 border-teal-900/15 bg-white text-center text-base font-semibold"
-                      />
+                        className="border-teal-900/15 bg-white"
+                      >
+                        <Minus /> Remove set
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={draft.setCount >= 5}
+                        onClick={() =>
+                          setDraft((current) => ({
+                            ...current,
+                            setCount: Math.min(5, current.setCount + 1),
+                          }))
+                        }
+                        className="border-teal-900/15 bg-white"
+                      >
+                        <Plus /> Add set
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 sm:grid-cols-[9rem_minmax(0,1fr)]">
+                    <label
+                      htmlFor="holiday-rir"
+                      className="space-y-2 text-sm font-semibold"
+                    >
+                      Reps in reserve
                       <Input
+                        id="holiday-rir"
                         type="number"
                         inputMode="numeric"
                         min="0"
-                        step="1"
-                        value={set.value}
-                        aria-label={`Set ${index + 1} ${exercise.metric}`}
+                        max="10"
+                        value={draft.rir}
                         onChange={(event) =>
-                          updateSet(index, 'value', event.target.value)
+                          setDraft((current) => ({
+                            ...current,
+                            rir: event.target.value,
+                          }))
                         }
-                        className="h-12 border-teal-900/15 bg-white text-center text-base font-semibold"
+                        className="h-12 border-teal-900/15 bg-white text-center text-base"
                       />
-                    </div>
-                  ))}
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={draft.setCount <= 1}
-                      onClick={() =>
-                        setDraft((current) => ({
-                          ...current,
-                          setCount: Math.max(1, current.setCount - 1),
-                        }))
-                      }
-                      className="border-teal-900/15 bg-white"
+                    </label>
+                    <label
+                      htmlFor="holiday-notes"
+                      className="space-y-2 text-sm font-semibold"
                     >
-                      <Minus /> Remove set
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={draft.setCount >= 5}
-                      onClick={() =>
-                        setDraft((current) => ({
-                          ...current,
-                          setCount: Math.min(5, current.setCount + 1),
-                        }))
-                      }
-                      className="border-teal-900/15 bg-white"
-                    >
-                      <Plus /> Add set
-                    </Button>
+                      Notes
+                      <Textarea
+                        id="holiday-notes"
+                        value={draft.notes}
+                        onChange={(event) =>
+                          setDraft((current) => ({
+                            ...current,
+                            notes: event.target.value,
+                          }))
+                        }
+                        placeholder="Equipment, variation, or how the set felt"
+                        className="min-h-24 border-teal-900/15 bg-white"
+                      />
+                    </label>
                   </div>
-                </div>
 
-                <div className="grid gap-4 sm:grid-cols-[9rem_minmax(0,1fr)]">
-                  <label
-                    htmlFor="holiday-rir"
-                    className="space-y-2 text-sm font-semibold"
+                  {exerciseDraft.dirty && (
+                    <p className="text-xs text-teal-800/75" role="status">
+                      {exerciseDraft.persisted
+                        ? `${exerciseDraft.recovered ? 'Draft recovered. ' : ''}Your inputs are saved on this device. Save & continue to log this exercise.`
+                        : 'Device storage is unavailable. Keep this page open until you save the exercise.'}
+                    </p>
+                  )}
+                  <Button
+                    type="button"
+                    disabled={saving || loading || !sessionId}
+                    onClick={saveExercise}
+                    className="h-12 w-full bg-teal-700 text-white shadow-md shadow-teal-900/15 hover:bg-teal-800"
                   >
-                    Reps in reserve
-                    <Input
-                      id="holiday-rir"
-                      type="number"
-                      inputMode="numeric"
-                      min="0"
-                      max="10"
-                      value={draft.rir}
-                      onChange={(event) =>
-                        setDraft((current) => ({
-                          ...current,
-                          rir: event.target.value,
-                        }))
-                      }
-                      className="h-12 border-teal-900/15 bg-white text-center text-base"
-                    />
-                  </label>
-                  <label
-                    htmlFor="holiday-notes"
-                    className="space-y-2 text-sm font-semibold"
-                  >
-                    Notes
-                    <Textarea
-                      id="holiday-notes"
-                      value={draft.notes}
-                      onChange={(event) =>
-                        setDraft((current) => ({
-                          ...current,
-                          notes: event.target.value,
-                        }))
-                      }
-                      placeholder="Equipment, variation, or how the set felt"
-                      className="min-h-24 border-teal-900/15 bg-white"
-                    />
-                  </label>
-                </div>
-
-                <Button
-                  type="button"
-                  disabled={saving || loading || !sessionId}
-                  onClick={saveExercise}
-                  className="h-12 w-full bg-teal-700 text-white shadow-md shadow-teal-900/15 hover:bg-teal-800"
-                >
-                  {saving ? <Loader2 className="animate-spin" /> : <Check />}
-                  {currentEntry?.completed
-                    ? 'Update & continue'
-                    : 'Save & continue'}
-                </Button>
+                    {saving ? <Loader2 className="animate-spin" /> : <Check />}
+                    {currentEntry?.completed
+                      ? 'Update & continue'
+                      : 'Save & continue'}
+                  </Button>
+                </fieldset>
               </CardContent>
             </Card>
           </section>
