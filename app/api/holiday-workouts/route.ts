@@ -1,6 +1,8 @@
 import { env, waitUntil } from 'cloudflare:workers';
 
 import { syncHolidayWorkoutEntries } from '@/lib/google-sheet-sync';
+import { parseSyncCursor } from '@/lib/sync-cursor';
+import { validateWorkoutNumbers } from '@/lib/workout-validation';
 import {
   holidayWorkoutSelectColumns,
   type HolidayMetric,
@@ -32,7 +34,12 @@ function safeIsoDate(value: unknown, fallback: string) {
 }
 
 function validCalendarDate(value: unknown) {
-  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value))
+    return false;
+  const date = new Date(value + 'T00:00:00Z');
+  return (
+    Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value
+  );
 }
 
 async function finishSheetSync(saved: HolidayWorkoutEntry) {
@@ -54,16 +61,54 @@ async function finishSheetSync(saved: HolidayWorkoutEntry) {
     .run();
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const entries = await workoutDatabase()
-      .prepare(
-        `SELECT ${holidayWorkoutSelectColumns} FROM holiday_workout_entries
-         ORDER BY session_date DESC, session_id DESC, exercise_order`,
-      )
-      .all<HolidayWorkoutEntry>();
+    const db = workoutDatabase();
+    const params = new URL(request.url).searchParams;
+    const cursor = parseSyncCursor(params.get('cursor'));
+    const activeSession = params.get('session') ?? '';
+    const before = (params.get('before') ?? '').split('|');
+    const beforeDate = validCalendarDate(before[0]) ? before[0] : '9999-12-31';
+    const beforeId = before[1] ?? '\uffff';
+    const sessionQuery = `SELECT session_id AS sessionId, MAX(session_date) AS date FROM holiday_workout_entries
+      WHERE session_date < ? OR (session_date = ? AND session_id < ?)
+      GROUP BY session_id ORDER BY date DESC, session_id DESC LIMIT 21`;
+    const statement =
+      cursor !== null
+        ? db
+            .prepare(
+              `SELECT ${holidayWorkoutSelectColumns} FROM holiday_workout_entries WHERE server_revision > ? OR session_id = ? ORDER BY session_date DESC, session_id DESC, exercise_order`,
+            )
+            .bind(cursor, activeSession)
+        : db
+            .prepare(`SELECT ${holidayWorkoutSelectColumns} FROM holiday_workout_entries WHERE session_id IN (
+          SELECT session_id FROM holiday_workout_entries WHERE session_date < ? OR (session_date = ? AND session_id < ?)
+          GROUP BY session_id ORDER BY MAX(session_date) DESC, session_id DESC LIMIT 20
+        ) OR session_id = ? ORDER BY session_date DESC, session_id DESC, exercise_order`)
+            .bind(beforeDate, beforeDate, beforeId, activeSession);
+    const [clock, entries, sessions] = await db.batch([
+      db.prepare("SELECT value FROM sync_clock WHERE key = 'records'"),
+      statement,
+      db.prepare(sessionQuery).bind(beforeDate, beforeDate, beforeId),
+    ]);
+    const page = sessions.results as { sessionId: string; date: string }[];
+    const last = page[19];
     return Response.json(
-      { entries: entries.results },
+      {
+        entries: entries.results,
+        partial: cursor !== null,
+        cursor: String(
+          (clock.results[0] as { value?: number } | undefined)?.value ?? 0,
+        ),
+        ...(cursor === null
+          ? {
+              nextPage:
+                page.length > 20 && last
+                  ? last.date + '|' + last.sessionId
+                  : null,
+            }
+          : {}),
+      },
       { headers: { 'Cache-Control': 'no-store' } },
     );
   } catch (error) {
@@ -86,7 +131,7 @@ export async function POST(request: Request) {
     const sessionType = String(body.sessionType ?? '') as HolidaySessionType;
     const metric = String(body.metric ?? '') as HolidayMetric;
     const exerciseOrder = Number(body.exerciseOrder);
-    const setCount = Math.min(5, Math.max(1, Number(body.setCount) || 1));
+    const setCount = body.setCount == null ? 1 : Number(body.setCount);
 
     if (
       !/^[a-zA-Z0-9_-]{8,80}$/.test(sessionId) ||
@@ -95,7 +140,8 @@ export async function POST(request: Request) {
       !['reps', 'seconds'].includes(metric) ||
       !Number.isInteger(exerciseOrder) ||
       exerciseOrder < 1 ||
-      exerciseOrder > 20
+      exerciseOrder > 20 ||
+      typeof body.completed !== 'boolean'
     ) {
       return Response.json(
         { error: 'Invalid holiday workout selection.' },
@@ -115,20 +161,29 @@ export async function POST(request: Request) {
       nullableNumber(body.set4Value),
       nullableNumber(body.set5Value),
     ];
-    if (
-      body.completed &&
-      values.slice(0, setCount).some((value) => !value || value <= 0)
-    ) {
-      return Response.json(
-        {
-          error: `Enter ${metric === 'seconds' ? 'seconds' : 'reps'} for every active set.`,
-        },
-        { status: 400 },
-      );
-    }
+    const invalid = validateWorkoutNumbers({
+      weights: [
+        body.set1Weight,
+        body.set2Weight,
+        body.set3Weight,
+        body.set4Weight,
+        body.set5Weight,
+      ],
+      values: [
+        body.set1Value,
+        body.set2Value,
+        body.set3Value,
+        body.set4Value,
+        body.set5Value,
+      ],
+      setCount,
+      rir: body.rir,
+      completed: Boolean(body.completed),
+    });
+    if (invalid) return Response.json({ error: invalid }, { status: 400 });
 
     const db = workoutDatabase();
-    await db
+    const writeResult = await db
       .prepare(`INSERT INTO holiday_workout_entries (
         session_id, session_date, session_type, exercise_order, exercise, target, metric,
         set1_weight, set1_value, set2_weight, set2_value, set3_weight, set3_value,
@@ -147,7 +202,7 @@ export async function POST(request: Request) {
         completed = excluded.completed, completed_at = excluded.completed_at,
         sync_status = 'pending', sheet_synced_at = NULL, sync_error = NULL,
         updated_at = excluded.updated_at
-      WHERE excluded.updated_at >= holiday_workout_entries.updated_at`)
+      WHERE excluded.updated_at > holiday_workout_entries.updated_at`)
       .bind(
         sessionId,
         body.sessionDate,
@@ -183,7 +238,16 @@ export async function POST(request: Request) {
       .bind(sessionId, exerciseOrder)
       .first<HolidayWorkoutEntry>();
 
-    if (saved && saved.updatedAt === updatedAt) {
+    if (saved && saved.updatedAt !== updatedAt)
+      return Response.json(
+        {
+          error:
+            'A newer version of this Holiday exercise is already saved. Reload and review before saving again.',
+          entry: saved,
+        },
+        { status: 409 },
+      );
+    if (saved && writeResult.meta.changes > 0) {
       waitUntil(finishSheetSync(saved).then(() => undefined));
     }
 

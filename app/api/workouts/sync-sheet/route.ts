@@ -15,16 +15,28 @@ export async function POST() {
     const sync = await syncWorkoutEntries(results.results);
 
     const now = new Date().toISOString();
-    await env.DB.prepare(`UPDATE workout_entries SET sync_status = ?, sheet_synced_at = ?, sync_error = ?
-      WHERE completed = 1 AND exercise_order < 100 AND week <= 12`)
-      .bind(
-        sync.ok ? 'synced' : 'failed',
-        sync.ok ? now : null,
-        sync.ok
-          ? null
-          : String(sync.message ?? 'Google Sheet sync failed.').slice(0, 500),
-      )
-      .run();
+    if (results.results.length)
+      await env.DB.batch(
+        results.results.map((entry) =>
+          env
+            .DB!.prepare(`UPDATE workout_entries SET sync_status = ?, sheet_synced_at = ?, sync_error = ?
+      WHERE week = ? AND day = ? AND exercise_order = ? AND updated_at = ?`)
+            .bind(
+              sync.ok ? 'synced' : 'failed',
+              sync.ok ? now : null,
+              sync.ok
+                ? null
+                : String(sync.message ?? 'Google Sheet sync failed.').slice(
+                    0,
+                    500,
+                  ),
+              entry.week,
+              entry.day,
+              entry.exerciseOrder,
+              entry.updatedAt,
+            ),
+        ),
+      );
 
     return Response.json(
       { ...sync, syncedAt: sync.ok ? now : null },

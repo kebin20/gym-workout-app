@@ -10,7 +10,7 @@ Made with ChatGPT Codex
 
 The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgpt.site](https://liftline-strength-plan.ktanzyl.chatgpt.site). Access is restricted to the site owner.
 
-Current production version: **v3.10.0**
+Current production version: **v3.11.0**
 
 ## Features
 
@@ -53,6 +53,18 @@ Current production version: **v3.10.0**
 ## Version history
 
 Minor fixes, visual refinements, and deployment maintenance are grouped into the nearest feature release so this history focuses on meaningful product changes.
+
+### v3.11 — Safer sync and lighter workout entry
+
+- Store each offline revision independently, acknowledge only uploaded revisions, and serialize queue runners across tabs where Web Locks is available. Retry temporary failures with bounded backoff while the app is open; keep permanent conflicts for review instead of retrying them endlessly.
+- Use indexed, server-generated revision cursors for main and Holiday delta refreshes. Late offline uploads and Google Sheet status changes are visible regardless of the device clock.
+- Include Holiday records in version-3 backups while retaining version-2 restore compatibility. Block a misleading “complete” export when offline records are pending, and explain that device-only drafts are excluded.
+- Reject negative/non-finite loads, non-positive/fractional reps or seconds, invalid set counts, and invalid RIR in new saves. Previous-session recall starts with uncompleted set checkboxes; historical backup records are preserved.
+- Keep the rest timer deadline across navigation/reload, with best-effort service-worker notifications where supported. iOS can suspend browser execution; notifications are not a guaranteed background alarm.
+- Isolate the live input state from the dashboard, persist only the edited draft payload, and load the entire Progress view on demand.
+- Cache Holiday history on the device, refresh by revision, and load earlier sessions in pages. Add Holiday offline saves, previous notes/RIR/copying, and the shared rest timer.
+- Add per-exercise 0.5/1/2.5/5 kg adjustment preferences and a conditional Undo last save action. Undo refuses to overwrite a newer server record and is offered for confirmed online saves only.
+- Add actual route/migration regression tests alongside the existing draft, completion, and installed-startup checks. Keep all current v9 app icons unchanged.
 
 ### v3.10 — Recoverable drafts and focused workouts
 
@@ -231,7 +243,7 @@ Minor fixes, visual refinements, and deployment maintenance are grouped into the
 - React 19 and TypeScript
 - vinext and Vite
 - Tailwind CSS and shadcn components
-- Recharts for progress visualizations
+- Accessible native SVG progress visualizations
 - Drizzle ORM with Cloudflare D1/SQLite
 - OpenAI Sites hosting on Cloudflare Workers
 
@@ -255,12 +267,12 @@ npm run start        # Run the built Worker locally with Wrangler
 npm run lint         # Run oxlint
 npm run format       # Format the project with oxfmt
 npm run db:generate  # Generate a Drizzle migration after schema changes
-npm run test:workout # Run draft, completion and installed-startup regression checks
+npm run test:workout # Run draft, queue, API, migration, backup, undo and startup checks
 ```
 
 ## Release workflow
 
-Production stays on `main`. New fixes and features are developed on `codex/staging`, where they are formatted, linted, built, and functionally checked. Only a completed staging batch is merged into `main` and deployed, keeping the live tracker available while work is in progress.
+New fixes and features are developed on `codex/` branches, tested, typechecked, built, and reviewed before promotion to `main`. Sites publication uses the tested source and matching production archive while preserving owner-only access.
 
 ## Project structure
 
@@ -294,7 +306,11 @@ Workout entries are keyed by internal programme week, day, and exercise. Phase 1
 
 Phase 2 remains locked until all three sessions in every Phase 1 week are complete. Unlocking it never resets or replaces Phase 1 data; the phase selector can be used to revisit the original history at any time.
 
-If a workout is saved without a connection, Liftline keeps a temporary device queue and shows the workout immediately. The latest version of each queued exercise is sent to D1 automatically when the connection returns. The server rejects an older queued update when a newer version of the same exercise is already stored.
+If a main-plan or Holiday workout is saved without a connection, Liftline keeps an immutable device queue and shows the workout immediately. The latest revision of each queued exercise is sent to D1 when the app is open and connected. Temporary failures retry with backoff; validation errors and newer-record conflicts are preserved for review. Acknowledging an earlier upload never removes a later queued edit. Do not clear browser storage until pending records have synced.
+
+Server revision numbers, rather than client timestamps, identify changes for incremental refresh. Google Sheet status updates also advance the revision. Client save timestamps remain the conflict ordering rule; the server refuses stale saves instead of silently dropping local input.
+
+JSON backups include main-plan records, Holiday records, session customizations, programme settings, readiness checks, and body metrics. Pending device uploads must sync before export. Unsaved device drafts are not part of the server backup. Restore remains preview-first and compatible with older backups that have no Holiday section.
 
 Each exercise can store between one and five sets. Removing a set clears that row from the saved record; adding it again starts with an empty row.
 

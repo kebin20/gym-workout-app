@@ -29,6 +29,7 @@ export type WorkoutEntry = {
   syncError?: string | null;
   updatedAt?: string;
   offlinePending?: boolean;
+  serverRevision?: number;
 };
 
 export type SessionExercise = {
@@ -54,7 +55,7 @@ export const workoutSelectColumns = `id, week, day, exercise_order AS exerciseOr
   set4_weight AS set4Weight, set4_reps AS set4Reps, set5_weight AS set5Weight,
   set5_reps AS set5Reps, set_count AS setCount,
   rir, notes, completed, completed_at AS completedAt, sync_status AS syncStatus,
-  sheet_synced_at AS sheetSyncedAt, sync_error AS syncError, updated_at AS updatedAt`;
+  sheet_synced_at AS sheetSyncedAt, sync_error AS syncError, updated_at AS updatedAt, server_revision AS serverRevision`;
 
 export const sessionExerciseSelectColumns = `id, week, day, exercise_order AS exerciseOrder,
   display_order AS displayOrder, name, target_sets AS targetSets, rep_range AS repRange,

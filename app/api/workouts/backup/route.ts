@@ -7,6 +7,14 @@ import {
   type WorkoutEntry,
 } from '@/lib/workout-types';
 import type { TrainingDay } from '@/lib/routine';
+import {
+  holidayWorkoutSelectColumns,
+  type HolidayWorkoutEntry,
+} from '@/lib/holiday-workout-types';
+import {
+  holidayBackupStatement,
+  normalizeHolidayBackup,
+} from '@/lib/holiday-backup';
 
 type BackupEnvelope = {
   version?: unknown;
@@ -15,6 +23,7 @@ type BackupEnvelope = {
   bodyMetrics?: unknown;
   readinessChecks?: unknown;
   settings?: unknown;
+  holidayEntries?: unknown;
 };
 
 type BodyMetricBackup = {
@@ -224,6 +233,17 @@ function parseBackup(value: unknown) {
     );
   }
   const entries = backup.entries.map(normalizeWorkout);
+  if (
+    backup.holidayEntries !== undefined &&
+    !Array.isArray(backup.holidayEntries)
+  )
+    throw new Error('Holiday backup records are invalid.');
+  const rawHolidayEntries = Array.isArray(backup.holidayEntries)
+    ? backup.holidayEntries
+    : [];
+  if (rawHolidayEntries.length > 5000)
+    throw new Error('This backup contains too many Holiday records.');
+  const holidayEntries = rawHolidayEntries.map(normalizeHolidayBackup);
   const sessionExercises = backup.sessionExercises.map(
     normalizeSessionExercise,
   );
@@ -242,6 +262,7 @@ function parseBackup(value: unknown) {
   const readinessChecks = rawReadinessChecks.map(normalizeReadiness);
   if (
     entries.some((entry) => !entry) ||
+    holidayEntries.some((entry) => !entry) ||
     sessionExercises.some((exercise) => !exercise) ||
     bodyMetrics.some((metric) => !metric) ||
     readinessChecks.some((check) => !check)
@@ -250,6 +271,7 @@ function parseBackup(value: unknown) {
   }
   return {
     entries: entries as WorkoutEntry[],
+    holidayEntries: holidayEntries as HolidayWorkoutEntry[],
     sessionExercises: sessionExercises as SessionExercise[],
     bodyMetrics: bodyMetrics as BodyMetricBackup[],
     readinessChecks: readinessChecks as ReadinessBackup[],
@@ -271,35 +293,45 @@ function keyOf(value: {
 export async function GET() {
   try {
     if (!env.DB) throw new Error('Workout database is unavailable.');
-    const [entries, sessionExercises, bodyMetrics, readinessChecks, settings] =
-      await Promise.all([
-        env.DB.prepare(
-          `SELECT ${workoutSelectColumns} FROM workout_entries ORDER BY week, day, exercise_order`,
-        ).all<WorkoutEntry>(),
-        env.DB.prepare(
-          `SELECT ${sessionExerciseSelectColumns} FROM session_exercises ORDER BY week, day, display_order`,
-        ).all<SessionExercise>(),
-        env.DB.prepare(
-          'SELECT date, weight, waist, body_fat AS bodyFat, lean_mass AS leanMass, source, notes FROM body_metrics ORDER BY date',
-        ).all<BodyMetricBackup>(),
-        env.DB.prepare(
-          'SELECT checked_at AS checkedAt, week, day, sleep, energy, soreness, joint_comfort AS jointComfort, recommendation FROM readiness_checks ORDER BY checked_at',
-        ).all<ReadinessBackup>(),
-        env.DB.prepare('SELECT key, value FROM app_settings').all<{
-          key: string;
-          value: string;
-        }>(),
-      ]);
+    const [
+      entries,
+      sessionExercises,
+      bodyMetrics,
+      readinessChecks,
+      settings,
+      holidayEntries,
+    ] = await Promise.all([
+      env.DB.prepare(
+        `SELECT ${workoutSelectColumns} FROM workout_entries ORDER BY week, day, exercise_order`,
+      ).all<WorkoutEntry>(),
+      env.DB.prepare(
+        `SELECT ${sessionExerciseSelectColumns} FROM session_exercises ORDER BY week, day, display_order`,
+      ).all<SessionExercise>(),
+      env.DB.prepare(
+        'SELECT date, weight, waist, body_fat AS bodyFat, lean_mass AS leanMass, source, notes FROM body_metrics ORDER BY date',
+      ).all<BodyMetricBackup>(),
+      env.DB.prepare(
+        'SELECT checked_at AS checkedAt, week, day, sleep, energy, soreness, joint_comfort AS jointComfort, recommendation FROM readiness_checks ORDER BY checked_at',
+      ).all<ReadinessBackup>(),
+      env.DB.prepare('SELECT key, value FROM app_settings').all<{
+        key: string;
+        value: string;
+      }>(),
+      env.DB.prepare(
+        `SELECT ${holidayWorkoutSelectColumns} FROM holiday_workout_entries ORDER BY session_date, session_id, exercise_order`,
+      ).all<HolidayWorkoutEntry>(),
+    ]);
     const createdAt = new Date().toISOString();
     const date = createdAt.slice(0, 10);
     return new Response(
       JSON.stringify(
         {
           source: 'Liftline',
-          version: 2,
+          version: 3,
           createdAt,
           timeZone: 'Asia/Tokyo',
           entries: entries.results,
+          holidayEntries: holidayEntries.results,
           sessionExercises: sessionExercises.results,
           bodyMetrics: bodyMetrics.results,
           readinessChecks: readinessChecks.results,
@@ -333,14 +365,21 @@ export async function POST(request: Request) {
   try {
     if (!env.DB) throw new Error('Workout database is unavailable.');
     const contentLength = Number(request.headers.get('content-length') ?? 0);
-    if (contentLength > 1_000_000)
+    if (contentLength > 8_000_000)
       return Response.json(
         { error: 'The backup file is too large.' },
         { status: 413 },
       );
-    const body = (await request.json()) as { mode?: unknown; backup?: unknown };
+    const content = await request.text();
+    if (new TextEncoder().encode(content).length > 8_000_000)
+      return Response.json(
+        { error: 'The backup file is too large.' },
+        { status: 413 },
+      );
+    const body = JSON.parse(content) as { mode?: unknown; backup?: unknown };
     const {
       entries,
+      holidayEntries,
       sessionExercises,
       bodyMetrics,
       readinessChecks,
@@ -361,6 +400,7 @@ export async function POST(request: Request) {
     );
     const summary = {
       workoutRecords: entries.length,
+      holidayRecords: holidayEntries.length,
       newWorkoutRecords: entries.filter(
         (entry) => !existingEntryKeys.has(keyOf(entry)),
       ).length,
@@ -378,6 +418,9 @@ export async function POST(request: Request) {
 
     const now = new Date().toISOString();
     const statements = [
+      ...holidayEntries.map((entry) =>
+        holidayBackupStatement(env.DB!, entry, now),
+      ),
       ...sessionExercises.map((exercise) =>
         env
           .DB!.prepare(`INSERT INTO session_exercises (
