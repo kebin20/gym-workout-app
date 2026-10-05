@@ -10,7 +10,7 @@ Made with ChatGPT Codex
 
 The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgpt.site](https://liftline-strength-plan.ktanzyl.chatgpt.site). Access is restricted to the site owner.
 
-Current production version: **v3.11.0**
+Current production version: **v3.11.1**
 
 ## Features
 

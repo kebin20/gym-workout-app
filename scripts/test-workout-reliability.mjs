@@ -66,13 +66,18 @@ test('the refactored Today and Holiday loggers render on the server without brow
   try {
     const { WorkoutApp } = fixture.load('app/workout-app.tsx');
     const html = renderToString(createElement(WorkoutApp));
-    assert.ok(html.includes('Weight adjustment increment'));
+    assert.ok(!html.includes('Weight adjustment increment'));
+    assert.ok(!html.includes('Weight steps'));
+    const rirInput = html.match(/<input\b[^>]*\bid="rir"[^>]*>/)?.[0];
+    assert.ok(rirInput);
+    assert.ok(rirInput.includes('placeholder="2"'));
+    assert.ok(rirInput.includes('placeholder:text-muted-foreground/35'));
     assert.ok(html.includes('Save &amp; next'));
-    assert.ok(html.includes('3.11.0'));
+    assert.ok(html.includes('3.11.1'));
     const Holiday = fixture.load('app/holiday-workout.tsx').default;
     const holiday = renderToString(
       createElement(Holiday, {
-        appVersion: '3.11.0',
+        appVersion: '3.11.1',
         isOnline: true,
         onExit: () => {},
       }),

@@ -22,31 +22,11 @@ export default function ExerciseDraftBoundary<T extends ExerciseDraft>({
     state: ReturnType<typeof useExerciseDraft<T>> & {
       showNotes: boolean;
       setShowNotes: (show: boolean) => void;
-      weightIncrement: number;
-      setWeightIncrement: (value: number) => void;
     },
   ) => ReactNode;
 }) {
   const draft = useExerciseDraft(draftKey, baseline, ready);
   const [showNotes, setShowNotes] = useState(false);
-  const preferenceKey = `liftline.weight-increment.v1:${draftKey.split(':').slice(3).join(':')}`;
-  const [weightIncrement, setIncrement] = useState(2.5);
-  useEffect(() => {
-    try {
-      const stored = Number(localStorage.getItem(preferenceKey));
-      setIncrement([0.5, 1, 2.5, 5].includes(stored) ? stored : 2.5);
-    } catch {
-      /* Optional preference, never block logging. */
-    }
-  }, [preferenceKey]);
-  function setWeightIncrement(value: number) {
-    setIncrement(value);
-    try {
-      localStorage.setItem(preferenceKey, String(value));
-    } catch {
-      /* Optional. */
-    }
-  }
   useEffect(() => {
     onStatus({ dirty: draft.dirty, persisted: draft.persisted });
   }, [draft.dirty, draft.persisted, onStatus]);
@@ -55,7 +35,5 @@ export default function ExerciseDraftBoundary<T extends ExerciseDraft>({
     ...draft,
     showNotes,
     setShowNotes,
-    weightIncrement,
-    setWeightIncrement,
   });
 }

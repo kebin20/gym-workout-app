@@ -2660,12 +2660,7 @@ export function WorkoutApp() {
                 onSnapshot={onDraftSnapshot}
               >
                 {(exerciseDraft) => {
-                  const {
-                    showNotes,
-                    setShowNotes,
-                    weightIncrement,
-                    setWeightIncrement,
-                  } = exerciseDraft;
+                  const { showNotes, setShowNotes } = exerciseDraft;
                   const draft = exerciseDraft.value;
                   const visibleSetCount = draft.setCount;
                   function setDraft(
@@ -2959,28 +2954,6 @@ export function WorkoutApp() {
                             </div>
                           ) : (
                             <>
-                              <div className="mb-3 flex items-center justify-end gap-2 text-xs text-muted-foreground">
-                                <label htmlFor="weight-increment">
-                                  Weight steps
-                                </label>
-                                <select
-                                  id="weight-increment"
-                                  aria-label="Weight adjustment increment"
-                                  value={weightIncrement}
-                                  onChange={(event) =>
-                                    setWeightIncrement(
-                                      Number(event.target.value),
-                                    )
-                                  }
-                                  className="min-h-11 rounded-lg border bg-background px-3 py-2 text-base text-foreground"
-                                >
-                                  {[0.5, 1, 2.5, 5].map((step) => (
-                                    <option key={step} value={step}>
-                                      {step} kg
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
                               <div className="hidden grid-cols-[42px_minmax(0,1fr)_64px] items-center gap-2 border-b py-2 font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground md:grid">
                                 <span className="text-center">Set</span>
                                 <div className="grid grid-cols-2 gap-3">
@@ -3035,11 +3008,7 @@ export function WorkoutApp() {
                                                 size="icon-sm"
                                                 aria-label={`Decrease set ${index + 1} weight`}
                                                 onClick={() =>
-                                                  stepSet(
-                                                    index,
-                                                    'weight',
-                                                    -weightIncrement,
-                                                  )
+                                                  stepSet(index, 'weight', -2.5)
                                                 }
                                               >
                                                 <Minus />
@@ -3073,11 +3042,7 @@ export function WorkoutApp() {
                                                 size="icon-sm"
                                                 aria-label={`Increase set ${index + 1} weight`}
                                                 onClick={() =>
-                                                  stepSet(
-                                                    index,
-                                                    'weight',
-                                                    weightIncrement,
-                                                  )
+                                                  stepSet(index, 'weight', 2.5)
                                                 }
                                               >
                                                 <Plus />
@@ -3213,7 +3178,7 @@ export function WorkoutApp() {
                                       rir: event.target.value,
                                     }))
                                   }
-                                  className="h-11 bg-background text-center font-sans text-lg font-semibold"
+                                  className="h-11 bg-background text-center font-sans text-lg font-semibold text-foreground placeholder:font-medium placeholder:text-muted-foreground/35"
                                 />
                               </div>
 
