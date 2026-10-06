@@ -73,11 +73,14 @@ test('the refactored Today and Holiday loggers render on the server without brow
     assert.ok(rirInput.includes('placeholder="2"'));
     assert.ok(rirInput.includes('placeholder:text-muted-foreground/35'));
     assert.ok(html.includes('Save &amp; next'));
-    assert.ok(html.includes('3.12.1'));
+    assert.ok(html.includes('3.12.2'));
+    assert.equal((html.match(/data-workout-set-row=""/g) ?? []).length, 3);
+    assert.ok(html.includes('max-w-[21.5rem]'));
+    assert.ok(!html.includes('max-w-60'));
     const Holiday = fixture.load('app/holiday-workout.tsx').default;
     const holiday = renderToString(
       createElement(Holiday, {
-        appVersion: '3.12.1',
+        appVersion: '3.12.2',
         isOnline: true,
         onExit: () => {},
       }),

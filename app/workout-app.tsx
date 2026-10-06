@@ -2984,10 +2984,11 @@ export function WorkoutApp() {
                                   return (
                                     <div
                                       key={index}
-                                      className="grid grid-cols-[2rem_minmax(0,1fr)_2.75rem] items-center gap-x-2 border-b border-border/70 py-3 last:border-0 md:grid-cols-[42px_minmax(0,1fr)_64px] md:gap-2"
+                                      data-workout-set-row=""
+                                      className="mx-auto grid w-full max-w-[21.5rem] grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center gap-x-2 border-b border-border/70 py-3 last:border-0 min-[32rem]:max-w-none md:grid-cols-[42px_minmax(0,1fr)_64px] md:gap-2"
                                     >
-                                      <div className="flex items-center justify-center self-center min-[32rem]:h-11 min-[32rem]:self-end md:self-center">
-                                        <span className="relative grid size-8 place-items-center rounded-full bg-secondary font-sans text-sm font-bold">
+                                      <div className="flex items-center justify-center self-center pt-5 min-[32rem]:h-11 min-[32rem]:self-end min-[32rem]:pt-0 md:self-center">
+                                        <span className="relative grid size-11 place-items-center rounded-full bg-secondary font-sans text-sm font-bold md:size-8">
                                           {index + 1}
                                           {setLabel && (
                                             <span className="absolute -right-3 -top-2 rounded bg-warning-soft px-1 font-sans text-[8px] text-warning-foreground">
@@ -2998,7 +2999,7 @@ export function WorkoutApp() {
                                       </div>
                                       <div className="col-start-2 min-w-0">
                                         <div className="grid gap-3 min-[32rem]:grid-cols-2">
-                                          <div className="w-full max-w-60 min-w-0 justify-self-center min-[32rem]:max-w-none">
+                                          <div className="w-full min-w-0">
                                             <span className="mb-1 block font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground md:hidden">
                                               Weight (kg)
                                             </span>
@@ -3049,7 +3050,7 @@ export function WorkoutApp() {
                                               </Button>
                                             </div>
                                           </div>
-                                          <div className="w-full max-w-60 min-w-0 justify-self-center min-[32rem]:max-w-none">
+                                          <div className="w-full min-w-0">
                                             <span className="mb-1 block font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground md:hidden">
                                               {exercise.name === 'Plank'
                                                 ? 'Seconds'
@@ -3100,7 +3101,7 @@ export function WorkoutApp() {
                                           </div>
                                         </div>
                                       </div>
-                                      <div className="col-start-3 flex h-full items-center justify-center min-[32rem]:h-11 min-[32rem]:self-end md:self-center">
+                                      <div className="col-start-3 flex h-full items-center justify-center pt-5 min-[32rem]:h-11 min-[32rem]:self-end min-[32rem]:pt-0 md:self-center">
                                         <button
                                           type="button"
                                           onClick={() =>
