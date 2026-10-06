@@ -10,7 +10,7 @@ Made with ChatGPT Codex
 
 The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgpt.site](https://liftline-strength-plan.ktanzyl.chatgpt.site). Access is restricted to the site owner.
 
-Current production version: **v3.11.1**
+Current production version: **v3.12.1**
 
 ## Features
 
@@ -54,6 +54,15 @@ Current production version: **v3.11.1**
 
 Minor fixes, visual refinements, and deployment maintenance are grouped into the nearest feature release so this history focuses on meaningful product changes.
 
+### v3.12 — Day reports and clearer rest alerts
+
+- In v3.12.1, give the Day A/B/C history badges larger, non-shrinking circles with balanced padding around their labels.
+- Download a consolidated PDF from each Day A/B/C card in Progress. Reports cover every saved phase/week, volume charts, per-exercise first/latest trends, full sets, RIR and notes. Partial and device-pending records are labelled; unsaved drafts and Holiday logs are excluded. Original Unicode records are also attached to the PDF.
+- Generate reports locally with PDF/font libraries loaded only on download. Noto fonts support Latin and Japanese notes; the larger Japanese font is fetched only when required and fonts can be cached after first use. Fonts are licensed under the SIL Open Font License (see `public/fonts/`).
+- Keep one rest-timer engine active across view navigation; send permitted system notifications in foreground as well as background, expose delivery errors, and add test alerts, optional sound and screen wake lock.
+- iOS can suspend a browser when the phone is locked. These local alerts are not server-scheduled Web Push and cannot guarantee a locked-screen or Apple Watch alarm. Use the native iPhone/Watch timer for that case. Web Push and Watch mirroring require additional server scheduling infrastructure and device notification settings.
+- Retain the v3.11.1 simplified weight controls and light-gray RIR placeholder, and all v9 icon artwork.
+
 ### v3.11 — Safer sync and lighter workout entry
 
 - Store each offline revision independently, acknowledge only uploaded revisions, and serialize queue runners across tabs where Web Locks is available. Retry temporary failures with bounded backoff while the app is open; keep permanent conflicts for review instead of retrying them endlessly.
@@ -63,7 +72,7 @@ Minor fixes, visual refinements, and deployment maintenance are grouped into the
 - Keep the rest timer deadline across navigation/reload, with best-effort service-worker notifications where supported. iOS can suspend browser execution; notifications are not a guaranteed background alarm.
 - Isolate the live input state from the dashboard, persist only the edited draft payload, and load the entire Progress view on demand.
 - Cache Holiday history on the device, refresh by revision, and load earlier sessions in pages. Add Holiday offline saves, previous notes/RIR/copying, and the shared rest timer.
-- Add per-exercise 0.5/1/2.5/5 kg adjustment preferences and a conditional Undo last save action. Undo refuses to overwrite a newer server record and is offered for confirmed online saves only.
+- Add a conditional Undo last save action. Undo refuses to overwrite a newer server record and is offered for confirmed online saves only. The weight-step selector was removed in v3.11.1; weight buttons use 2.5 kg steps.
 - Add actual route/migration regression tests alongside the existing draft, completion, and installed-startup checks. Keep all current v9 app icons unchanged.
 
 ### v3.10 — Recoverable drafts and focused workouts

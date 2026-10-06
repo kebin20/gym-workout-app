@@ -41,6 +41,7 @@ import {
 } from '@/lib/routine';
 import { workoutMetrics } from '@/lib/workout-metrics';
 import type { WorkoutEntry } from '@/lib/workout-types';
+import DayReportButton from './day-report-button';
 const ProgressChart = lazy(() => import('./progress-chart'));
 const ExerciseProgressChart = lazy(() => import('./exercise-progress-chart'));
 const AdvancedInsights = lazy(() => import('./advanced-insights'));
@@ -185,6 +186,7 @@ type Props = {
   activePhase: number;
   activeRoutine: RoutineExercise[];
   phaseEntries: WorkoutEntry[];
+  allEntries: WorkoutEntry[];
   entryIndex: {
     completedByPhaseDay: Map<string, WorkoutEntry[]>;
     completedByExercise: Map<string, WorkoutEntry[]>;
@@ -215,6 +217,7 @@ export default function ProgressView({
   activePhase,
   activeRoutine,
   phaseEntries,
+  allEntries,
   entryIndex,
   weeklySummaries,
   totalRows,
@@ -592,7 +595,7 @@ export default function ProgressView({
                       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 pb-4">
                         <div className="flex items-center gap-3">
                           <span
-                            className={`grid size-11 place-items-center rounded-xl font-sans text-sm font-bold ${dayColor}`}
+                            className={`grid size-16 shrink-0 place-items-center rounded-full p-2 font-sans text-sm font-bold ${dayColor}`}
                           >
                             Day {day}
                           </span>
@@ -606,6 +609,11 @@ export default function ProgressView({
                           </div>
                         </div>
                         <div className="flex flex-wrap items-center justify-end gap-2">
+                          <DayReportButton
+                            day={day}
+                            entries={allEntries}
+                            loading={loading}
+                          />
                           <Badge
                             variant="outline"
                             className="bg-card font-sans"

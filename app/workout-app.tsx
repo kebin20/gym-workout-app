@@ -3400,6 +3400,7 @@ export function WorkoutApp() {
               activePhase={activePhase}
               activeRoutine={activeRoutine}
               phaseEntries={phaseEntries}
+              allEntries={entries}
               entryIndex={entryIndex}
               weeklySummaries={weeklySummaries}
               totalRows={totalRows}
