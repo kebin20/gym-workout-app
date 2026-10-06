@@ -73,20 +73,65 @@ test('the refactored Today and Holiday loggers render on the server without brow
     assert.ok(rirInput.includes('placeholder="2"'));
     assert.ok(rirInput.includes('placeholder:text-muted-foreground/35'));
     assert.ok(html.includes('Save &amp; next'));
-    assert.ok(html.includes('3.12.2'));
+    assert.ok(html.includes('3.12.3'));
     assert.equal((html.match(/data-workout-set-row=""/g) ?? []).length, 3);
     assert.ok(html.includes('max-w-[21.5rem]'));
     assert.ok(!html.includes('max-w-60'));
+    const primaryNav = html.match(
+      /<nav\b[^>]*aria-label="Primary navigation"[^>]*>[\s\S]*?<\/nav>/,
+    )?.[0];
+    assert.ok(primaryNav);
+    assert.equal((primaryNav.match(/<button\b/g) ?? []).length, 3);
+    for (const label of ['Today', 'Plan', 'Progress'])
+      assert.ok(primaryNav.includes(label));
+    assert.ok(!primaryNav.includes('Nutrition'));
     const Holiday = fixture.load('app/holiday-workout.tsx').default;
     const holiday = renderToString(
       createElement(Holiday, {
-        appVersion: '3.12.2',
+        appVersion: '3.12.3',
         isOnline: true,
         onExit: () => {},
       }),
     );
     assert.ok(holiday.includes('Liftline Holiday'));
     assert.ok(holiday.includes('Rest timer'));
+  } finally {
+    fixture.close();
+  }
+});
+
+test('the simplified programme menu opens Nutrition, schedule and guide without the removed tool entries', () => {
+  const fixture = routeFixture();
+  try {
+    const { ProgrammeToolsMenu } = fixture.load('app/programme-tools-menu.tsx');
+    const selected = [];
+    const menu = ProgrammeToolsMenu({
+      view: 'nutrition',
+      onSelect: (destination) => selected.push(destination),
+    });
+    const html = renderToString(menu);
+    for (const label of ['Training schedule', 'Nutrition', 'Training guide'])
+      assert.ok(html.includes(label));
+    for (const label of [
+      'Readiness check',
+      'Warm-up &amp; plates',
+      'Body metrics',
+    ])
+      assert.ok(!html.includes(label));
+    const buttons = [];
+    const visit = (node) => {
+      if (Array.isArray(node)) return node.forEach(visit);
+      if (!node || typeof node !== 'object') return;
+      if (node.type === 'button') buttons.push(node.props);
+      visit(node.props?.children);
+    };
+    visit(menu);
+    assert.equal(buttons.length, 3);
+    assert.equal(buttons[1]['aria-current'], 'page');
+    for (const button of buttons) button.onClick();
+    assert.deepEqual(selected, ['schedule', 'nutrition', 'guide']);
+    const NutritionView = fixture.load('app/nutrition-view.tsx').default;
+    assert.ok(renderToString(createElement(NutritionView)).includes('protein'));
   } finally {
     fixture.close();
   }

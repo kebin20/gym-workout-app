@@ -15,13 +15,10 @@ import {
 import {
   AlertCircle,
   Activity,
-  Apple,
   ArrowDown,
   ArrowUp,
   BarChart3,
-  BookOpen,
   CalendarDays,
-  Calculator,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -43,7 +40,6 @@ import {
   NotebookPen,
   Plus,
   RotateCcw,
-  Scale,
   Settings2,
   Sparkles,
   Target,
@@ -55,6 +51,7 @@ import {
 } from 'lucide-react';
 import { appVersion, brandMarkHref, notificationIconHref } from './app-release';
 import RestTimer, { type RestTimerHandle } from './rest-timer';
+import { ProgrammeToolsMenu } from './programme-tools-menu';
 import {
   hasPendingOutbox,
   outboxStorageIssue,
@@ -2154,13 +2151,6 @@ export function WorkoutApp() {
               label="Progress"
               onChange={setView}
             />
-            <NavButton
-              view="nutrition"
-              active={view === 'nutrition'}
-              icon={Apple}
-              label="Nutrition"
-              onChange={setView}
-            />
           </div>
           <div className="ml-auto flex items-center gap-2 md:ml-0">
             <Button
@@ -2247,43 +2237,17 @@ export function WorkoutApp() {
                       </span>
                     )}
                   </button>
-                  <div className="-mx-1 my-1 h-px bg-border" />
-                  <p className="px-2 py-1 font-sans text-xs font-medium text-muted-foreground">
-                    Tools
-                  </p>
-                  {(
-                    [
-                      ['schedule', CalendarDays, 'Training schedule'],
-                      ['readiness', Activity, 'Readiness check'],
-                      ['calculator', Calculator, 'Warm-up & plates'],
-                      ['metrics', Scale, 'Body metrics'],
-                    ] as const
-                  ).map(([tool, Icon, label]) => (
-                    <button
-                      key={tool}
-                      type="button"
-                      role="menuitem"
-                      className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left font-sans text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
-                      onClick={() => {
-                        setProgrammeMenuOpen(false);
-                        setActiveTrainingTool(tool);
-                      }}
-                    >
-                      <Icon className="size-4" /> {label}
-                    </button>
-                  ))}
-                  <div className="-mx-1 my-1 h-px bg-border" />
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left font-sans text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
-                    onClick={() => {
+                  <ProgrammeToolsMenu
+                    view={view}
+                    onSelect={(destination) => {
                       setProgrammeMenuOpen(false);
-                      setView('guide');
+                      if (destination === 'schedule') {
+                        setActiveTrainingTool('schedule');
+                      } else {
+                        setView(destination);
+                      }
                     }}
-                  >
-                    <BookOpen className="size-4" /> Training guide
-                  </button>
+                  />
                 </div>
               )}
             </div>
@@ -3998,7 +3962,7 @@ export function WorkoutApp() {
         aria-label="Primary navigation"
         className="beta-bottom-nav fixed inset-x-0 bottom-0 z-30 border-t bg-card/95 px-2 pb-[max(.5rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-8px_30px_rgb(15_23_42/7%)] backdrop-blur md:hidden"
       >
-        <div className="mx-auto grid max-w-md grid-cols-4">
+        <div className="mx-auto grid max-w-md grid-cols-3">
           <NavButton
             view="today"
             active={view === 'today'}
@@ -4020,14 +3984,6 @@ export function WorkoutApp() {
             active={view === 'progress'}
             icon={BarChart3}
             label="Progress"
-            onChange={setView}
-            compact
-          />
-          <NavButton
-            view="nutrition"
-            active={view === 'nutrition'}
-            icon={Apple}
-            label="Nutrition"
             onChange={setView}
             compact
           />

@@ -10,7 +10,7 @@ Made with ChatGPT Codex
 
 The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgpt.site](https://liftline-strength-plan.ktanzyl.chatgpt.site). Access is restricted to the site owner.
 
-Current production version: **v3.12.2**
+Current production version: **v3.12.3**
 
 ## Features
 
@@ -58,6 +58,7 @@ Minor fixes, visual refinements, and deployment maintenance are grouped into the
 
 - In v3.12.1, give the Day A/B/C history badges larger, non-shrinking circles with balanced padding around their labels.
 - In v3.12.2, centre compact mobile set rows with matching number/status circles and consistent gaps to the weight/reps controls, while retaining the wider side-by-side layout on larger screens.
+- In v3.12.3, move Nutrition into the programme dropdown, keep Today/Plan/Progress as the primary tabs, and remove Readiness check, Warm-up & plates and Body metrics from that menu without deleting stored records.
 - Download a consolidated PDF from each Day A/B/C card in Progress. Reports cover every saved phase/week, volume charts, per-exercise first/latest trends, full sets, RIR and notes. Partial and device-pending records are labelled; unsaved drafts and Holiday logs are excluded. Original Unicode records are also attached to the PDF.
 - Generate reports locally with PDF/font libraries loaded only on download. Noto fonts support Latin and Japanese notes; the larger Japanese font is fetched only when required and fonts can be cached after first use. Fonts are licensed under the SIL Open Font License (see `public/fonts/`).
 - Keep one rest-timer engine active across view navigation; send permitted system notifications in foreground as well as background, expose delivery errors, and add test alerts, optional sound and screen wake lock.
