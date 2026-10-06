@@ -73,11 +73,11 @@ test('the refactored Today and Holiday loggers render on the server without brow
     assert.ok(rirInput.includes('placeholder="2"'));
     assert.ok(rirInput.includes('placeholder:text-muted-foreground/35'));
     assert.ok(html.includes('Save &amp; next'));
-    assert.ok(html.includes('3.12.0'));
+    assert.ok(html.includes('3.12.1'));
     const Holiday = fixture.load('app/holiday-workout.tsx').default;
     const holiday = renderToString(
       createElement(Holiday, {
-        appVersion: '3.12.0',
+        appVersion: '3.12.1',
         isOnline: true,
         onExit: () => {},
       }),

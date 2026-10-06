@@ -1,4 +1,4 @@
-const cacheVersion = 'liftline-3.12.0-1';
+const cacheVersion = 'liftline-3.12.1-1';
 const shellCache = `${cacheVersion}-shell`;
 const assetCache = `${cacheVersion}-assets`;
 

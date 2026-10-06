@@ -595,7 +595,7 @@ export default function ProgressView({
                       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 pb-4">
                         <div className="flex items-center gap-3">
                           <span
-                            className={`grid size-11 place-items-center rounded-xl font-sans text-sm font-bold ${dayColor}`}
+                            className={`grid size-16 shrink-0 place-items-center rounded-full p-2 font-sans text-sm font-bold ${dayColor}`}
                           >
                             Day {day}
                           </span>
