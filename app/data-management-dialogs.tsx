@@ -32,6 +32,7 @@ type BackupSummary = {
   newSessionChanges: number;
   bodyMeasurements?: number;
   readinessChecks?: number;
+  holidayRecords?: number;
 };
 
 type SheetImportPreview = {
@@ -153,6 +154,8 @@ export default function DataManagementDialogs({
                     {backup.summary.sessionChanges} session customizations
                     {(backup.summary.bodyMeasurements ?? 0) > 0 &&
                       ` · ${backup.summary.bodyMeasurements} body measurements`}
+                    {(backup.summary.holidayRecords ?? 0) > 0 &&
+                      ` · ${backup.summary.holidayRecords} Holiday records`}
                     {(backup.summary.readinessChecks ?? 0) > 0 &&
                       ` · ${backup.summary.readinessChecks} readiness checks`}
                   </p>

@@ -29,6 +29,8 @@ export type HolidayWorkoutEntry = {
   sheetSyncedAt?: string | null;
   syncError?: string | null;
   updatedAt: string;
+  serverRevision?: number;
+  offlinePending?: boolean;
 };
 
 export const holidayWorkoutSelectColumns = `id, session_id AS sessionId,
@@ -42,4 +44,4 @@ export const holidayWorkoutSelectColumns = `id, session_id AS sessionId,
   set_count AS setCount, rir, notes, completed,
   completed_at AS completedAt, sync_status AS syncStatus,
   sheet_synced_at AS sheetSyncedAt, sync_error AS syncError,
-  updated_at AS updatedAt`;
+  updated_at AS updatedAt, server_revision AS serverRevision`;

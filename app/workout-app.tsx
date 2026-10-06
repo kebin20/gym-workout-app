@@ -55,6 +55,12 @@ import {
 } from 'lucide-react';
 import { appVersion, brandMarkHref, notificationIconHref } from './app-release';
 import RestTimer, { type RestTimerHandle } from './rest-timer';
+import {
+  hasPendingOutbox,
+  outboxStorageIssue,
+  confirmOutboxResponse,
+} from '@/lib/workout-outbox';
+import { undoWorkoutPayload } from '@/lib/workout-undo';
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -67,13 +73,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import {
-  Carousel,
-  CarouselContent,
-  CarouselItem,
-  CarouselNext,
-  CarouselPrevious,
-} from '@/components/ui/carousel';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -93,12 +92,26 @@ import {
 import {
   personalRecordsFor,
   totalPersonalRecords,
-  workoutMetrics,
 } from '@/lib/workout-metrics';
 import { findStartupWeek } from '@/lib/startup-week';
 import { latestDraftKey } from '@/lib/exercise-drafts';
 import { sessionProgress } from '@/lib/session-progress';
-import { useExerciseDraft } from './use-exercise-draft';
+import ExerciseDraftBoundary, {
+  type DraftStatus,
+} from './exercise-draft-boundary';
+import { useOutboxRetry } from './use-outbox-retry';
+import { recallSets, validateWorkoutNumbers } from '@/lib/workout-validation';
+import {
+  acknowledgeOutbox,
+  blockOutbox,
+  enqueueOutbox,
+  migrateWorkoutOutbox,
+  overlayOutbox,
+  readOutbox,
+  retryableStatus,
+  singleFlight,
+  type OutboxItem,
+} from '@/lib/workout-outbox';
 import type { SessionExercise, WorkoutEntry } from '@/lib/workout-types';
 import type { ProgramSchedule } from './training-tools-dialog';
 
@@ -141,7 +154,7 @@ type WorkoutPayload = {
   clientUpdatedAt: string;
 };
 
-type PendingWorkout = { key: string; payload: WorkoutPayload };
+type PendingWorkout = OutboxItem<WorkoutEntry> & { payload: WorkoutPayload };
 
 type BackupSummary = {
   workoutRecords: number;
@@ -151,6 +164,7 @@ type BackupSummary = {
   newSessionChanges: number;
   bodyMeasurements?: number;
   readinessChecks?: number;
+  holidayRecords?: number;
 };
 
 type SheetImportItem = {
@@ -170,7 +184,6 @@ type SheetImportPreview = {
 
 const workoutCacheKey = 'liftline.workout-entries.v1';
 const sessionExerciseCacheKey = 'liftline.session-exercises.v1';
-const pendingWorkoutKey = 'liftline.pending-workouts.v1';
 const scheduleCacheKey = 'liftline.programme-schedule.v1';
 const setNumbers = [1, 2, 3, 4, 5] as const;
 const emptyDraft: Draft = {
@@ -311,20 +324,24 @@ function resumeDraftIndex(
 
 function readPendingWorkouts(): PendingWorkout[] {
   try {
-    const value = window.localStorage.getItem(pendingWorkoutKey);
-    const parsed = value ? JSON.parse(value) : [];
-    return Array.isArray(parsed) ? parsed : [];
+    migrateWorkoutOutbox(window.localStorage, (raw) => {
+      const payload = raw as WorkoutPayload;
+      const exercise = routineForWeek(payload.week).find(
+        (item) =>
+          item.day === payload.day && item.order === payload.exerciseOrder,
+      );
+      return optimisticEntry(payload, {
+        ...exercise,
+        name: exercise?.name ?? 'Exercise',
+        custom: false,
+      } as PlannedExercise);
+    });
+    return readOutbox<WorkoutEntry>(
+      'workout',
+      window.localStorage,
+    ) as PendingWorkout[];
   } catch {
     return [];
-  }
-}
-
-function cachePendingWorkouts(queue: PendingWorkout[]) {
-  try {
-    window.localStorage.setItem(pendingWorkoutKey, JSON.stringify(queue));
-    return true;
-  } catch {
-    return false;
   }
 }
 
@@ -391,12 +408,10 @@ function mergeWorkoutEntries(
   );
 }
 
-const ProgressChart = lazy(() => import('./progress-chart'));
-const ExerciseProgressChart = lazy(() => import('./exercise-progress-chart'));
+const ProgressView = lazy(() => import('./progress-view'));
 const ExerciseDemoDialog = lazy(() => import('./exercise-demo-dialog'));
 const TrainingToolsDialog = lazy(() => import('./training-tools-dialog'));
 const DataManagementDialogs = lazy(() => import('./data-management-dialogs'));
-const AdvancedInsights = lazy(() => import('./advanced-insights'));
 const HolidayWorkout = lazy(() => import('./holiday-workout'));
 const NutritionView = lazy(() => import('./nutrition-view'));
 const TrainingGuideView = lazy(() => import('./training-guide-view'));
@@ -837,114 +852,6 @@ function DashboardMetric({
   );
 }
 
-function HistoryWeekDisclosure({
-  entry,
-  displayName,
-  defaultExpanded,
-}: {
-  entry: WorkoutEntry;
-  displayName: string;
-  defaultExpanded: boolean;
-}) {
-  const [expanded, setExpanded] = useState(defaultExpanded);
-  const evenWeek = entry.week % 2 === 0;
-  const surfaceClass = evenWeek
-    ? 'border-blue-200/80 bg-blue-50/75'
-    : 'border-violet-200/80 bg-violet-50/75';
-  const weekClass = evenWeek
-    ? 'bg-blue-100 text-blue-700'
-    : 'bg-violet-100 text-violet-700';
-
-  return (
-    <div className={`overflow-hidden rounded-xl border ${surfaceClass}`}>
-      <button
-        type="button"
-        onClick={() => setExpanded((current) => !current)}
-        aria-expanded={expanded}
-        className="flex w-full items-center gap-2 px-3 py-2.5 text-left font-sans"
-      >
-        <span
-          className={`rounded-lg px-2 py-1 text-xs font-semibold ${weekClass}`}
-        >
-          Week {displayWeekNumber(entry.week)}
-        </span>
-        <span className="ml-auto text-xs text-muted-foreground">
-          {formatWorkoutDate(entry.completedAt ?? entry.updatedAt)}
-        </span>
-        <ChevronRight
-          className={`size-4 shrink-0 text-muted-foreground transition-transform ${expanded ? 'rotate-90' : ''}`}
-        />
-      </button>
-      {expanded && (
-        <div className="border-t border-current/5 px-3 pb-3 pt-2">
-          <div className="flex flex-wrap gap-1.5">
-            {loggedSets(entry).map((set) => (
-              <span
-                key={set.set}
-                className="rounded-lg border border-border/80 bg-card px-2 py-1 font-sans text-xs font-medium"
-              >
-                Set {set.set}:{' '}
-                {set.weight == null
-                  ? `${set.reps} ${displayName === 'Plank' ? 'sec' : 'reps'}`
-                  : `${set.weight} kg × ${set.reps}`}
-              </span>
-            ))}
-            {entry.rir != null && (
-              <span className="rounded-lg border border-primary/20 bg-accent px-2 py-1 font-sans text-xs font-medium text-primary">
-                RIR {entry.rir}
-              </span>
-            )}
-          </div>
-          {entry.notes && (
-            <p className="mt-2 flex gap-1.5 font-sans text-xs leading-relaxed text-muted-foreground">
-              <NotebookPen className="mt-0.5 size-3.5 shrink-0" />
-              {entry.notes}
-            </p>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function EarlierHistoryDisclosure({
-  entries,
-  displayName,
-}: {
-  entries: WorkoutEntry[];
-  displayName: string;
-}) {
-  const [expanded, setExpanded] = useState(false);
-
-  return (
-    <details
-      className="group overflow-hidden rounded-xl border border-border/80 bg-muted/35"
-      onToggle={(event) => setExpanded(event.currentTarget.open)}
-    >
-      <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 font-sans text-xs font-semibold [&::-webkit-details-marker]:hidden">
-        <History className="size-4 text-muted-foreground" />
-        Earlier weeks
-        <Badge variant="outline" className="ml-auto bg-card font-sans">
-          {entries.length}
-        </Badge>
-        <ChevronRight className="size-4 text-muted-foreground transition-transform group-open:rotate-90" />
-      </summary>
-      {expanded && (
-        <div className="space-y-2 border-t border-border/70 p-2">
-          {entries.map((entry) => (
-            <HistoryWeekDisclosure
-              key={`${entry.id ?? entry.week}-${entry.exerciseOrder}`}
-              entry={entry}
-              displayName={displayName}
-              defaultExpanded={false}
-            />
-          ))}
-        </div>
-      )}
-    </details>
-  );
-}
-
 export function WorkoutApp() {
   const initialWeek = scheduledWeekForToday(defaultSchedule, false);
   const [view, setView] = useState<View>('today');
@@ -959,6 +866,11 @@ export function WorkoutApp() {
   const [workoutFocus, setWorkoutFocus] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [lastSave, setLastSave] = useState<{
+    saved: WorkoutEntry;
+    before?: WorkoutEntry;
+  } | null>(null);
+  const [undoing, setUndoing] = useState(false);
   const [syncingSheet, setSyncingSheet] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [loadingImport, setLoadingImport] = useState(false);
@@ -970,10 +882,22 @@ export function WorkoutApp() {
   const [sheetImportError, setSheetImportError] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [showNotes, setShowNotes] = useState(false);
+  const [exerciseDraft, setDraftStatus] = useState<DraftStatus>({
+    dirty: false,
+    persisted: false,
+  });
+  const loggerSnapshot = useRef<(Draft & { setCount: number }) | null>(null);
+  const onDraftSnapshot = useCallback((value: Draft & { setCount: number }) => {
+    loggerSnapshot.current = value;
+  }, []);
   const [activeTipIndex, setActiveTipIndex] = useState(0);
   const [isOnline, setIsOnline] = useState(true);
   const [pendingWorkoutCount, setPendingWorkoutCount] = useState(0);
+  const [queueIssue, setQueueIssue] = useState<string | null>(null);
+  const blockedWorkouts =
+    typeof window !== 'undefined'
+      ? readPendingWorkouts().filter((item) => item.blocked)
+      : [];
   const [personalRecords, setPersonalRecords] = useState<string[]>([]);
   const [personalRecordOpen, setPersonalRecordOpen] = useState(false);
   const [sessionSummaryOpen, setSessionSummaryOpen] = useState(false);
@@ -995,10 +919,13 @@ export function WorkoutApp() {
   const [activeTrainingTool, setActiveTrainingTool] =
     useState<TrainingTool | null>(null);
   const [schedule, setSchedule] = useState<ProgramSchedule>(defaultSchedule);
-  const [progressExerciseKey, setProgressExerciseKey] = useState('A|1');
   const restTimerRef = useRef<RestTimerHandle>(null);
   const programmeMenuRef = useRef<HTMLDivElement>(null);
   const startupWeekApplied = useRef(false);
+  const refreshSequence = useRef(0);
+  const mutationSequence = useRef(0);
+  const currentSelection = useRef('');
+  currentSelection.current = `${activeWeek}|${activeDay}|${activeIndex}`;
 
   const activePhase = activeWeek > 12 ? 2 : 1;
   const phaseStartWeek = activePhase === 1 ? 1 : 13;
@@ -1083,29 +1010,6 @@ export function WorkoutApp() {
       )
     : undefined;
   const draftKey = `workout:${activeWeek}:${activeDay}:${exercise.order}:${exercise.name}`;
-  const exerciseDraft = useExerciseDraft(
-    draftKey,
-    {
-      ...draftFromEntry(existingEntry),
-      setCount: visibleSetsForEntry(existingEntry, exercise.targetSets),
-    },
-    !loading,
-  );
-  const draft = exerciseDraft.value;
-  const visibleSetCount = draft.setCount;
-  function setDraft(update: Draft | ((current: Draft) => Draft)) {
-    exerciseDraft.setValue((current) => ({
-      ...(typeof update === 'function' ? update(current) : update),
-      setCount: current.setCount,
-    }));
-  }
-  function setVisibleSetCount(update: number | ((current: number) => number)) {
-    exerciseDraft.setValue((current) => ({
-      ...current,
-      setCount:
-        typeof update === 'function' ? update(current.setCount) : update,
-    }));
-  }
   const dayProgress = useMemo(
     () =>
       Object.fromEntries(
@@ -1131,28 +1035,41 @@ export function WorkoutApp() {
 
   const refreshWorkoutData = useCallback(
     async (cachedEntries?: WorkoutEntry[], syncedAt?: string | null) => {
+      const requestSequence = ++refreshSequence.current;
+      const mutation = mutationSequence.current;
       const query =
         cachedEntries && syncedAt
-          ? `?since=${encodeURIComponent(syncedAt)}`
+          ? `?cursor=${encodeURIComponent(syncedAt)}`
           : '';
       const response = await fetch(`/api/workouts${query}`, {
         cache: 'no-store',
+        signal: AbortSignal.timeout(15_000),
       });
       const data = (await response.json()) as {
         entries?: WorkoutEntry[];
         sessionExercises?: SessionExercise[];
         partial?: boolean;
-        serverTime?: string;
+        cursor?: string;
         schedule?: ProgramSchedule;
         error?: string;
       };
       if (!response.ok)
         throw new Error(data.error ?? 'Unable to load workouts.');
+      if (
+        requestSequence !== refreshSequence.current ||
+        mutation !== mutationSequence.current
+      )
+        return readCachedWorkoutEntries()?.entries ?? [];
       const incomingEntries = normaliseWorkoutEntries(data.entries ?? []);
-      const freshEntries =
+      const serverEntries =
         data.partial && cachedEntries
           ? mergeWorkoutEntries(cachedEntries, incomingEntries)
           : incomingEntries;
+      const freshEntries = overlayOutbox(
+        serverEntries,
+        readPendingWorkouts(),
+        workoutKey,
+      );
       const freshSessionExercises = normaliseSessionExercises(
         data.sessionExercises ?? [],
       );
@@ -1162,40 +1079,58 @@ export function WorkoutApp() {
         setSchedule(data.schedule);
         cacheSchedule(data.schedule);
       }
-      cacheWorkoutEntries(freshEntries, data.serverTime);
+      cacheWorkoutEntries(freshEntries, data.cursor);
       cacheSessionExercises(freshSessionExercises);
       return freshEntries;
     },
     [],
   );
 
-  const flushPendingWorkouts = useCallback(async () => {
-    const queue = readPendingWorkouts();
-    if (queue.length === 0 || !navigator.onLine) {
-      setPendingWorkoutCount(queue.length);
-      return;
-    }
+  const flushPendingWorkouts = useCallback(
+    () =>
+      singleFlight('workout-outbox', async () => {
+        const queue = readPendingWorkouts();
+        if (queue.length === 0 || !navigator.onLine) {
+          setPendingWorkoutCount(queue.length);
+          return;
+        }
 
-    const remaining: PendingWorkout[] = [];
-    for (const item of queue) {
-      try {
-        const response = await fetch('/api/workouts', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(item.payload),
-        });
-        if (!response.ok) remaining.push(item);
-      } catch {
-        remaining.push(item);
-      }
-    }
-    cachePendingWorkouts(remaining);
-    setPendingWorkoutCount(remaining.length);
-    if (remaining.length === 0) {
-      await refreshWorkoutData();
-      setNotice('Offline workouts are safely synced to Liftline.');
-    }
-  }, [refreshWorkoutData]);
+        for (const item of queue) {
+          if (item.blocked) continue;
+          try {
+            const response = await fetch('/api/workouts', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(item.payload),
+              signal: AbortSignal.timeout(15_000),
+            });
+            if (response.ok) {
+              await confirmOutboxResponse(response, 'workout', item);
+              acknowledgeOutbox('workout', item, window.localStorage);
+            } else if (!retryableStatus(response.status)) {
+              const data = (await response.json().catch(() => ({}))) as {
+                error?: string;
+              };
+              const message =
+                data.error ??
+                'This queued workout needs review before it can sync.';
+              blockOutbox('workout', item, message, window.localStorage);
+              setError(message);
+            }
+          } catch {
+            // Timeouts and network failures stay durable for bounded automatic retry.
+          }
+        }
+        const remaining = readPendingWorkouts();
+        setPendingWorkoutCount(remaining.length);
+        if (remaining.length === 0) {
+          await refreshWorkoutData();
+          setNotice('Offline workouts are safely synced to Liftline.');
+        }
+      }),
+    [refreshWorkoutData],
+  );
+  useOutboxRetry(flushPendingWorkouts, pendingWorkoutCount);
 
   useEffect(() => {
     if (!programmeMenuOpen) return;
@@ -1224,7 +1159,9 @@ export function WorkoutApp() {
     const cachedSchedule = readCachedSchedule();
     if (cachedSchedule) setSchedule(cachedSchedule);
     if (cachedEntries) {
-      setEntries(cachedEntries);
+      setEntries(
+        overlayOutbox(cachedEntries, readPendingWorkouts(), workoutKey),
+      );
       const cachedPhaseTwoUnlocked = weeklySummariesForPhase(
         cachedEntries,
         cachedSessionExercises,
@@ -1255,11 +1192,18 @@ export function WorkoutApp() {
       // without holding logging behind a slow connection or changing its cursor.
       startupWeekApplied.current = true;
       setLoading(false);
+    } else {
+      const pending = readPendingWorkouts();
+      if (pending.length) {
+        setEntries(overlayOutbox([], pending, workoutKey));
+        setLoading(false);
+      }
     }
     if (cachedSessionExercises.length > 0)
       setSessionExercises(cachedSessionExercises);
     setIsOnline(navigator.onLine);
     setPendingWorkoutCount(readPendingWorkouts().length);
+    setQueueIssue(outboxStorageIssue(window.localStorage));
     refreshWorkoutData(cachedEntries ?? undefined, cachedSnapshot?.syncedAt)
       .then(() => {
         if (!cancelled) setError('');
@@ -1277,12 +1221,20 @@ export function WorkoutApp() {
       void flushPendingWorkouts();
     };
     const handleOffline = () => setIsOnline(false);
+    const handleStorage = () => {
+      const pending = readPendingWorkouts();
+      setPendingWorkoutCount(pending.length);
+      setQueueIssue(outboxStorageIssue(window.localStorage));
+      setEntries((current) => overlayOutbox(current, pending, workoutKey));
+    };
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
+    window.addEventListener('storage', handleStorage);
     return () => {
       cancelled = true;
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('storage', handleStorage);
     };
   }, [flushPendingWorkouts, initialWeek, refreshWorkoutData]);
 
@@ -1350,10 +1302,6 @@ export function WorkoutApp() {
       if (tipTimer != null) window.clearTimeout(tipTimer);
     };
   }, [activeTrainingTips.length]);
-
-  useEffect(() => {
-    setShowNotes(false);
-  }, [draftKey]);
 
   useLayoutEffect(() => {
     try {
@@ -1433,10 +1381,6 @@ export function WorkoutApp() {
     () => totalPersonalRecords(phaseEntries),
     [phaseEntries],
   );
-  const advice = progressionAdvice(exercise, draft, visibleSetCount);
-  const readyToSave = draft.sets
-    .slice(0, visibleSetCount)
-    .every((set) => numberOrNull(set.reps) != null);
   const currentSessionEntries = useMemo(
     () => entryIndex.completedBySession.get(`${activeWeek}|${activeDay}`) ?? [],
     [activeDay, activeWeek, entryIndex],
@@ -1471,40 +1415,6 @@ export function WorkoutApp() {
           Math.round((sessionTimes.at(-1)! - sessionTimes[0]) / 60_000),
         )
       : null;
-  const progressExerciseOptions = useMemo(() => {
-    const customByKey = new Map<string, RoutineExercise>();
-    phaseEntries
-      .filter((entry) => entry.exerciseOrder >= 100)
-      .forEach((entry) => {
-        const key = `${entry.day}|${entry.exerciseOrder}`;
-        if (!customByKey.has(key))
-          customByKey.set(key, {
-            day: entry.day,
-            order: entry.exerciseOrder,
-            name: entry.exercise,
-            targetSets: entry.setCount ?? 3,
-            repRange: entry.target.split('×')[1]?.trim() ?? 'Logged sets',
-            rest: 'Custom',
-            muscles: 'Custom exercise',
-            alternative: 'None',
-          });
-      });
-    return [...activeRoutine, ...customByKey.values()];
-  }, [activeRoutine, phaseEntries]);
-  const selectedProgressExercise =
-    progressExerciseOptions.find(
-      (item) => `${item.day}|${item.order}` === progressExerciseKey,
-    ) ?? progressExerciseOptions[0]!;
-  const selectedProgressData = [
-    ...(entryIndex.completedByExercise.get(
-      `${activePhase}|${selectedProgressExercise.day}|${selectedProgressExercise.order}`,
-    ) ?? []),
-  ]
-    .reverse()
-    .map((entry) => ({
-      week: displayWeekNumber(entry.week),
-      ...workoutMetrics(entry),
-    }));
   const currentSessionComplete = dayProgress[activeDay].complete;
 
   function selectPhase(phase: 1 | 2) {
@@ -1520,7 +1430,6 @@ export function WorkoutApp() {
     );
     setActiveIndex(0);
     setActiveTipIndex(0);
-    setProgressExerciseKey('A|1');
     setView('today');
     setNotice(
       phase === 1
@@ -1539,64 +1448,6 @@ export function WorkoutApp() {
     setActiveDay(day);
     setActiveIndex(0);
     setView('today');
-  }
-
-  function updateSet(index: number, key: 'weight' | 'reps', value: string) {
-    setDraft((current) => ({
-      ...current,
-      sets: current.sets.map((set, setIndex) =>
-        setIndex === index ? { ...set, [key]: value } : set,
-      ),
-    }));
-  }
-
-  function stepSet(index: number, key: 'weight' | 'reps', amount: number) {
-    const current = Number(draft.sets[index][key] || 0);
-    const next = Math.max(0, Math.round((current + amount) * 10) / 10);
-    updateSet(index, key, String(next));
-  }
-
-  function addSet() {
-    setVisibleSetCount((count) => Math.min(5, count + 1));
-  }
-
-  function removeSet() {
-    if (visibleSetCount <= 1) return;
-    const removedIndex = visibleSetCount - 1;
-    setDraft((current) => ({
-      ...current,
-      sets: current.sets.map((set, index) =>
-        index === removedIndex ? { weight: '', reps: '', done: false } : set,
-      ),
-    }));
-    setVisibleSetCount((count) => Math.max(1, count - 1));
-  }
-
-  function toggleSetComplete(index: number) {
-    const set = draft.sets[index];
-    if (!set.done && numberOrNull(set.reps) == null) {
-      setError(`Enter reps for set ${index + 1} before marking it complete.`);
-      return;
-    }
-    setError('');
-    setDraft((current) => ({
-      ...current,
-      sets: current.sets.map((currentSet, setIndex) =>
-        setIndex === index
-          ? { ...currentSet, done: !currentSet.done }
-          : currentSet,
-      ),
-    }));
-    if (!set.done) restTimerRef.current?.start();
-  }
-
-  function usePreviousSession() {
-    if (!previousEntry) return;
-    const previousDraft = draftFromEntry(previousEntry);
-    setDraft({ ...previousDraft, notes: '' });
-    setVisibleSetCount(visibleSetsForEntry(previousEntry, exercise.targetSets));
-    setShowNotes(false);
-    setNotice('Previous weights and reps copied. Review them before saving.');
   }
 
   function advanceToNextSession() {
@@ -1635,12 +1486,25 @@ export function WorkoutApp() {
     if (sessionCelebrationPending) setSessionSummaryOpen(true);
   }
 
-  async function saveExercise() {
+  async function saveExercise(
+    draft: Draft,
+    visibleSetCount: number,
+    clearDraft: () => void,
+  ) {
+    const inputError = validateWorkoutNumbers({
+      weights: draft.sets.map((set) => set.weight),
+      values: draft.sets.map((set) => set.reps),
+      setCount: visibleSetCount,
+      rir: draft.rir,
+    });
+    const readyToSave = inputError === null;
     if (!readyToSave) {
-      setError(`Enter reps for all ${visibleSetCount} displayed sets.`);
+      setError(inputError ?? 'Review your inputs before saving.');
       return;
     }
     setSaving(true);
+    mutationSequence.current++;
+    const savedSelection = currentSelection.current;
     setError('');
     setNotice('');
     const now = new Date().toISOString();
@@ -1666,6 +1530,9 @@ export function WorkoutApp() {
       clientUpdatedAt: now,
     };
     const localEntry = optimisticEntry(payload, exercise);
+    const previousPending = readPendingWorkouts().filter(
+      (item) => item.key === workoutKey(payload),
+    );
     const records = personalRecordsFor(localEntry, phaseEntries);
     const nextEntries = replaceWorkoutEntry(entries, localEntry);
     setEntries(nextEntries);
@@ -1690,24 +1557,27 @@ export function WorkoutApp() {
 
     const queueForLater = () => {
       const key = workoutKey(payload);
-      const queue = [
-        ...readPendingWorkouts().filter((item) => item.key !== key),
-        { key, payload },
-      ];
-      if (!cachePendingWorkouts(queue)) {
+      if (
+        !enqueueOutbox(
+          'workout',
+          { key, revision: crypto.randomUUID(), payload, record: localEntry },
+          window.localStorage,
+        )
+      ) {
         setEntries(entries);
         cacheWorkoutEntries(entries);
         setSessionCelebrationPending(false);
         setPersonalRecordOpen(false);
         return false;
       }
-      setPendingWorkoutCount(queue.length);
+      setPendingWorkoutCount(readPendingWorkouts().length);
       setIsOnline(navigator.onLine);
-      exerciseDraft.clear();
+      clearDraft();
       return true;
     };
 
     const advance = () => {
+      if (currentSelection.current !== savedSelection) return;
       if (sessionJustCompleted && records.length === 0)
         setSessionSummaryOpen(true);
       else if (activeIndex < dayExercises.length - 1)
@@ -1733,12 +1603,21 @@ export function WorkoutApp() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(15_000),
       });
       const data = (await response.json()) as {
         entry?: WorkoutEntry;
         sheetSyncQueued?: boolean;
         error?: string;
       };
+      if (!response.ok && !retryableStatus(response.status)) {
+        setEntries(entries);
+        cacheWorkoutEntries(entries);
+        setSessionCelebrationPending(false);
+        setPersonalRecordOpen(false);
+        setError(data.error ?? 'Review your inputs before saving again.');
+        return;
+      }
       if (!response.ok || !data.entry)
         throw new Error(data.error ?? 'Unable to save exercise.');
       const saved = {
@@ -1746,6 +1625,11 @@ export function WorkoutApp() {
         completed: Boolean(data.entry.completed),
         offlinePending: false,
       };
+      setLastSave({ saved, before: existingEntry });
+      previousPending.forEach((item) =>
+        acknowledgeOutbox('workout', item, window.localStorage),
+      );
+      setPendingWorkoutCount(readPendingWorkouts().length);
       setEntries((current) => {
         const refreshed = replaceWorkoutEntry(current, saved);
         cacheWorkoutEntries(refreshed);
@@ -1754,7 +1638,7 @@ export function WorkoutApp() {
       setNotice(
         `${exercise.name} saved to Liftline${data.sheetSyncQueued ? ' · Sheet sync queued' : ''}`,
       );
-      exerciseDraft.clear();
+      clearDraft();
       window.setTimeout(() => {
         void refreshWorkoutData().catch(() => undefined);
       }, 3500);
@@ -1778,6 +1662,73 @@ export function WorkoutApp() {
       advance();
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function undoLastSave() {
+    if (
+      !lastSave ||
+      !navigator.onLine ||
+      readPendingWorkouts().some(
+        (item) => item.key === workoutKey(lastSave.saved),
+      )
+    ) {
+      setError('Reconnect and sync pending changes before undoing this save.');
+      return;
+    }
+    setUndoing(true);
+    mutationSequence.current++;
+    try {
+      const response = await fetch('/api/workouts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(
+          undoWorkoutPayload(lastSave.saved, lastSave.before),
+        ),
+        signal: AbortSignal.timeout(15_000),
+      });
+      const result = (await response.json()) as {
+        entry?: WorkoutEntry;
+        error?: string;
+      };
+      if (!response.ok || !result.entry)
+        throw Error(result.error ?? 'Unable to undo this save.');
+      const restored = {
+        ...result.entry,
+        completed: Boolean(result.entry.completed),
+      };
+      setEntries((current) => {
+        const next = replaceWorkoutEntry(current, restored);
+        cacheWorkoutEntries(next);
+        return next;
+      });
+      setPersonalRecordOpen(false);
+      setSessionSummaryOpen(false);
+      setSessionCelebrationPending(false);
+      setActiveWeek(restored.week);
+      setActiveDay(restored.day);
+      setActiveIndex(
+        Math.max(
+          0,
+          planForSession(
+            sessionExercises,
+            restored.week,
+            restored.day,
+          ).findIndex((item) => item.order === restored.exerciseOrder),
+        ),
+      );
+      setView('today');
+      setLastSave(null);
+      setError('');
+      setNotice('Last save undone. Any newer device drafts have been kept.');
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : 'Unable to undo. Your saved workout has been kept.',
+      );
+    } finally {
+      setUndoing(false);
     }
   }
 
@@ -2016,6 +1967,10 @@ export function WorkoutApp() {
     setBackupBusy(true);
     setError('');
     try {
+      if (hasPendingOutbox(window.localStorage))
+        throw new Error(
+          'Sync your pending main and Holiday workouts before downloading a complete backup. Drafts saved only on this device are not included.',
+        );
       const response = await fetch('/api/workouts/backup');
       if (!response.ok) throw new Error('Unable to create a Liftline backup.');
       const blob = await response.blob();
@@ -2025,7 +1980,9 @@ export function WorkoutApp() {
       anchor.download = `liftline-backup-${new Date().toISOString().slice(0, 10)}.json`;
       anchor.click();
       URL.revokeObjectURL(url);
-      setNotice('Liftline backup downloaded.');
+      setNotice(
+        'Backup downloaded, including Holiday workouts. Unsaved device drafts are not included.',
+      );
     } catch (backupError) {
       setError(
         backupError instanceof Error
@@ -2335,6 +2292,75 @@ export function WorkoutApp() {
       </header>
 
       <div className="beta-app-content mx-auto max-w-6xl py-5 md:py-8">
+        {queueIssue && (
+          <Alert variant="destructive" className="mb-3">
+            <AlertTitle>Offline data needs attention</AlertTitle>
+            <AlertDescription>{queueIssue}</AlertDescription>
+          </Alert>
+        )}
+        {blockedWorkouts.map((item) => (
+          <div
+            key={item.key}
+            className="mb-3 rounded-xl border border-destructive/30 bg-card p-3 text-sm"
+          >
+            <p>{item.blocked} Your local inputs are kept.</p>
+            <Button
+              variant="outline"
+              className="mt-2"
+              onClick={() => {
+                setActiveWeek(item.record.week);
+                setActiveDay(item.record.day);
+                setActiveIndex(
+                  Math.max(
+                    0,
+                    planForSession(
+                      sessionExercises,
+                      item.record.week,
+                      item.record.day,
+                    ).findIndex(
+                      (exercise) =>
+                        exercise.order === item.record.exerciseOrder,
+                    ),
+                  ),
+                );
+                setView('today');
+              }}
+            >
+              Review pending workout
+            </Button>
+          </div>
+        ))}
+        {lastSave && (
+          <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border bg-card p-3 text-sm">
+            <span>Last saved: {lastSave.saved.exercise}</span>
+            <Button
+              variant="outline"
+              disabled={undoing || saving || !isOnline}
+              onClick={() => void undoLastSave()}
+            >
+              <RotateCcw />
+              {undoing ? 'Undoing…' : 'Undo last save'}
+            </Button>
+          </div>
+        )}
+        {pendingWorkoutCount > 0 && (
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/15 bg-secondary/60 p-3 text-sm">
+            <span>
+              {pendingWorkoutCount} changes saved only on this device. Keep
+              Liftline open to sync.
+            </span>
+            <Button
+              variant="outline"
+              onClick={() =>
+                void flushPendingWorkouts().catch((error: Error) =>
+                  setError(error.message),
+                )
+              }
+            >
+              Retry sync
+            </Button>
+          </div>
+        )}
         {(error || notice) && (
           <Alert
             className={`mb-5 ${error ? 'border-destructive/30 bg-destructive/5 text-destructive' : 'border-success/25 bg-success-soft text-success'}`}
@@ -2619,464 +2645,633 @@ export function WorkoutApp() {
                 </div>
               </div>
 
-              <Card className="beta-workout-card gap-0 border-0 py-0 shadow-sm shadow-slate-900/5 ring-border">
-                <CardHeader className="border-b bg-muted/35 pt-(--card-spacing)">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge className="bg-day-c font-sans text-day-c-foreground">
-                      Day {activeDay}
-                    </Badge>
-                    <Badge variant="outline" className="font-sans">
-                      <Target /> {targetLabel(exercise)}
-                    </Badge>
-                    <Badge variant="outline" className="font-sans">
-                      <Clock3 /> Rest {exercise.rest}
-                    </Badge>
-                    {existingEntry?.completed && (
-                      <Badge className="bg-success-soft font-sans text-success">
-                        <Check /> Logged
-                      </Badge>
-                    )}
-                    {exercise.skipped && (
-                      <Badge className="bg-warning-soft font-sans text-warning-foreground">
-                        Skipped this session
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                    <CardDescription className="font-sans">
-                      {exercise.muscles} · Alternative: {exercise.alternative}
-                    </CardDescription>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      aria-label={`Show an animated movement guide for ${exercise.name}`}
-                      onClick={() => setExerciseDemoOpen(true)}
-                      className="border-primary/20 bg-background font-sans text-sm font-semibold text-primary hover:bg-accent hover:text-primary"
-                    >
-                      <CirclePlay className="size-4" /> See movement
-                    </Button>
-                  </div>
-                  <RestTimer
-                    key={`${activeWeek}|${activeDay}|${exercise.order}|${suggestedRestSeconds}`}
-                    ref={restTimerRef}
-                    exerciseName={exercise.name}
-                    restLabel={exercise.rest}
-                    suggestedSeconds={suggestedRestSeconds}
-                    notificationIconHref={notificationIconHref}
-                  />
-                  {(!workoutFocus || previousEntry) && (
-                    <details
-                      key={`${activeWeek}|${activeDay}|${exercise.order}|${workoutFocus}`}
-                      open={!workoutFocus}
-                      className="mt-3 rounded-xl border border-primary/15 bg-background/90 p-3 shadow-sm shadow-slate-900/5"
-                    >
-                      <summary className="flex cursor-pointer list-none items-center gap-3 [&::-webkit-details-marker]:hidden">
-                        <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-accent text-primary">
-                          <History className="size-4" />
-                        </span>
-                        <div className="flex min-w-0 flex-1 flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                          <p className="font-sans text-sm font-semibold">
-                            Previous session
-                          </p>
-                          {previousEntry && (
-                            <p className="font-sans text-xs font-medium text-muted-foreground">
-                              {formatWorkoutDate(
-                                previousEntry.completedAt ??
-                                  previousEntry.updatedAt,
-                              )}{' '}
-                              · Week {displayWeekNumber(previousEntry.week)}
-                            </p>
+              <ExerciseDraftBoundary
+                key={draftKey}
+                draftKey={draftKey}
+                baseline={{
+                  ...draftFromEntry(existingEntry),
+                  setCount: visibleSetsForEntry(
+                    existingEntry,
+                    exercise.targetSets,
+                  ),
+                }}
+                ready={!loading}
+                onStatus={setDraftStatus}
+                onSnapshot={onDraftSnapshot}
+              >
+                {(exerciseDraft) => {
+                  const { showNotes, setShowNotes } = exerciseDraft;
+                  const draft = exerciseDraft.value;
+                  const visibleSetCount = draft.setCount;
+                  function setDraft(
+                    update: Draft | ((current: Draft) => Draft),
+                  ) {
+                    exerciseDraft.setValue((current) => ({
+                      ...(typeof update === 'function'
+                        ? update(current)
+                        : update),
+                      setCount: current.setCount,
+                    }));
+                  }
+                  function setVisibleSetCount(
+                    update: number | ((current: number) => number),
+                  ) {
+                    exerciseDraft.setValue((current) => ({
+                      ...current,
+                      setCount:
+                        typeof update === 'function'
+                          ? update(current.setCount)
+                          : update,
+                    }));
+                  }
+
+                  const advice = progressionAdvice(
+                    exercise,
+                    draft,
+                    visibleSetCount,
+                  );
+                  const inputError = validateWorkoutNumbers({
+                    weights: draft.sets.map((set) => set.weight),
+                    values: draft.sets.map((set) => set.reps),
+                    setCount: visibleSetCount,
+                    rir: draft.rir,
+                  });
+                  const readyToSave = inputError === null;
+
+                  function updateSet(
+                    index: number,
+                    key: 'weight' | 'reps',
+                    value: string,
+                  ) {
+                    setDraft((current) => ({
+                      ...current,
+                      sets: current.sets.map((set, setIndex) =>
+                        setIndex === index ? { ...set, [key]: value } : set,
+                      ),
+                    }));
+                  }
+
+                  function stepSet(
+                    index: number,
+                    key: 'weight' | 'reps',
+                    amount: number,
+                  ) {
+                    const current = Number(draft.sets[index][key] || 0);
+                    const next = Math.max(
+                      0,
+                      Math.round((current + amount) * 1000) / 1000,
+                    );
+                    updateSet(index, key, String(next));
+                  }
+
+                  function addSet() {
+                    setVisibleSetCount((count) => Math.min(5, count + 1));
+                  }
+
+                  function removeSet() {
+                    if (visibleSetCount <= 1) return;
+                    const removedIndex = visibleSetCount - 1;
+                    setDraft((current) => ({
+                      ...current,
+                      sets: current.sets.map((set, index) =>
+                        index === removedIndex
+                          ? { weight: '', reps: '', done: false }
+                          : set,
+                      ),
+                    }));
+                    setVisibleSetCount((count) => Math.max(1, count - 1));
+                  }
+
+                  function toggleSetComplete(index: number) {
+                    const set = draft.sets[index];
+                    const invalidSet = validateWorkoutNumbers({
+                      weights: [set.weight],
+                      values: [set.reps],
+                      setCount: 1,
+                      rir: null,
+                    });
+                    if (!set.done && invalidSet) {
+                      setError(invalidSet);
+                      return;
+                    }
+                    setError('');
+                    setDraft((current) => ({
+                      ...current,
+                      sets: current.sets.map((currentSet, setIndex) =>
+                        setIndex === index
+                          ? { ...currentSet, done: !currentSet.done }
+                          : currentSet,
+                      ),
+                    }));
+                    if (!set.done) restTimerRef.current?.start();
+                  }
+
+                  function usePreviousSession() {
+                    if (!previousEntry) return;
+                    const previousDraft = draftFromEntry(previousEntry);
+                    setDraft({
+                      ...previousDraft,
+                      sets: recallSets(previousDraft.sets),
+                      notes: '',
+                    });
+                    setVisibleSetCount(
+                      visibleSetsForEntry(previousEntry, exercise.targetSets),
+                    );
+                    setShowNotes(false);
+                    setNotice(
+                      'Previous weights and reps copied. Review them before saving.',
+                    );
+                  }
+
+                  return (
+                    <Card className="beta-workout-card gap-0 border-0 py-0 shadow-sm shadow-slate-900/5 ring-border">
+                      <CardHeader className="border-b bg-muted/35 pt-(--card-spacing)">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge className="bg-day-c font-sans text-day-c-foreground">
+                            Day {activeDay}
+                          </Badge>
+                          <Badge variant="outline" className="font-sans">
+                            <Target /> {targetLabel(exercise)}
+                          </Badge>
+                          <Badge variant="outline" className="font-sans">
+                            <Clock3 /> Rest {exercise.rest}
+                          </Badge>
+                          {existingEntry?.completed && (
+                            <Badge className="bg-success-soft font-sans text-success">
+                              <Check /> Logged
+                            </Badge>
+                          )}
+                          {exercise.skipped && (
+                            <Badge className="bg-warning-soft font-sans text-warning-foreground">
+                              Skipped this session
+                            </Badge>
                           )}
                         </div>
-                        <ChevronDown
-                          className="size-4 shrink-0 text-muted-foreground"
-                          aria-hidden="true"
-                        />
-                      </summary>
-                      {previousEntry ? (
-                        <div className="mt-2.5">
-                          <div className="flex flex-wrap gap-1.5">
-                            {loggedSets(previousEntry).map((set) => (
-                              <span
-                                key={set.set}
-                                className="rounded-lg bg-secondary px-2 py-1.5 font-sans text-xs font-medium tabular-nums"
-                              >
-                                Set {set.set}:{' '}
-                                {set.weight == null
-                                  ? `${set.reps} ${exercise.name === 'Plank' ? 'sec' : 'reps'}`
-                                  : `${set.weight} kg × ${set.reps}`}
-                              </span>
-                            ))}
-                          </div>
-                          <div className="mt-2 flex flex-wrap items-center gap-2">
-                            {previousEntry.rir != null && (
-                              <span className="rounded-lg bg-success-soft px-2.5 py-1.5 font-sans text-xs font-medium text-success">
-                                RIR {previousEntry.rir}
-                              </span>
-                            )}
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="text-sm"
-                              onClick={usePreviousSession}
-                            >
-                              <Copy /> Use previous
-                            </Button>
-                          </div>
-                          {(previousEntry.notes ?? '').trim() && (
-                            <div className="mt-2.5 flex items-start gap-2 rounded-lg border border-primary/10 bg-background/65 px-3 py-2.5">
-                              <NotebookPen
-                                className="mt-0.5 size-4 shrink-0 text-primary"
-                                aria-hidden="true"
-                              />
-                              <p className="min-w-0 break-words font-sans text-xs leading-relaxed text-muted-foreground">
-                                <span className="font-semibold text-foreground">
-                                  Previous note:
-                                </span>{' '}
-                                {previousEntry.notes.trim()}
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <p className="mt-2 font-sans text-xs leading-relaxed text-muted-foreground">
-                          No earlier session for this exercise yet. Your last
-                          sets and date will appear here from Week 2 onward.
-                        </p>
-                      )}
-                    </details>
-                  )}
-                </CardHeader>
-                <CardContent className="py-(--card-spacing)">
-                  <fieldset
-                    disabled={loading || saving}
-                    className="min-w-0"
-                    aria-label={`Log ${exercise.name}`}
-                  >
-                    {exercise.skipped ? (
-                      <div className="grid min-h-52 place-items-center py-8 text-center">
-                        <div className="max-w-sm">
-                          <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-warning-soft text-warning-foreground">
-                            <Minus className="size-5" />
-                          </span>
-                          <h3 className="mt-3 font-sans text-lg font-semibold">
-                            Skipped for Week {activeDisplayWeek}
-                          </h3>
-                          <p className="mt-1 font-sans text-sm leading-relaxed text-muted-foreground">
-                            This exercise does not count against Day {activeDay}{' '}
-                            completion. You can bring it back from Edit session.
-                          </p>
-                          <Button
-                            className="mt-4"
-                            variant="outline"
-                            onClick={() =>
-                              setActiveIndex((index) =>
-                                Math.min(dayExercises.length - 1, index + 1),
-                              )
-                            }
-                          >
-                            Continue <ChevronRight />
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="hidden grid-cols-[42px_minmax(0,1fr)_64px] items-center gap-2 border-b py-2 font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground md:grid">
-                          <span className="text-center">Set</span>
-                          <div className="grid grid-cols-2 gap-3">
-                            <span className="text-center">Weight (kg)</span>
-                            <span className="text-center">
-                              {exercise.name === 'Plank' ? 'Seconds' : 'Reps'}
-                            </span>
-                          </div>
-                          <span className="text-center">
-                            <span className="sr-only sm:not-sr-only">
-                              Status
-                            </span>
-                          </span>
-                        </div>
-                        {draft.sets
-                          .slice(0, visibleSetCount)
-                          .map((set, index) => {
-                            const setLabel =
-                              index >= exercise.targetSets
-                                ? 'EXTRA'
-                                : index >= activeSets
-                                  ? 'OPT'
-                                  : '';
-                            return (
-                              <div
-                                key={index}
-                                className="grid grid-cols-[2rem_minmax(0,1fr)_2.75rem] items-center gap-x-2 border-b border-border/70 py-3 last:border-0 md:grid-cols-[42px_minmax(0,1fr)_64px] md:gap-2"
-                              >
-                                <div className="flex items-center justify-center self-center min-[32rem]:h-11 min-[32rem]:self-end md:self-center">
-                                  <span className="relative grid size-8 place-items-center rounded-full bg-secondary font-sans text-sm font-bold">
-                                    {index + 1}
-                                    {setLabel && (
-                                      <span className="absolute -right-3 -top-2 rounded bg-warning-soft px-1 font-sans text-[8px] text-warning-foreground">
-                                        {setLabel}
-                                      </span>
-                                    )}
-                                  </span>
-                                </div>
-                                <div className="col-start-2 min-w-0">
-                                  <div className="grid gap-3 min-[32rem]:grid-cols-2">
-                                    <div className="w-full max-w-60 min-w-0 justify-self-center min-[32rem]:max-w-none">
-                                      <span className="mb-1 block font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground md:hidden">
-                                        Weight (kg)
-                                      </span>
-                                      <div className="grid w-full grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center justify-items-center gap-2 min-[32rem]:gap-1">
-                                        <Button
-                                          variant="outline"
-                                          size="icon-sm"
-                                          aria-label={`Decrease set ${index + 1} weight`}
-                                          onClick={() =>
-                                            stepSet(index, 'weight', -2.5)
-                                          }
-                                        >
-                                          <Minus />
-                                        </Button>
-                                        <Input
-                                          aria-label={`Set ${index + 1} weight in kilograms`}
-                                          inputMode="decimal"
-                                          type="number"
-                                          value={set.weight}
-                                          placeholder={
-                                            exercise.name === 'Plank'
-                                              ? 'Optional'
-                                              : '0'
-                                          }
-                                          onFocus={(event) =>
-                                            event.currentTarget.select()
-                                          }
-                                          onChange={(event) =>
-                                            updateSet(
-                                              index,
-                                              'weight',
-                                              event.target.value,
-                                            )
-                                          }
-                                          className="h-11 w-full min-w-0 bg-background text-center font-sans text-lg font-semibold text-foreground tabular-nums placeholder:font-medium placeholder:text-muted-foreground/35"
-                                        />
-                                        <Button
-                                          variant="outline"
-                                          size="icon-sm"
-                                          aria-label={`Increase set ${index + 1} weight`}
-                                          onClick={() =>
-                                            stepSet(index, 'weight', 2.5)
-                                          }
-                                        >
-                                          <Plus />
-                                        </Button>
-                                      </div>
-                                    </div>
-                                    <div className="w-full max-w-60 min-w-0 justify-self-center min-[32rem]:max-w-none">
-                                      <span className="mb-1 block font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground md:hidden">
-                                        {exercise.name === 'Plank'
-                                          ? 'Seconds'
-                                          : 'Reps'}
-                                      </span>
-                                      <div className="grid w-full grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center justify-items-center gap-2 min-[32rem]:gap-1">
-                                        <Button
-                                          variant="outline"
-                                          size="icon-sm"
-                                          aria-label={`Decrease set ${index + 1} repetitions`}
-                                          onClick={() =>
-                                            stepSet(index, 'reps', -1)
-                                          }
-                                        >
-                                          <Minus />
-                                        </Button>
-                                        <Input
-                                          aria-label={`Set ${index + 1} ${exercise.name === 'Plank' ? 'seconds' : 'repetitions'}`}
-                                          inputMode="numeric"
-                                          type="number"
-                                          value={set.reps}
-                                          placeholder="0"
-                                          onFocus={(event) =>
-                                            event.currentTarget.select()
-                                          }
-                                          onChange={(event) =>
-                                            updateSet(
-                                              index,
-                                              'reps',
-                                              event.target.value,
-                                            )
-                                          }
-                                          className="h-11 w-full min-w-0 bg-background text-center font-sans text-lg font-semibold text-foreground tabular-nums placeholder:font-medium placeholder:text-muted-foreground/35"
-                                        />
-                                        <Button
-                                          variant="outline"
-                                          size="icon-sm"
-                                          aria-label={`Increase set ${index + 1} repetitions`}
-                                          onClick={() =>
-                                            stepSet(index, 'reps', 1)
-                                          }
-                                        >
-                                          <Plus />
-                                        </Button>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                                <div className="col-start-3 flex h-full items-center justify-center min-[32rem]:h-11 min-[32rem]:self-end md:self-center">
-                                  <button
-                                    type="button"
-                                    onClick={() => toggleSetComplete(index)}
-                                    aria-label={`${set.done ? 'Reopen' : 'Complete'} set ${index + 1}`}
-                                    aria-pressed={set.done}
-                                    className={`grid size-11 place-items-center rounded-full border-2 transition-colors md:size-8 ${set.done ? 'border-success bg-success text-white' : 'border-border bg-background text-transparent hover:border-primary'}`}
-                                  >
-                                    <Check className="size-4" />
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          })}
-
-                        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-muted/55 p-2.5">
-                          <p className="px-1 font-sans text-xs text-muted-foreground">
-                            <strong className="text-foreground">
-                              {visibleSetCount}{' '}
-                              {visibleSetCount === 1 ? 'set' : 'sets'}
-                            </strong>{' '}
-                            · {activeSets} recommended this week
-                          </p>
-                          <div className="flex gap-2">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              disabled={visibleSetCount <= 1}
-                              onClick={removeSet}
-                            >
-                              <Minus /> Remove set
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              disabled={visibleSetCount >= 5}
-                              onClick={addSet}
-                            >
-                              <Plus /> Add set
-                            </Button>
-                          </div>
-                        </div>
-
-                        <div className="mt-4 grid grid-cols-[1fr_112px] items-end gap-3">
-                          <div>
-                            <label
-                              htmlFor="rir"
-                              className="mb-1.5 block font-sans text-sm font-medium"
-                            >
-                              Reps in reserve (RIR)
-                            </label>
-                            <p className="font-sans text-xs text-muted-foreground">
-                              {activeWeek <= 2
-                                ? 'Aim for about 3 during ramp-in.'
-                                : 'Aim for 1–2 with clean form.'}
-                            </p>
-                          </div>
-                          <Input
-                            id="rir"
-                            type="number"
-                            inputMode="numeric"
-                            value={draft.rir}
-                            placeholder="2"
-                            min="0"
-                            max="5"
-                            onFocus={(event) => event.currentTarget.select()}
-                            onChange={(event) =>
-                              setDraft((current) => ({
-                                ...current,
-                                rir: event.target.value,
-                              }))
-                            }
-                            className="h-11 bg-background text-center font-sans text-lg font-semibold"
-                          />
-                        </div>
-
-                        <div className="mt-4 flex items-center justify-between rounded-xl bg-secondary/70 p-3">
-                          <div>
-                            <p className="font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                              Next time
-                            </p>
-                            <p className="font-sans text-sm font-semibold">
-                              {advice}
-                            </p>
-                          </div>
-                          <TrendingUp className="size-5 text-primary" />
-                        </div>
-
-                        {exerciseDraft.dirty && (
-                          <p
-                            className="mt-3 text-xs text-muted-foreground"
-                            role="status"
-                          >
-                            {exerciseDraft.persisted
-                              ? `${exerciseDraft.recovered ? 'Draft recovered. ' : ''}Your inputs are saved on this device. Save & next to log this exercise.`
-                              : 'Device storage is unavailable. Keep this page open until you save the exercise.'}
-                          </p>
-                        )}
-                        {showNotes || Boolean(draft.notes) ? (
-                          <div className="mt-4">
-                            <label
-                              htmlFor="notes"
-                              className="mb-1.5 block font-sans text-sm font-medium"
-                            >
-                              Notes
-                            </label>
-                            <Textarea
-                              id="notes"
-                              value={draft.notes}
-                              onChange={(event) =>
-                                setDraft((current) => ({
-                                  ...current,
-                                  notes: event.target.value,
-                                }))
-                              }
-                              placeholder="Form cues, machine settings, anything to remember…"
-                              className="font-sans"
-                            />
-                          </div>
-                        ) : (
+                        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                          <CardDescription className="font-sans">
+                            {exercise.muscles} · Alternative:{' '}
+                            {exercise.alternative}
+                          </CardDescription>
                           <Button
                             type="button"
-                            variant="ghost"
-                            className="mt-3 font-sans text-muted-foreground"
-                            onClick={() => setShowNotes(true)}
+                            variant="outline"
+                            aria-label={`Show an animated movement guide for ${exercise.name}`}
+                            onClick={() => setExerciseDemoOpen(true)}
+                            className="border-primary/20 bg-background font-sans text-sm font-semibold text-primary hover:bg-accent hover:text-primary"
                           >
-                            <NotebookPen /> Add notes
+                            <CirclePlay className="size-4" /> See movement
                           </Button>
+                        </div>
+                        <RestTimer
+                          key={`${activeWeek}|${activeDay}|${exercise.order}|${suggestedRestSeconds}`}
+                          ref={restTimerRef}
+                          exerciseName={exercise.name}
+                          restLabel={exercise.rest}
+                          suggestedSeconds={suggestedRestSeconds}
+                          notificationIconHref={notificationIconHref}
+                        />
+                        {(!workoutFocus || previousEntry) && (
+                          <details
+                            key={`${activeWeek}|${activeDay}|${exercise.order}|${workoutFocus}`}
+                            open={!workoutFocus}
+                            className="mt-3 rounded-xl border border-primary/15 bg-background/90 p-3 shadow-sm shadow-slate-900/5"
+                          >
+                            <summary className="flex cursor-pointer list-none items-center gap-3 [&::-webkit-details-marker]:hidden">
+                              <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-accent text-primary">
+                                <History className="size-4" />
+                              </span>
+                              <div className="flex min-w-0 flex-1 flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                                <p className="font-sans text-sm font-semibold">
+                                  Previous session
+                                </p>
+                                {previousEntry && (
+                                  <p className="font-sans text-xs font-medium text-muted-foreground">
+                                    {formatWorkoutDate(
+                                      previousEntry.completedAt ??
+                                        previousEntry.updatedAt,
+                                    )}{' '}
+                                    · Week{' '}
+                                    {displayWeekNumber(previousEntry.week)}
+                                  </p>
+                                )}
+                              </div>
+                              <ChevronDown
+                                className="size-4 shrink-0 text-muted-foreground"
+                                aria-hidden="true"
+                              />
+                            </summary>
+                            {previousEntry ? (
+                              <div className="mt-2.5">
+                                <div className="flex flex-wrap gap-1.5">
+                                  {loggedSets(previousEntry).map((set) => (
+                                    <span
+                                      key={set.set}
+                                      className="rounded-lg bg-secondary px-2 py-1.5 font-sans text-xs font-medium tabular-nums"
+                                    >
+                                      Set {set.set}:{' '}
+                                      {set.weight == null
+                                        ? `${set.reps} ${exercise.name === 'Plank' ? 'sec' : 'reps'}`
+                                        : `${set.weight} kg × ${set.reps}`}
+                                    </span>
+                                  ))}
+                                </div>
+                                <div className="mt-2 flex flex-wrap items-center gap-2">
+                                  {previousEntry.rir != null && (
+                                    <span className="rounded-lg bg-success-soft px-2.5 py-1.5 font-sans text-xs font-medium text-success">
+                                      RIR {previousEntry.rir}
+                                    </span>
+                                  )}
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="text-sm"
+                                    onClick={usePreviousSession}
+                                  >
+                                    <Copy /> Use previous
+                                  </Button>
+                                </div>
+                                {(previousEntry.notes ?? '').trim() && (
+                                  <div className="mt-2.5 flex items-start gap-2 rounded-lg border border-primary/10 bg-background/65 px-3 py-2.5">
+                                    <NotebookPen
+                                      className="mt-0.5 size-4 shrink-0 text-primary"
+                                      aria-hidden="true"
+                                    />
+                                    <p className="min-w-0 break-words font-sans text-xs leading-relaxed text-muted-foreground">
+                                      <span className="font-semibold text-foreground">
+                                        Previous note:
+                                      </span>{' '}
+                                      {previousEntry.notes.trim()}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <p className="mt-2 font-sans text-xs leading-relaxed text-muted-foreground">
+                                No earlier session for this exercise yet. Your
+                                last sets and date will appear here from Week 2
+                                onward.
+                              </p>
+                            )}
+                          </details>
                         )}
-
-                        <Button
-                          size="lg"
-                          className="mt-4 h-12 w-full rounded-xl font-sans text-base shadow-md shadow-primary/20"
-                          disabled={saving || loading}
-                          onClick={saveExercise}
+                      </CardHeader>
+                      <CardContent className="py-(--card-spacing)">
+                        <fieldset
+                          disabled={loading || saving}
+                          className="min-w-0"
+                          aria-label={`Log ${exercise.name}`}
                         >
-                          {saving ? (
-                            <Loader2 className="animate-spin" />
-                          ) : existingEntry?.completed ? (
-                            <RotateCcw />
+                          {exercise.skipped ? (
+                            <div className="grid min-h-52 place-items-center py-8 text-center">
+                              <div className="max-w-sm">
+                                <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-warning-soft text-warning-foreground">
+                                  <Minus className="size-5" />
+                                </span>
+                                <h3 className="mt-3 font-sans text-lg font-semibold">
+                                  Skipped for Week {activeDisplayWeek}
+                                </h3>
+                                <p className="mt-1 font-sans text-sm leading-relaxed text-muted-foreground">
+                                  This exercise does not count against Day{' '}
+                                  {activeDay} completion. You can bring it back
+                                  from Edit session.
+                                </p>
+                                <Button
+                                  className="mt-4"
+                                  variant="outline"
+                                  onClick={() =>
+                                    setActiveIndex((index) =>
+                                      Math.min(
+                                        dayExercises.length - 1,
+                                        index + 1,
+                                      ),
+                                    )
+                                  }
+                                >
+                                  Continue <ChevronRight />
+                                </Button>
+                              </div>
+                            </div>
                           ) : (
-                            <CheckCircle2 />
+                            <>
+                              <div className="hidden grid-cols-[42px_minmax(0,1fr)_64px] items-center gap-2 border-b py-2 font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground md:grid">
+                                <span className="text-center">Set</span>
+                                <div className="grid grid-cols-2 gap-3">
+                                  <span className="text-center">
+                                    Weight (kg)
+                                  </span>
+                                  <span className="text-center">
+                                    {exercise.name === 'Plank'
+                                      ? 'Seconds'
+                                      : 'Reps'}
+                                  </span>
+                                </div>
+                                <span className="text-center">
+                                  <span className="sr-only sm:not-sr-only">
+                                    Status
+                                  </span>
+                                </span>
+                              </div>
+                              {draft.sets
+                                .slice(0, visibleSetCount)
+                                .map((set, index) => {
+                                  const setLabel =
+                                    index >= exercise.targetSets
+                                      ? 'EXTRA'
+                                      : index >= activeSets
+                                        ? 'OPT'
+                                        : '';
+                                  return (
+                                    <div
+                                      key={index}
+                                      className="grid grid-cols-[2rem_minmax(0,1fr)_2.75rem] items-center gap-x-2 border-b border-border/70 py-3 last:border-0 md:grid-cols-[42px_minmax(0,1fr)_64px] md:gap-2"
+                                    >
+                                      <div className="flex items-center justify-center self-center min-[32rem]:h-11 min-[32rem]:self-end md:self-center">
+                                        <span className="relative grid size-8 place-items-center rounded-full bg-secondary font-sans text-sm font-bold">
+                                          {index + 1}
+                                          {setLabel && (
+                                            <span className="absolute -right-3 -top-2 rounded bg-warning-soft px-1 font-sans text-[8px] text-warning-foreground">
+                                              {setLabel}
+                                            </span>
+                                          )}
+                                        </span>
+                                      </div>
+                                      <div className="col-start-2 min-w-0">
+                                        <div className="grid gap-3 min-[32rem]:grid-cols-2">
+                                          <div className="w-full max-w-60 min-w-0 justify-self-center min-[32rem]:max-w-none">
+                                            <span className="mb-1 block font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground md:hidden">
+                                              Weight (kg)
+                                            </span>
+                                            <div className="grid w-full grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center justify-items-center gap-2 min-[32rem]:gap-1">
+                                              <Button
+                                                variant="outline"
+                                                size="icon-sm"
+                                                aria-label={`Decrease set ${index + 1} weight`}
+                                                onClick={() =>
+                                                  stepSet(index, 'weight', -2.5)
+                                                }
+                                              >
+                                                <Minus />
+                                              </Button>
+                                              <Input
+                                                aria-label={`Set ${index + 1} weight in kilograms`}
+                                                inputMode="decimal"
+                                                type="number"
+                                                min="0"
+                                                step="any"
+                                                value={set.weight}
+                                                placeholder={
+                                                  exercise.name === 'Plank'
+                                                    ? 'Optional'
+                                                    : '0'
+                                                }
+                                                onFocus={(event) =>
+                                                  event.currentTarget.select()
+                                                }
+                                                onChange={(event) =>
+                                                  updateSet(
+                                                    index,
+                                                    'weight',
+                                                    event.target.value,
+                                                  )
+                                                }
+                                                className="h-11 w-full min-w-0 bg-background text-center font-sans text-lg font-semibold text-foreground tabular-nums placeholder:font-medium placeholder:text-muted-foreground/35"
+                                              />
+                                              <Button
+                                                variant="outline"
+                                                size="icon-sm"
+                                                aria-label={`Increase set ${index + 1} weight`}
+                                                onClick={() =>
+                                                  stepSet(index, 'weight', 2.5)
+                                                }
+                                              >
+                                                <Plus />
+                                              </Button>
+                                            </div>
+                                          </div>
+                                          <div className="w-full max-w-60 min-w-0 justify-self-center min-[32rem]:max-w-none">
+                                            <span className="mb-1 block font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground md:hidden">
+                                              {exercise.name === 'Plank'
+                                                ? 'Seconds'
+                                                : 'Reps'}
+                                            </span>
+                                            <div className="grid w-full grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center justify-items-center gap-2 min-[32rem]:gap-1">
+                                              <Button
+                                                variant="outline"
+                                                size="icon-sm"
+                                                aria-label={`Decrease set ${index + 1} repetitions`}
+                                                onClick={() =>
+                                                  stepSet(index, 'reps', -1)
+                                                }
+                                              >
+                                                <Minus />
+                                              </Button>
+                                              <Input
+                                                aria-label={`Set ${index + 1} ${exercise.name === 'Plank' ? 'seconds' : 'repetitions'}`}
+                                                inputMode="numeric"
+                                                type="number"
+                                                min="1"
+                                                step="1"
+                                                value={set.reps}
+                                                placeholder="0"
+                                                onFocus={(event) =>
+                                                  event.currentTarget.select()
+                                                }
+                                                onChange={(event) =>
+                                                  updateSet(
+                                                    index,
+                                                    'reps',
+                                                    event.target.value,
+                                                  )
+                                                }
+                                                className="h-11 w-full min-w-0 bg-background text-center font-sans text-lg font-semibold text-foreground tabular-nums placeholder:font-medium placeholder:text-muted-foreground/35"
+                                              />
+                                              <Button
+                                                variant="outline"
+                                                size="icon-sm"
+                                                aria-label={`Increase set ${index + 1} repetitions`}
+                                                onClick={() =>
+                                                  stepSet(index, 'reps', 1)
+                                                }
+                                              >
+                                                <Plus />
+                                              </Button>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+                                      <div className="col-start-3 flex h-full items-center justify-center min-[32rem]:h-11 min-[32rem]:self-end md:self-center">
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            toggleSetComplete(index)
+                                          }
+                                          aria-label={`${set.done ? 'Reopen' : 'Complete'} set ${index + 1}`}
+                                          aria-pressed={set.done}
+                                          className={`grid size-11 place-items-center rounded-full border-2 transition-colors md:size-8 ${set.done ? 'border-success bg-success text-white' : 'border-border bg-background text-transparent hover:border-primary'}`}
+                                        >
+                                          <Check className="size-4" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+
+                              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-muted/55 p-2.5">
+                                <p className="px-1 font-sans text-xs text-muted-foreground">
+                                  <strong className="text-foreground">
+                                    {visibleSetCount}{' '}
+                                    {visibleSetCount === 1 ? 'set' : 'sets'}
+                                  </strong>{' '}
+                                  · {activeSets} recommended this week
+                                </p>
+                                <div className="flex gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={visibleSetCount <= 1}
+                                    onClick={removeSet}
+                                  >
+                                    <Minus /> Remove set
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={visibleSetCount >= 5}
+                                    onClick={addSet}
+                                  >
+                                    <Plus /> Add set
+                                  </Button>
+                                </div>
+                              </div>
+
+                              <div className="mt-4 grid grid-cols-[1fr_112px] items-end gap-3">
+                                <div>
+                                  <label
+                                    htmlFor="rir"
+                                    className="mb-1.5 block font-sans text-sm font-medium"
+                                  >
+                                    Reps in reserve (RIR)
+                                  </label>
+                                  <p className="font-sans text-xs text-muted-foreground">
+                                    {activeWeek <= 2
+                                      ? 'Aim for about 3 during ramp-in.'
+                                      : 'Aim for 1–2 with clean form.'}
+                                  </p>
+                                </div>
+                                <Input
+                                  id="rir"
+                                  type="number"
+                                  inputMode="numeric"
+                                  value={draft.rir}
+                                  placeholder="2"
+                                  min="0"
+                                  max="5"
+                                  onFocus={(event) =>
+                                    event.currentTarget.select()
+                                  }
+                                  onChange={(event) =>
+                                    setDraft((current) => ({
+                                      ...current,
+                                      rir: event.target.value,
+                                    }))
+                                  }
+                                  className="h-11 bg-background text-center font-sans text-lg font-semibold text-foreground placeholder:font-medium placeholder:text-muted-foreground/35"
+                                />
+                              </div>
+
+                              <div className="mt-4 flex items-center justify-between rounded-xl bg-secondary/70 p-3">
+                                <div>
+                                  <p className="font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                    Next time
+                                  </p>
+                                  <p className="font-sans text-sm font-semibold">
+                                    {advice}
+                                  </p>
+                                </div>
+                                <TrendingUp className="size-5 text-primary" />
+                              </div>
+
+                              {exerciseDraft.dirty && (
+                                <p
+                                  className="mt-3 text-xs text-muted-foreground"
+                                  role="status"
+                                >
+                                  {exerciseDraft.persisted
+                                    ? `${exerciseDraft.recovered ? 'Draft recovered. ' : ''}Your inputs are saved on this device. Save & next to log this exercise.`
+                                    : 'Device storage is unavailable. Keep this page open until you save the exercise.'}
+                                </p>
+                              )}
+                              {showNotes || Boolean(draft.notes) ? (
+                                <div className="mt-4">
+                                  <label
+                                    htmlFor="notes"
+                                    className="mb-1.5 block font-sans text-sm font-medium"
+                                  >
+                                    Notes
+                                  </label>
+                                  <Textarea
+                                    id="notes"
+                                    value={draft.notes}
+                                    onChange={(event) =>
+                                      setDraft((current) => ({
+                                        ...current,
+                                        notes: event.target.value,
+                                      }))
+                                    }
+                                    placeholder="Form cues, machine settings, anything to remember…"
+                                    className="font-sans"
+                                  />
+                                </div>
+                              ) : (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  className="mt-3 font-sans text-muted-foreground"
+                                  onClick={() => setShowNotes(true)}
+                                >
+                                  <NotebookPen /> Add notes
+                                </Button>
+                              )}
+
+                              <Button
+                                size="lg"
+                                className="mt-4 h-12 w-full rounded-xl font-sans text-base shadow-md shadow-primary/20"
+                                disabled={saving || loading}
+                                onClick={() =>
+                                  void saveExercise(
+                                    draft,
+                                    visibleSetCount,
+                                    exerciseDraft.clear,
+                                  )
+                                }
+                              >
+                                {saving ? (
+                                  <Loader2 className="animate-spin" />
+                                ) : existingEntry?.completed ? (
+                                  <RotateCcw />
+                                ) : (
+                                  <CheckCircle2 />
+                                )}
+                                {saving
+                                  ? 'Saving…'
+                                  : existingEntry?.completed
+                                    ? 'Update & continue'
+                                    : 'Save & next'}
+                                {!saving && (
+                                  <ChevronRight data-icon="inline-end" />
+                                )}
+                              </Button>
+                            </>
                           )}
-                          {saving
-                            ? 'Saving…'
-                            : existingEntry?.completed
-                              ? 'Update & continue'
-                              : 'Save & next'}
-                          {!saving && <ChevronRight data-icon="inline-end" />}
-                        </Button>
-                      </>
-                    )}
-                  </fieldset>
-                </CardContent>
-              </Card>
+                        </fieldset>
+                      </CardContent>
+                    </Card>
+                  );
+                }}
+              </ExerciseDraftBoundary>
             </section>
 
             {!workoutFocus && (
@@ -3192,474 +3387,43 @@ export function WorkoutApp() {
         )}
 
         {view === 'progress' && (
-          <section>
-            <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-              <div>
-                <p className="font-sans text-sm font-semibold text-primary">
-                  TRAINING SUMMARY
-                </p>
-                <h1 className="font-sans text-3xl font-bold tracking-tight">
-                  Phase {activePhase} progress across 12 weeks.
-                </h1>
-                <p className="mt-1 font-sans text-muted-foreground">
-                  The same core KPIs and weekly totals as your spreadsheet,
-                  updated automatically.
-                </p>
-              </div>
-              <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
-                {activePhase === 1 && (
-                  <>
-                    <Button
-                      variant="outline"
-                      className="font-sans"
-                      disabled={loadingImport || importingSheet || loading}
-                      onClick={previewGoogleSheetImport}
-                    >
-                      {loadingImport ? (
-                        <Loader2 className="animate-spin" />
-                      ) : (
-                        <Download />
-                      )}{' '}
-                      {loadingImport ? 'Checking…' : 'Import from Google Sheet'}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="font-sans"
-                      disabled={syncingSheet || loading}
-                      onClick={syncGoogleSheet}
-                    >
-                      {syncingSheet ? (
-                        <Loader2 className="animate-spin" />
-                      ) : (
-                        <FileSpreadsheet />
-                      )}{' '}
-                      {syncingSheet ? 'Sending…' : 'Send to Google Sheet'}
-                    </Button>
-                  </>
-                )}
-                <Button
-                  variant="outline"
-                  className="font-sans"
-                  disabled={backupBusy || loading}
-                  onClick={downloadBackup}
-                >
-                  {backupBusy ? (
-                    <Loader2 className="animate-spin" />
-                  ) : (
-                    <Download />
-                  )}{' '}
-                  Download backup
-                </Button>
-                <Button
-                  variant="outline"
-                  className="font-sans"
-                  disabled={backupBusy || loading}
-                  onClick={() => {
-                    setBackupOpen(true);
-                    setBackupSummary(null);
-                    setBackupData(null);
-                    setBackupFileName('');
-                  }}
-                >
-                  <Upload /> Restore backup
-                </Button>
-              </div>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-              {[
-                ['Exercise rows', totalRows.toLocaleString(), Dumbbell],
-                [
-                  'Total volume',
-                  `${Math.round(totalVolume).toLocaleString()} kg`,
-                  TrendingUp,
-                ],
-                ['Sessions', String(totalSessions), CheckCircle2],
-                ['Personal records', String(totalRecords), Medal],
-                ['Weekly goal', '3 sessions', Target],
-              ].map(([label, value, Icon]) => {
-                const KpiIcon = Icon as typeof Dumbbell;
-                return (
-                  <Card key={String(label)} size="sm">
-                    <CardContent className="flex items-center gap-3">
-                      <span className="grid size-10 place-items-center rounded-xl bg-accent text-primary">
-                        <KpiIcon className="size-5" />
-                      </span>
-                      <div>
-                        <p className="font-sans text-xs text-muted-foreground">
-                          {String(label)}
-                        </p>
-                        <p className="font-sans text-xl font-bold">
-                          {String(value)}
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-            <details className="group mt-5 overflow-hidden rounded-2xl border bg-card">
-              <summary className="flex cursor-pointer list-none items-center gap-3 px-5 py-4 font-sans [&::-webkit-details-marker]:hidden">
-                <span className="grid size-9 place-items-center rounded-xl bg-accent text-primary">
-                  <Sparkles className="size-4" />
-                </span>
-                <span>
-                  <span className="block text-sm font-semibold">
-                    Programme insights
-                  </span>
-                  <span className="block text-xs font-normal text-muted-foreground">
-                    Progress, effort, muscle balance, and recovery signals
-                  </span>
-                </span>
-                <ChevronDown className="ml-auto size-4 text-muted-foreground transition-transform group-open:rotate-180" />
-              </summary>
-              <div className="border-t px-4 py-4 sm:px-5">
-                <Suspense
-                  fallback={
-                    <div className="h-28 animate-pulse rounded-xl bg-muted/45" />
-                  }
-                >
-                  <AdvancedInsights
-                    entries={phaseEntries}
-                    routine={activeRoutine}
-                  />
-                </Suspense>
-              </div>
-            </details>
-            <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(330px,.65fr)]">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="font-sans">
-                    Weekly training volume
-                  </CardTitle>
-                  <CardDescription className="font-sans">
-                    Weight × reps across all logged sets
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Suspense
-                    fallback={
-                      <div className="grid h-[300px] place-items-center rounded-xl bg-muted/35 font-sans text-sm text-muted-foreground">
-                        Loading chart…
-                      </div>
-                    }
-                  >
-                    <ProgressChart data={weeklySummaries} />
-                  </Suspense>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader>
-                  <CardTitle className="font-sans">Weekly summary</CardTitle>
-                  <CardDescription className="font-sans">
-                    Sessions completed out of 3
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="max-h-[345px] space-y-3 overflow-y-auto pr-1">
-                  {weeklySummaries.map((week) => (
-                    <button
-                      type="button"
-                      key={week.week}
-                      onClick={() => {
-                        selectWeek(week.storageWeek);
-                        setView('today');
-                      }}
-                      className="flex w-full items-center gap-3 rounded-xl p-2 text-left hover:bg-muted"
-                    >
-                      <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-secondary font-sans text-xs font-bold">
-                        W{week.week}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="flex justify-between font-sans text-xs">
-                          <span>{week.sessions}/3 sessions</span>
-                          <span className="text-muted-foreground">
-                            {Math.round(week.volume).toLocaleString()} kg
-                          </span>
-                        </span>
-                        <span className="mt-2 block h-1.5 overflow-hidden rounded-full bg-muted">
-                          <span
-                            className="block h-full rounded-full bg-primary"
-                            style={{ width: `${(week.sessions / 3) * 100}%` }}
-                          />
-                        </span>
-                      </span>
-                    </button>
-                  ))}
-                </CardContent>
-              </Card>
-            </div>
-            <Card className="mt-5 overflow-hidden">
-              <CardHeader className="border-b border-border/70">
-                <div>
-                  <CardTitle className="flex items-center gap-2 font-sans">
-                    <TrendingUp className="size-5 text-primary" /> Exercise
-                    progress
-                  </CardTitle>
-                  <CardDescription className="mt-1 font-sans">
-                    Top weight and estimated strength for one exercise across
-                    the programme.
-                  </CardDescription>
-                </div>
-                <CardAction>
-                  <select
-                    value={progressExerciseKey}
-                    onChange={(event) =>
-                      setProgressExerciseKey(event.target.value)
-                    }
-                    aria-label="Exercise progress selection"
-                    className="h-11 max-w-[260px] rounded-lg border bg-card px-3 font-sans text-base font-medium outline-none focus:ring-3 focus:ring-ring/30"
-                  >
-                    {days.map((day) => (
-                      <optgroup key={day} label={`Day ${day}`}>
-                        {progressExerciseOptions
-                          .filter((item) => item.day === day)
-                          .map((item) => (
-                            <option
-                              key={`${day}|${item.order}`}
-                              value={`${day}|${item.order}`}
-                            >
-                              {item.name}
-                            </option>
-                          ))}
-                      </optgroup>
-                    ))}
-                  </select>
-                </CardAction>
-              </CardHeader>
-              <CardContent className="pt-5">
-                {selectedProgressData.length > 0 ? (
-                  <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_220px]">
-                    <Suspense
-                      fallback={
-                        <div className="grid h-[260px] place-items-center rounded-xl bg-muted/35 font-sans text-sm text-muted-foreground">
-                          Loading chart…
-                        </div>
-                      }
-                    >
-                      <ExerciseProgressChart data={selectedProgressData} />
-                    </Suspense>
-                    <div className="grid grid-cols-2 gap-3 lg:grid-cols-1">
-                      {[
-                        [
-                          'Latest top weight',
-                          `${selectedProgressData.at(-1)?.maxWeight ?? 0} kg`,
-                        ],
-                        [
-                          'Latest estimated 1RM',
-                          `${selectedProgressData.at(-1)?.estimatedMax ?? 0} kg`,
-                        ],
-                        [
-                          'Sessions logged',
-                          String(selectedProgressData.length),
-                        ],
-                      ].map(([label, value]) => (
-                        <div
-                          key={label}
-                          className="rounded-xl bg-secondary/65 p-3"
-                        >
-                          <p className="font-sans text-xs text-muted-foreground">
-                            {label}
-                          </p>
-                          <p className="mt-1 font-sans text-lg font-bold tabular-nums">
-                            {value}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="grid min-h-44 place-items-center rounded-xl bg-muted/40 px-5 text-center font-sans text-sm text-muted-foreground">
-                    Log this exercise to start its progress chart.
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-            <Card className="mt-5 overflow-hidden">
-              <CardHeader className="border-b border-border/70">
-                <div>
-                  <CardTitle className="flex items-center gap-2 font-sans">
-                    <History className="size-5 text-primary" /> Exercise history
-                  </CardTitle>
-                  <CardDescription className="mt-1 font-sans">
-                    Swipe between Day A, B, and C to review every completed
-                    exercise, set, and note. The latest three weeks open by
-                    default; earlier weeks stay tucked away.
-                  </CardDescription>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-5">
-                <Carousel
-                  opts={{ align: 'start', loop: false, duration: 18 }}
-                  adaptiveHeight
-                  wheelNavigation
-                  aria-label="Workout history by training day"
-                >
-                  <CarouselContent>
-                    {days.map((day) => {
-                      const dayEntries =
-                        entryIndex.completedByPhaseDay.get(
-                          `${activePhase}|${day}`,
-                        ) ?? [];
-                      const sessionCount = new Set(
-                        dayEntries.map((entry) => entry.week),
-                      ).size;
-                      const dayVolume = dayEntries.reduce(
-                        (sum, entry) => sum + entryVolume(entry),
-                        0,
-                      );
-                      const customHistory = new Map<number, RoutineExercise>();
-                      dayEntries
-                        .filter((entry) => entry.exerciseOrder >= 100)
-                        .forEach((entry) => {
-                          if (!customHistory.has(entry.exerciseOrder))
-                            customHistory.set(entry.exerciseOrder, {
-                              day,
-                              order: entry.exerciseOrder,
-                              name: entry.exercise,
-                              targetSets: entry.setCount ?? 3,
-                              repRange:
-                                entry.target.split('×')[1]?.trim() ??
-                                'Logged sets',
-                              rest: 'Custom',
-                              muscles: 'Custom exercise',
-                              alternative: 'None',
-                            });
-                        });
-                      const dayExercises = [
-                        ...activeRoutine.filter((item) => item.day === day),
-                        ...customHistory.values(),
-                      ];
-                      const dayColor =
-                        day === 'A'
-                          ? 'bg-blue-100 text-blue-700'
-                          : day === 'B'
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : 'bg-violet-100 text-violet-700';
-
-                      return (
-                        <CarouselItem key={day}>
-                          <div className="rounded-2xl border border-border/80 bg-muted/20 p-3 sm:p-5">
-                            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 pb-4">
-                              <div className="flex items-center gap-3">
-                                <span
-                                  className={`grid size-11 place-items-center rounded-xl font-sans text-sm font-bold ${dayColor}`}
-                                >
-                                  Day {day}
-                                </span>
-                                <div>
-                                  <p className="font-sans font-semibold">
-                                    {dayExercises.length} exercises
-                                  </p>
-                                  <p className="font-sans text-xs text-muted-foreground">
-                                    Full workout history
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="flex flex-wrap items-center justify-end gap-2">
-                                <Badge
-                                  variant="outline"
-                                  className="bg-card font-sans"
-                                >
-                                  {sessionCount}{' '}
-                                  {sessionCount === 1 ? 'session' : 'sessions'}
-                                </Badge>
-                                <Badge
-                                  variant="outline"
-                                  className="bg-card font-sans"
-                                >
-                                  {Math.round(dayVolume).toLocaleString()} kg
-                                  volume
-                                </Badge>
-                                <span className="mx-1 hidden h-6 w-px bg-border md:block" />
-                                <div className="hidden shrink-0 gap-2 md:flex">
-                                  <CarouselPrevious
-                                    aria-label="Previous training day"
-                                    title="Previous training day"
-                                    className="static inset-auto m-0 size-8 translate-x-0 translate-y-0"
-                                  />
-                                  <CarouselNext
-                                    aria-label="Next training day"
-                                    title="Next training day"
-                                    className="static inset-auto m-0 size-8 translate-x-0 translate-y-0"
-                                  />
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-                              {dayExercises.map((item) => {
-                                const exerciseEntries =
-                                  entryIndex.completedByExercise.get(
-                                    `${activePhase}|${day}|${item.order}`,
-                                  ) ?? [];
-                                const displayName =
-                                  exerciseEntries[0]?.exercise ?? item.name;
-
-                                return (
-                                  <article
-                                    key={`${day}-${item.order}`}
-                                    className="workout-history-card flex min-h-56 flex-col rounded-xl border border-border/70 bg-card p-3 sm:p-4"
-                                  >
-                                    <div className="flex items-start gap-3">
-                                      <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-secondary font-sans text-xs font-bold">
-                                        {item.order}
-                                      </span>
-                                      <div className="min-w-0 flex-1">
-                                        <h3 className="font-sans text-sm font-semibold sm:text-base">
-                                          {displayName}
-                                        </h3>
-                                        <p className="mt-0.5 font-sans text-xs text-muted-foreground">
-                                          {targetLabel(item)} · {item.muscles}
-                                        </p>
-                                      </div>
-                                    </div>
-
-                                    {exerciseEntries.length > 0 ? (
-                                      <div className="mt-3 max-h-96 space-y-2 overflow-y-auto pr-1">
-                                        {exerciseEntries
-                                          .slice(0, 3)
-                                          .map((entry) => (
-                                            <HistoryWeekDisclosure
-                                              key={`${entry.id ?? entry.week}-${entry.exerciseOrder}`}
-                                              entry={entry}
-                                              displayName={displayName}
-                                              defaultExpanded
-                                            />
-                                          ))}
-                                        {exerciseEntries.length > 3 && (
-                                          <EarlierHistoryDisclosure
-                                            entries={exerciseEntries.slice(3)}
-                                            displayName={displayName}
-                                          />
-                                        )}
-                                      </div>
-                                    ) : (
-                                      <p className="mt-3 flex flex-1 items-center justify-center rounded-lg bg-muted/45 px-3 py-5 text-center font-sans text-xs text-muted-foreground">
-                                        No logged sessions yet.
-                                      </p>
-                                    )}
-                                  </article>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        </CarouselItem>
-                      );
-                    })}
-                  </CarouselContent>
-                  <div className="mt-4 flex items-center justify-between gap-3">
-                    <p className="font-sans text-xs text-muted-foreground">
-                      Swipe or scroll horizontally, or use the arrows to change
-                      day.
-                    </p>
-                    <div className="flex shrink-0 gap-2">
-                      <CarouselPrevious className="static inset-auto m-0 translate-x-0 translate-y-0" />
-                      <CarouselNext className="static inset-auto m-0 translate-x-0 translate-y-0" />
-                    </div>
-                  </div>
-                </Carousel>
-              </CardContent>
-            </Card>
-          </section>
+          <Suspense
+            fallback={
+              <section
+                aria-label="Loading progress"
+                className="min-h-[34rem] animate-pulse rounded-3xl bg-card/70"
+              />
+            }
+          >
+            <ProgressView
+              key={activePhase}
+              activePhase={activePhase}
+              activeRoutine={activeRoutine}
+              phaseEntries={phaseEntries}
+              entryIndex={entryIndex}
+              weeklySummaries={weeklySummaries}
+              totalRows={totalRows}
+              totalVolume={totalVolume}
+              totalSessions={totalSessions}
+              totalRecords={totalRecords}
+              loadingImport={loadingImport}
+              importingSheet={importingSheet}
+              loading={loading}
+              syncingSheet={syncingSheet}
+              backupBusy={backupBusy}
+              previewGoogleSheetImport={previewGoogleSheetImport}
+              syncGoogleSheet={syncGoogleSheet}
+              downloadBackup={downloadBackup}
+              onRestoreBackup={() => {
+                setBackupOpen(true);
+                setBackupSummary(null);
+                setBackupData(null);
+                setBackupFileName('');
+              }}
+              selectWeek={selectWeek}
+              setView={setView}
+            />
+          </Suspense>
         )}
 
         {view === 'nutrition' && (
@@ -3782,7 +3546,9 @@ export function WorkoutApp() {
             schedule={schedule}
             activeWeek={activeWeek}
             activeDay={activeDay}
-            currentWeight={numberOrNull(draft.sets[0]?.weight ?? '')}
+            currentWeight={numberOrNull(
+              loggerSnapshot.current?.sets[0]?.weight ?? '',
+            )}
             onScheduleChange={(next) => {
               setSchedule(next);
               cacheSchedule(next);

@@ -1,6 +1,8 @@
 import { env, waitUntil } from 'cloudflare:workers';
 
 import { syncWorkoutEntries } from '@/lib/google-sheet-sync';
+import { parseSyncCursor } from '@/lib/sync-cursor';
+import { validateWorkoutNumbers } from '@/lib/workout-validation';
 import {
   routineForWeek,
   targetLabel,
@@ -34,6 +36,7 @@ type WorkoutPayload = {
   completed: boolean;
   completedAt?: string | null;
   clientUpdatedAt?: string | null;
+  expectedUpdatedAt?: string;
 };
 
 function workoutDatabase() {
@@ -118,55 +121,51 @@ async function finishSheetSync(saved: WorkoutEntry) {
 export async function GET(request: Request) {
   try {
     const db = workoutDatabase();
-    const sinceValue = new URL(request.url).searchParams.get('since');
-    const sinceDate = sinceValue ? new Date(sinceValue) : null;
-    const since =
-      sinceDate && !Number.isNaN(sinceDate.getTime())
-        ? sinceDate.toISOString()
-        : null;
-    const serverTime = new Date().toISOString();
-    const [entries, sessionExercises, settings] = await Promise.all([
-      since
+    // A D1 batch is one snapshot: never advance the cursor past rows absent
+    // from this response. Legacy timestamp clients receive a full snapshot.
+    const cursor = parseSyncCursor(
+      new URL(request.url).searchParams.get('cursor'),
+    );
+    const [clock, entries, sessionExercises, settings] = await db.batch([
+      db.prepare("SELECT value FROM sync_clock WHERE key = 'records'"),
+      cursor !== null
         ? db
             .prepare(
-              `SELECT ${workoutSelectColumns} FROM workout_entries WHERE updated_at > ? ORDER BY week, day, exercise_order`,
+              `SELECT ${workoutSelectColumns} FROM workout_entries WHERE server_revision > ? ORDER BY week, day, exercise_order`,
             )
-            .bind(since)
-            .all<WorkoutEntry>()
-        : db
-            .prepare(
-              `SELECT ${workoutSelectColumns} FROM workout_entries ORDER BY week, day, exercise_order`,
-            )
-            .all<WorkoutEntry>(),
-      db
-        .prepare(
-          `SELECT ${sessionExerciseSelectColumns} FROM session_exercises ORDER BY week, day, display_order`,
-        )
-        .all<SessionExercise>(),
-      db
-        .prepare(
-          "SELECT key, value FROM app_settings WHERE key IN ('phase1StartDate', 'phase2StartDate')",
-        )
-        .all<{ key: string; value: string }>(),
+            .bind(cursor)
+        : db.prepare(
+            `SELECT ${workoutSelectColumns} FROM workout_entries ORDER BY week, day, exercise_order`,
+          ),
+      db.prepare(
+        `SELECT ${sessionExerciseSelectColumns} FROM session_exercises ORDER BY week, day, display_order`,
+      ),
+      db.prepare(
+        "SELECT key, value FROM app_settings WHERE key IN ('phase1StartDate', 'phase2StartDate')",
+      ),
     ]);
     const schedule = {
       phase1StartDate: '2026-08-26',
       phase2StartDate: '2026-11-18',
     };
-    settings.results.forEach((setting) => {
-      if (
-        setting.key === 'phase1StartDate' ||
-        setting.key === 'phase2StartDate'
-      )
-        schedule[setting.key] = setting.value;
-    });
+    (settings.results as { key: string; value: string }[]).forEach(
+      (setting) => {
+        if (
+          setting.key === 'phase1StartDate' ||
+          setting.key === 'phase2StartDate'
+        )
+          schedule[setting.key] = setting.value;
+      },
+    );
     return Response.json(
       {
         entries: entries.results,
         sessionExercises: sessionExercises.results,
         schedule,
-        partial: Boolean(since),
-        serverTime,
+        partial: cursor !== null,
+        cursor: String(
+          (clock.results[0] as { value?: number } | undefined)?.value ?? 0,
+        ),
       },
       { headers: { 'Cache-Control': 'no-store' } },
     );
@@ -210,17 +209,37 @@ export async function POST(request: Request) {
     if (!resolved)
       return Response.json({ error: 'Exercise not found.' }, { status: 404 });
     const { exercise, custom } = resolved;
-    const setCount = Math.min(
-      5,
-      Math.max(
-        1,
-        Number.isInteger(Number(body.setCount))
-          ? Number(body.setCount)
-          : exercise.targetSets,
-      ),
-    );
+    const setCount =
+      body.setCount == null ? exercise.targetSets : Number(body.setCount);
+    if (
+      typeof body.completed !== 'boolean' ||
+      (body.expectedUpdatedAt !== undefined &&
+        (typeof body.expectedUpdatedAt !== 'string' ||
+          !Number.isFinite(Date.parse(body.expectedUpdatedAt))))
+    )
+      return Response.json({ error: 'Invalid save request.' }, { status: 400 });
     const db = workoutDatabase();
     const serverNow = new Date().toISOString();
+    const invalid = validateWorkoutNumbers({
+      weights: [
+        body.set1Weight,
+        body.set2Weight,
+        body.set3Weight,
+        body.set4Weight,
+        body.set5Weight,
+      ],
+      values: [
+        body.set1Reps,
+        body.set2Reps,
+        body.set3Reps,
+        body.set4Reps,
+        body.set5Reps,
+      ],
+      setCount,
+      rir: body.rir,
+      completed: Boolean(body.completed),
+    });
+    if (invalid) return Response.json({ error: invalid }, { status: 400 });
     const updatedAt = safeIsoDate(body.clientUpdatedAt, serverNow);
     const completedAt = body.completed
       ? safeIsoDate(body.completedAt, serverNow)
@@ -230,7 +249,7 @@ export async function POST(request: Request) {
         ? 'not_applicable'
         : 'pending';
 
-    await db
+    const writeResult = await db
       .prepare(`INSERT INTO workout_entries (
       week, day, exercise_order, exercise, target, set1_weight, set1_reps, set2_weight,
       set2_reps, set3_weight, set3_reps, set4_weight, set4_reps, set5_weight, set5_reps,
@@ -247,7 +266,8 @@ export async function POST(request: Request) {
       rir = excluded.rir, notes = excluded.notes, completed = excluded.completed,
       completed_at = excluded.completed_at, sync_status = excluded.sync_status,
       sheet_synced_at = NULL, sync_error = NULL, updated_at = excluded.updated_at
-    WHERE excluded.updated_at >= workout_entries.updated_at`)
+    WHERE excluded.updated_at > workout_entries.updated_at
+      AND (? IS NULL OR workout_entries.updated_at = ?)`)
       .bind(
         week,
         day,
@@ -271,6 +291,8 @@ export async function POST(request: Request) {
         completedAt,
         syncStatus,
         updatedAt,
+        body.expectedUpdatedAt ?? null,
+        body.expectedUpdatedAt ?? null,
       )
       .run();
 
@@ -280,7 +302,16 @@ export async function POST(request: Request) {
       )
       .bind(week, day, exerciseOrder)
       .first<WorkoutEntry>();
-    if (saved && syncStatus === 'pending' && saved.updatedAt === updatedAt) {
+    if (saved && saved.updatedAt !== updatedAt)
+      return Response.json(
+        {
+          error:
+            'A newer version of this workout is already saved. Reload and review before saving again.',
+          entry: saved,
+        },
+        { status: 409 },
+      );
+    if (saved && syncStatus === 'pending' && writeResult.meta.changes > 0) {
       waitUntil(finishSheetSync(saved).then(() => undefined));
     }
     return Response.json({

@@ -37,6 +37,7 @@ export const workoutEntries = sqliteTable(
     sheetSyncedAt: text('sheet_synced_at'),
     syncError: text('sync_error'),
     updatedAt: text('updated_at').notNull(),
+    serverRevision: integer('server_revision').notNull().default(0),
   },
   (table) => [
     uniqueIndex('workout_entry_session_exercise_idx').on(
@@ -45,6 +46,7 @@ export const workoutEntries = sqliteTable(
       table.exerciseOrder,
     ),
     index('workout_entry_updated_at_idx').on(table.updatedAt),
+    index('workout_entry_server_revision_idx').on(table.serverRevision),
   ],
 );
 
@@ -80,6 +82,7 @@ export const holidayWorkoutEntries = sqliteTable(
     sheetSyncedAt: text('sheet_synced_at'),
     syncError: text('sync_error'),
     updatedAt: text('updated_at').notNull(),
+    serverRevision: integer('server_revision').notNull().default(0),
   },
   (table) => [
     uniqueIndex('holiday_workout_session_exercise_idx').on(
@@ -87,6 +90,7 @@ export const holidayWorkoutEntries = sqliteTable(
       table.exerciseOrder,
     ),
     index('holiday_workout_date_idx').on(table.sessionDate),
+    index('holiday_workout_server_revision_idx').on(table.serverRevision),
   ],
 );
 
@@ -121,6 +125,11 @@ export const appSettings = sqliteTable('app_settings', {
   key: text('key').primaryKey(),
   value: text('value').notNull(),
   updatedAt: text('updated_at').notNull(),
+});
+
+export const syncClock = sqliteTable('sync_clock', {
+  key: text('key').primaryKey(),
+  value: integer('value').notNull().default(0),
 });
 
 export const readinessChecks = sqliteTable(
