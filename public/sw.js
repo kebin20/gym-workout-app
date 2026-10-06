@@ -1,4 +1,4 @@
-const cacheVersion = 'liftline-3.11.1-1';
+const cacheVersion = 'liftline-3.12.0-1';
 const shellCache = `${cacheVersion}-shell`;
 const assetCache = `${cacheVersion}-assets`;
 
@@ -180,7 +180,8 @@ self.addEventListener('fetch', (event) => {
     url.pathname.endsWith('.png') ||
     url.pathname.endsWith('.webp') ||
     url.pathname.endsWith('.svg') ||
-    url.pathname.endsWith('.woff2');
+    url.pathname.endsWith('.woff2') ||
+    (url.pathname.startsWith('/fonts/') && url.pathname.endsWith('.ttf'));
 
   if (!cacheableAsset) return;
 
@@ -193,6 +194,23 @@ self.addEventListener('fetch', (event) => {
       const response = await fetch(request);
       if (isCacheable(response)) await cache.put(request, response.clone());
       return response;
+    })(),
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    (async () => {
+      const tabs = await clients.matchAll({
+        type: 'window',
+        includeUncontrolled: true,
+      });
+      for (const tab of tabs) {
+        if (new URL(tab.url).origin === self.location.origin && 'focus' in tab)
+          return tab.focus();
+      }
+      return clients.openWindow('/');
     })(),
   );
 });

@@ -15,6 +15,12 @@ import {
   remainingSeconds,
   type TimerState,
 } from '@/lib/rest-timer-state';
+import {
+  prepareTimerSound,
+  playTimerSound,
+  showRestNotification,
+  shouldAlertForTimer,
+} from '@/lib/rest-timer-alerts';
 
 export type RestTimerHandle = { start: () => void };
 const storageKey = 'liftline.rest-timer.v2';
@@ -28,6 +34,129 @@ const subscribe = (listener: () => void) => {
 };
 const snapshot = () => timerState;
 const serverSnapshot = () => null;
+let engineStarted = false;
+let engineInterval: ReturnType<typeof setInterval> | null = null;
+let alertsEnabled = false;
+let soundEnabled = true;
+let keepAwake = true;
+let notificationIcon = '/liftline-icon-192-v9.png';
+let alertStatus = '';
+const alertSnapshot = () => alertStatus;
+let wakeLock: WakeLockSentinel | null = null;
+let requestingWakeLock = false;
+function status(message: string) {
+  alertStatus = message;
+  listeners.forEach((listener) => listener());
+}
+async function updateWakeLock() {
+  const needed = keepAwake && timerState?.endsAt != null && !document.hidden;
+  if (!needed) {
+    void wakeLock?.release().catch(() => undefined);
+    wakeLock = null;
+    return;
+  }
+  if (
+    (wakeLock && !wakeLock.released) ||
+    requestingWakeLock ||
+    !('wakeLock' in navigator)
+  )
+    return;
+  requestingWakeLock = true;
+  try {
+    const lock = await navigator.wakeLock.request('screen');
+    if (!keepAwake || !timerState?.endsAt || document.hidden)
+      await lock.release();
+    else wakeLock = lock;
+  } catch {
+    /* Unsupported/power-saving restrictions are controlled by the device. */
+  } finally {
+    requestingWakeLock = false;
+  }
+}
+async function notifyComplete(state: TimerState) {
+  if (soundEnabled) playTimerSound();
+  try {
+    navigator.vibrate?.([160, 80, 160]);
+  } catch {
+    /* Not available on iOS. */
+  }
+  if (!alertsEnabled) return;
+  if (!('Notification' in window) || Notification.permission !== 'granted') {
+    status(
+      'Notifications are blocked or unavailable. Use Alerts to check settings; the in-app sound still works while Liftline is open.',
+    );
+    return;
+  }
+  try {
+    await showRestNotification(navigator.serviceWorker.getRegistration(), {
+      body: state.exerciseName + ': ready for your next set.',
+      icon: notificationIcon,
+      tag: state.id,
+      silent: !soundEnabled,
+      data: { url: '/' },
+    });
+  } catch (error) {
+    status(
+      error instanceof Error
+        ? error.message
+        : 'The notification failed. Open Alerts and test again.',
+    );
+  }
+}
+function tickEngine() {
+  const state = timerState;
+  const timestamp = Date.now();
+  if (!state?.endsAt || remainingSeconds(state, timestamp) !== 0) return;
+  const onTime = shouldAlertForTimer(state.endsAt, timestamp);
+  publish({ ...state, endsAt: null, remaining: 0, updatedAt: timestamp });
+  if (onTime) void notifyComplete(state);
+  else
+    status(
+      'Rest finished while Liftline was suspended. Keep the app open for timely alerts; use an iPhone or Watch timer when the screen is locked.',
+    );
+}
+function updateEngine() {
+  if (timerState?.endsAt && !engineInterval)
+    engineInterval = setInterval(tickEngine, 500);
+  if (!timerState?.endsAt && engineInterval) {
+    clearInterval(engineInterval);
+    engineInterval = null;
+  }
+  void updateWakeLock();
+}
+function startEngine() {
+  if (engineStarted) return;
+  engineStarted = true;
+  try {
+    const enabled = localStorage.getItem('liftline.timer-alerts.v1');
+    alertsEnabled =
+      enabled === 'on' ||
+      (enabled === null &&
+        'Notification' in window &&
+        Notification.permission === 'granted');
+    soundEnabled = localStorage.getItem('liftline.timer-sound.v1') !== 'off';
+    keepAwake = localStorage.getItem('liftline.timer-awake.v1') !== 'off';
+    timerState = readTimerState(localStorage.getItem(storageKey));
+  } catch {
+    /* Storage disabled: retain session-only preferences. */
+  }
+  const reconcile = () => {
+    tickEngine();
+    void updateWakeLock();
+  };
+  // One engine survives navigation away from Today, not one interval per mounted timer.
+  document.addEventListener('visibilitychange', reconcile);
+  window.addEventListener('pageshow', reconcile);
+  window.addEventListener('storage', (event) => {
+    if (event.key === storageKey) {
+      timerState = readTimerState(event.newValue);
+      updateEngine();
+      listeners.forEach((listener) => listener());
+    }
+  });
+  updateEngine();
+  tickEngine();
+}
 function publish(state: TimerState | null) {
   timerState = state;
   try {
@@ -37,6 +166,7 @@ function publish(state: TimerState | null) {
     /* Timer still works for this session. */
   }
   listeners.forEach((listener) => listener());
+  if (engineStarted) updateEngine();
 }
 const formatTimer = (seconds: number) =>
   Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0');
@@ -58,7 +188,12 @@ const RestTimer = forwardRef<
   const [permission, setPermission] = useState<NotificationPermission | null>(
     null,
   );
-  const [alertMessage, setAlertMessage] = useState('');
+  const alertMessage = useSyncExternalStore(subscribe, alertSnapshot, () => '');
+  const [showAlerts, setShowAlerts] = useState(false);
+  const [sound, setSound] = useState(true);
+  const [awake, setAwake] = useState(true);
+  const [testing, setTesting] = useState(false);
+  const [systemAlerts, setSystemAlerts] = useState(false);
   const active =
     state && (state.endsAt !== null || state.exerciseName === exerciseName)
       ? state
@@ -69,55 +204,20 @@ const RestTimer = forwardRef<
   const running = active?.endsAt !== null && active?.endsAt !== undefined;
 
   useEffect(() => {
-    try {
-      if (!timerState)
-        publish(readTimerState(localStorage.getItem(storageKey)));
-    } catch {
-      /* Storage disabled. */
-    }
+    notificationIcon = notificationIconHref;
+    startEngine();
+    setSound(soundEnabled);
+    setAwake(keepAwake);
+    setSystemAlerts(alertsEnabled);
     setNow(Date.now());
     if ('Notification' in window && 'serviceWorker' in navigator)
       setPermission(Notification.permission);
-    const storageChanged = (event: StorageEvent) => {
-      if (event.key !== storageKey) return;
-      timerState = readTimerState(event.newValue);
-      listeners.forEach((listener) => listener());
-    };
-    window.addEventListener('storage', storageChanged);
-    return () => window.removeEventListener('storage', storageChanged);
-  }, []);
+  }, [notificationIconHref]);
 
   useEffect(() => {
     if (!state?.endsAt) return;
     const tick = () => {
-      const timestamp = Date.now();
-      setNow(timestamp);
-      if (
-        timerState?.id !== state.id ||
-        remainingSeconds(state, timestamp) !== 0
-      )
-        return;
-      publish({ ...state, endsAt: null, remaining: 0, updatedAt: timestamp });
-      navigator.vibrate?.([160, 80, 160]);
-      if (
-        document.hidden &&
-        'Notification' in window &&
-        Notification.permission === 'granted' &&
-        timestamp - (state.endsAt ?? timestamp) < 30_000
-      ) {
-        // No Notification constructor on mobile, and never wait indefinitely for
-        // a service worker. Background execution remains browser-controlled.
-        void navigator.serviceWorker
-          ?.getRegistration()
-          .then((registration) =>
-            registration?.showNotification('Liftline rest complete', {
-              body: state.exerciseName + ': ready for your next set.',
-              icon: notificationIconHref,
-              tag: state.id,
-            }),
-          )
-          .catch(() => undefined);
-      }
+      setNow(Date.now());
     };
     tick();
     const interval = window.setInterval(tick, 1000);
@@ -131,6 +231,7 @@ const RestTimer = forwardRef<
   }, [state, notificationIconHref]);
 
   const start = useCallback(() => {
+    if (soundEnabled) prepareTimerSound();
     const timestamp = Date.now();
     setNow(timestamp);
     publish({
@@ -144,6 +245,7 @@ const RestTimer = forwardRef<
   }, [exerciseName, restLabel, suggestedSeconds]);
   useImperativeHandle(ref, () => ({ start }), [start]);
   const toggle = () => {
+    if (soundEnabled) prepareTimerSound();
     if (active && running)
       publish({
         ...active,
@@ -162,15 +264,75 @@ const RestTimer = forwardRef<
   };
   const enableAlerts = async () => {
     try {
+      if (!('Notification' in window) || !('serviceWorker' in navigator)) {
+        status(
+          'System notifications are unavailable here. On iPhone, add Liftline to the Home Screen and open it from its icon.',
+        );
+        return;
+      }
       const result = await Notification.requestPermission();
       setPermission(result);
-      setAlertMessage(
+      alertsEnabled = result === 'granted';
+      setSystemAlerts(alertsEnabled);
+      try {
+        localStorage.setItem(
+          'liftline.timer-alerts.v1',
+          alertsEnabled ? 'on' : 'off',
+        );
+      } catch {
+        /* Session-only. */
+      }
+      status(
         result === 'granted'
-          ? 'Background alerts are best-effort. Keep Liftline open for reliable timing.'
-          : 'Alerts are unavailable; the visible timer still works.',
+          ? 'Notifications enabled. Use Test alert to check delivery. Locked-screen delivery is not guaranteed.'
+          : 'Notifications are blocked. Enable Liftline notifications in device settings, then test again.',
       );
     } catch {
-      setAlertMessage('Alerts are unavailable; the visible timer still works.');
+      status(
+        'Notifications could not be enabled. On iPhone, open Liftline from the Home Screen; the visible timer still works.',
+      );
+    }
+  };
+  const testAlert = async () => {
+    setTesting(true);
+    try {
+      prepareTimerSound();
+      let played = false;
+      if (soundEnabled) {
+        // resume() is async; wait one event turn before testing the oscillator.
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        played = playTimerSound();
+      }
+      if (
+        !('Notification' in window) ||
+        Notification.permission !== 'granted'
+      ) {
+        status(
+          (played
+            ? 'Sound tested. '
+            : soundEnabled
+              ? 'Sound was unavailable; tap Start to enable it. '
+              : 'Sound is off. ') +
+            'System notifications need permission; on iPhone, open the Home Screen app first.',
+        );
+        return;
+      }
+      await showRestNotification(navigator.serviceWorker.getRegistration(), {
+        body: 'Test alert: ready for your next set.',
+        icon: notificationIconHref,
+        tag: 'liftline-rest-test',
+        silent: !soundEnabled,
+        data: { url: '/' },
+      });
+      status(
+        'Test notification sent. If it is silent, check Liftline notifications, sound settings and Focus. Apple controls whether alerts appear on iPhone or Watch.',
+      );
+    } catch (error) {
+      status(
+        error instanceof Error ? error.message : 'Test notification failed.',
+      );
+    } finally {
+      setTesting(false);
     }
   };
   return (
@@ -208,11 +370,14 @@ const RestTimer = forwardRef<
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {permission === 'default' && (
-            <Button type="button" variant="ghost" onClick={enableAlerts}>
-              <Bell /> Alerts
-            </Button>
-          )}
+          <Button
+            type="button"
+            variant="ghost"
+            aria-expanded={showAlerts}
+            onClick={() => setShowAlerts(!showAlerts)}
+          >
+            <Bell /> Alerts
+          </Button>
           <Button
             type="button"
             variant={running ? 'secondary' : 'default'}
@@ -232,6 +397,96 @@ const RestTimer = forwardRef<
           </Button>
         </div>
       </div>
+      {showAlerts && (
+        <div className="mt-3 space-y-3 border-t border-border/60 pt-3">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              aria-pressed={sound}
+              onClick={() => {
+                soundEnabled = !sound;
+                setSound(soundEnabled);
+                if (soundEnabled) prepareTimerSound();
+                try {
+                  localStorage.setItem(
+                    'liftline.timer-sound.v1',
+                    soundEnabled ? 'on' : 'off',
+                  );
+                } catch {
+                  /* Session-only. */
+                }
+              }}
+            >
+              Sound {sound ? 'on' : 'off'}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              aria-pressed={awake}
+              onClick={() => {
+                keepAwake = !awake;
+                setAwake(keepAwake);
+                void updateWakeLock();
+                try {
+                  localStorage.setItem(
+                    'liftline.timer-awake.v1',
+                    keepAwake ? 'on' : 'off',
+                  );
+                } catch {
+                  /* Session-only. */
+                }
+              }}
+            >
+              Keep screen awake {awake ? 'on' : 'off'}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                if (permission !== 'granted') {
+                  void enableAlerts();
+                  return;
+                }
+                alertsEnabled = !systemAlerts;
+                setSystemAlerts(alertsEnabled);
+                try {
+                  localStorage.setItem(
+                    'liftline.timer-alerts.v1',
+                    alertsEnabled ? 'on' : 'off',
+                  );
+                } catch {
+                  /* Session-only. */
+                }
+              }}
+              aria-pressed={systemAlerts}
+            >
+              {permission === 'granted'
+                ? `Notifications ${systemAlerts ? 'on' : 'off'}`
+                : 'Enable notifications'}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              disabled={testing}
+              onClick={testAlert}
+            >
+              {testing ? 'Testing…' : 'Test alert'}
+            </Button>
+          </div>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Keep Liftline open for timely alerts. Screen wake is supported where
+            the device permits it. On iPhone, system alerts require the Home
+            Screen app and notification permission. When the phone is locked,
+            use an iPhone or Watch timer: Liftline does not yet have
+            server-scheduled push alerts.
+          </p>
+        </div>
+      )}
       {alertMessage && (
         <p className="mt-2 text-xs text-muted-foreground" role="status">
           {alertMessage}
