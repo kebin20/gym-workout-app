@@ -28,6 +28,7 @@
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
+  --color-placeholder: var(--placeholder);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
@@ -65,6 +66,10 @@
 }
 
 :root {
+  --liftline-radius-control: 0.9rem;
+  --liftline-radius-panel: 1rem;
+  --liftline-radius-card: 1.5rem;
+  --liftline-shadow-quiet: 0 2px 8px rgb(35 60 122 / 3%);
   --background: oklch(0.979 0.014 258);
   --foreground: oklch(0.2 0.055 266);
   --card: oklch(1 0 0);
@@ -77,6 +82,7 @@
   --secondary-foreground: oklch(0.29 0.09 265);
   --muted: oklch(0.962 0.016 263);
   --muted-foreground: oklch(0.49 0.045 263);
+  --placeholder: #5f6e85;
   --accent: oklch(0.935 0.052 264);
   --accent-foreground: oklch(0.34 0.145 266);
   --destructive: oklch(0.59 0.22 25);
@@ -120,6 +126,7 @@
   --secondary-foreground: oklch(0.94 0.018 263);
   --muted: oklch(0.26 0.028 263);
   --muted-foreground: oklch(0.71 0.03 263);
+  --placeholder: #a3afc2;
   --accent: oklch(0.31 0.055 263);
   --accent-foreground: oklch(0.95 0.012 263);
   --destructive: oklch(0.68 0.19 25);
@@ -269,7 +276,7 @@
     border-radius: 1.2rem;
     background: rgb(255 255 255 / 74%);
     padding: 0.68rem 0.82rem;
-    box-shadow: 0 8px 24px rgb(39 64 126 / 6%);
+    box-shadow: var(--liftline-shadow-quiet);
     backdrop-filter: blur(16px);
   }
 
@@ -286,13 +293,13 @@
         transparent 28%
       ),
       linear-gradient(135deg, rgb(255 255 255 / 92%), rgb(236 242 255 / 88%));
-    box-shadow: 0 16px 42px rgb(33 62 132 / 8%);
+    box-shadow: var(--liftline-shadow-quiet);
   }
 
   .beta-training-spotlight {
-    min-height: 8.75rem;
+    min-height: 6.5rem;
     border-radius: 1.65rem;
-    padding: 1.15rem 10.25rem 1.15rem 1.25rem;
+    padding: 0.8rem 7.25rem 0.8rem 1rem;
   }
 
   .beta-dashboard-intro {
@@ -335,9 +342,9 @@
   .beta-training-spotlight-art {
     position: absolute;
     right: 0.75rem;
-    bottom: -0.65rem;
-    width: 8.8rem;
-    height: 9.8rem;
+    bottom: -0.25rem;
+    width: 6.25rem;
+    height: 7rem;
     pointer-events: none;
     filter: drop-shadow(0 14px 20px rgb(42 58 140 / 15%));
   }
@@ -385,10 +392,10 @@
     align-items: center;
     gap: 0.8rem;
     border: 1px solid rgb(74 112 200 / 13%);
-    border-radius: 1.45rem;
+    border-radius: var(--liftline-radius-panel);
     background: rgb(255 255 255 / 86%);
     padding: 0.85rem;
-    box-shadow: 0 14px 38px rgb(30 61 132 / 8%);
+    box-shadow: var(--liftline-shadow-quiet);
     backdrop-filter: blur(14px);
   }
 
@@ -421,7 +428,7 @@
   .beta-metric-label {
     overflow: hidden;
     color: #66718b;
-    font-size: 0.7rem;
+    font-size: 0.875rem;
     font-weight: 700;
     line-height: 1.2;
     text-overflow: ellipsis;
@@ -439,20 +446,27 @@
 
   .beta-metric-detail {
     margin-top: 0.12rem;
-    color: #7b849b;
-    font-size: 0.66rem;
+    color: #5f6e85;
+    font-size: 0.875rem;
     font-weight: 600;
     white-space: nowrap;
   }
 
   .liftline-beta [data-slot='card'] {
-    border-radius: 1.75rem;
-    box-shadow: 0 18px 48px rgb(35 60 122 / 8%);
-    ring-color: rgb(57 86 154 / 10%);
+    border-radius: var(--liftline-radius-card);
+    box-shadow: var(--liftline-shadow-quiet);
   }
 
   .liftline-beta [data-slot='button'] {
-    border-radius: 0.9rem;
+    border-radius: var(--liftline-radius-control);
+  }
+
+  .liftline-beta .beta-workout-card {
+    box-shadow: 0 8px 24px rgb(35 60 122 / 6%);
+  }
+
+  .liftline-beta .beta-week-card {
+    box-shadow: 0 8px 24px rgb(35 60 122 / 10%);
   }
 
   .beta-week-card {
@@ -543,14 +557,14 @@
     }
 
     .beta-training-spotlight {
-      min-height: 8.2rem;
-      padding: 1rem 7.8rem 1rem 1rem;
+      min-height: 6.5rem;
+      padding: 0.8rem 5.5rem 0.8rem 1rem;
     }
 
     .beta-training-spotlight-art {
       right: 0.2rem;
-      width: 7.6rem;
-      height: 8.7rem;
+      width: 5rem;
+      height: 6.5rem;
     }
 
     .beta-plan-intro {
@@ -572,13 +586,12 @@
     .beta-metric-card {
       flex-direction: column;
       gap: 0.45rem;
-      padding: 0.7rem 0.4rem;
+      padding: 0.625rem 0.4rem;
       text-align: center;
     }
 
     .beta-metric-ring {
-      width: 3rem;
-      height: 3rem;
+      display: none;
     }
 
     .beta-metric-ring-inner {
@@ -591,35 +604,20 @@
     }
 
     .beta-metric-label,
-    .beta-metric-detail,
     .beta-eyebrow {
       font-size: 0.75rem;
+    }
+
+    .beta-metric-label {
+      font-size: 0.875rem;
     }
 
     .beta-metric-detail {
       white-space: normal;
     }
 
-    .liftline-beta [data-slot='card'] {
-      border-radius: 1.55rem;
-    }
-
     .beta-week-card {
       border-radius: 1.7rem !important;
-    }
-  }
-
-  @media (prefers-reduced-motion: no-preference) {
-    .beta-metric-card,
-    .liftline-beta [data-slot='card'] {
-      transition:
-        transform 180ms ease,
-        box-shadow 180ms ease;
-    }
-
-    .beta-metric-card:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 18px 44px rgb(35 60 122 / 12%);
     }
   }
 }

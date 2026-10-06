@@ -10,7 +10,7 @@ Made with ChatGPT Codex
 
 The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgpt.site](https://liftline-strength-plan.ktanzyl.chatgpt.site). Access is restricted to the site owner.
 
-Current production version: **v3.12.3**
+Current production version: **v3.13.0**
 
 ## Features
 
@@ -53,6 +53,17 @@ Current production version: **v3.12.3**
 ## Version history
 
 Minor fixes, visual refinements, and deployment maintenance are grouped into the nearest feature release so this history focuses on meaningful product changes.
+
+### v3.13 — Calmer, clearer workout UI
+
+- Compact the Today spotlight and mobile metric cards so logging is reached sooner, while keeping every overview value and the existing persistent Workout focus control.
+- Reduce secondary-card shadows and remove hover elevation from passive statistics; retain emphasis for the workout card, weekly progress and primary actions.
+- Label the programme dropdown “Menu” so Nutrition, schedule and guide are easier to discover; phase selection remains inside.
+- Increase important dates, set-history details and instructions to 14px. Use a distinct regular-weight slate-gray numeric placeholder with at least 4.5:1 contrast on the tested light input surfaces.
+- Share Day A/B/C badge styling across Today, Plan and Progress: blue, emerald and violet. Completion indicators remain green.
+- Delay the fixed-width Today sidebar until 1024px so tablet-sized workout columns do not squeeze the numeric controls.
+- Group Google Sheet exchange and backup/restore under Progress’s accessible Data menu. Keep existing callbacks, phase restrictions, busy-state protection and per-day PDF buttons unchanged.
+- Add navigation, day identity, Data-menu action and placeholder-contrast regressions; retain the existing offline, draft, save, timer and PDF coverage. App icons and artwork revision v9 are unchanged.
 
 ### v3.12 — Day reports and clearer rest alerts
 

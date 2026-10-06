@@ -350,7 +350,7 @@ const RestTimer = forwardRef<
             <Clock3 className="size-4" />
           </span>
           <div>
-            <p className="font-sans text-xs font-medium text-muted-foreground">
+            <p className="font-sans text-sm font-medium text-muted-foreground">
               {seconds === 0
                 ? 'Rest complete'
                 : active && active.exerciseName !== exerciseName
@@ -478,7 +478,7 @@ const RestTimer = forwardRef<
               {testing ? 'Testing…' : 'Test alert'}
             </Button>
           </div>
-          <p className="text-xs leading-relaxed text-muted-foreground">
+          <p className="text-sm leading-relaxed text-muted-foreground">
             Keep Liftline open for timely alerts. Screen wake is supported where
             the device permits it. On iPhone, system alerts require the Home
             Screen app and notification permission. When the phone is locked,
@@ -488,7 +488,7 @@ const RestTimer = forwardRef<
         </div>
       )}
       {alertMessage && (
-        <p className="mt-2 text-xs text-muted-foreground" role="status">
+        <p className="mt-2 text-sm text-muted-foreground" role="status">
           {alertMessage}
         </p>
       )}
