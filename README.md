@@ -10,7 +10,7 @@ Made with ChatGPT Codex
 
 The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgpt.site](https://liftline-strength-plan.ktanzyl.chatgpt.site). Access is restricted to the site owner.
 
-Current production version: **v3.12.2**
+Current production version: **v3.13.0**
 
 ## Features
 
@@ -54,10 +54,22 @@ Current production version: **v3.12.2**
 
 Minor fixes, visual refinements, and deployment maintenance are grouped into the nearest feature release so this history focuses on meaningful product changes.
 
+### v3.13 — Calmer, clearer workout UI
+
+- Compact the Today spotlight and mobile metric cards so logging is reached sooner, while keeping every overview value and the existing persistent Workout focus control.
+- Reduce secondary-card shadows and remove hover elevation from passive statistics; retain emphasis for the workout card, weekly progress and primary actions.
+- Label the programme dropdown “Menu” so Nutrition, schedule and guide are easier to discover; phase selection remains inside.
+- Increase important dates, set-history details and instructions to 14px. Use a distinct regular-weight slate-gray numeric placeholder with at least 4.5:1 contrast on the tested light input surfaces.
+- Share Day A/B/C badge styling across Today, Plan and Progress: blue, emerald and violet. Completion indicators remain green.
+- Delay the fixed-width Today sidebar until 1024px so tablet-sized workout columns do not squeeze the numeric controls.
+- Group Google Sheet exchange and backup/restore under Progress’s accessible Data menu. Keep existing callbacks, phase restrictions, busy-state protection and per-day PDF buttons unchanged.
+- Add navigation, day identity, Data-menu action and placeholder-contrast regressions; retain the existing offline, draft, save, timer and PDF coverage. App icons and artwork revision v9 are unchanged.
+
 ### v3.12 — Day reports and clearer rest alerts
 
 - In v3.12.1, give the Day A/B/C history badges larger, non-shrinking circles with balanced padding around their labels.
 - In v3.12.2, centre compact mobile set rows with matching number/status circles and consistent gaps to the weight/reps controls, while retaining the wider side-by-side layout on larger screens.
+- In v3.12.3, move Nutrition into the programme dropdown, keep Today/Plan/Progress as the primary tabs, and remove Readiness check, Warm-up & plates and Body metrics from that menu without deleting stored records.
 - Download a consolidated PDF from each Day A/B/C card in Progress. Reports cover every saved phase/week, volume charts, per-exercise first/latest trends, full sets, RIR and notes. Partial and device-pending records are labelled; unsaved drafts and Holiday logs are excluded. Original Unicode records are also attached to the PDF.
 - Generate reports locally with PDF/font libraries loaded only on download. Noto fonts support Latin and Japanese notes; the larger Japanese font is fetched only when required and fonts can be cached after first use. Fonts are licensed under the SIL Open Font License (see `public/fonts/`).
 - Keep one rest-timer engine active across view navigation; send permitted system notifications in foreground as well as background, expose delivery errors, and add test alerts, optional sound and screen wake lock.

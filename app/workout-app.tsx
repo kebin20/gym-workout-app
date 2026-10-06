@@ -15,13 +15,10 @@ import {
 import {
   AlertCircle,
   Activity,
-  Apple,
   ArrowDown,
   ArrowUp,
   BarChart3,
-  BookOpen,
   CalendarDays,
-  Calculator,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -43,7 +40,6 @@ import {
   NotebookPen,
   Plus,
   RotateCcw,
-  Scale,
   Settings2,
   Sparkles,
   Target,
@@ -55,6 +51,7 @@ import {
 } from 'lucide-react';
 import { appVersion, brandMarkHref, notificationIconHref } from './app-release';
 import RestTimer, { type RestTimerHandle } from './rest-timer';
+import { ProgrammeToolsMenu } from './programme-tools-menu';
 import {
   hasPendingOutbox,
   outboxStorageIssue,
@@ -96,6 +93,7 @@ import {
 import { findStartupWeek } from '@/lib/startup-week';
 import { latestDraftKey } from '@/lib/exercise-drafts';
 import { sessionProgress } from '@/lib/session-progress';
+import { dayPresentation } from '@/lib/day-presentation';
 import ExerciseDraftBoundary, {
   type DraftStatus,
 } from './exercise-draft-boundary';
@@ -2154,13 +2152,6 @@ export function WorkoutApp() {
               label="Progress"
               onChange={setView}
             />
-            <NavButton
-              view="nutrition"
-              active={view === 'nutrition'}
-              icon={Apple}
-              label="Nutrition"
-              onChange={setView}
-            />
           </div>
           <div className="ml-auto flex items-center gap-2 md:ml-0">
             <Button
@@ -2183,7 +2174,7 @@ export function WorkoutApp() {
                 aria-controls="programme-tools-menu"
                 onClick={() => setProgrammeMenuOpen((open) => !open)}
               >
-                Phase {activePhase}{' '}
+                Menu{' '}
                 <ChevronDown
                   className={`transition-transform ${programmeMenuOpen ? 'rotate-180' : ''}`}
                 />
@@ -2198,7 +2189,7 @@ export function WorkoutApp() {
                     <span className="block font-sans text-sm font-semibold text-foreground">
                       Training programme
                     </span>
-                    <span className="block font-sans text-xs font-normal text-muted-foreground">
+                    <span className="block font-sans text-sm font-normal text-muted-foreground">
                       {activePhase === 1
                         ? `${phaseOneSessions} of 36 Phase 1 sessions complete`
                         : 'Specialized full-body progression'}
@@ -2247,43 +2238,17 @@ export function WorkoutApp() {
                       </span>
                     )}
                   </button>
-                  <div className="-mx-1 my-1 h-px bg-border" />
-                  <p className="px-2 py-1 font-sans text-xs font-medium text-muted-foreground">
-                    Tools
-                  </p>
-                  {(
-                    [
-                      ['schedule', CalendarDays, 'Training schedule'],
-                      ['readiness', Activity, 'Readiness check'],
-                      ['calculator', Calculator, 'Warm-up & plates'],
-                      ['metrics', Scale, 'Body metrics'],
-                    ] as const
-                  ).map(([tool, Icon, label]) => (
-                    <button
-                      key={tool}
-                      type="button"
-                      role="menuitem"
-                      className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left font-sans text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
-                      onClick={() => {
-                        setProgrammeMenuOpen(false);
-                        setActiveTrainingTool(tool);
-                      }}
-                    >
-                      <Icon className="size-4" /> {label}
-                    </button>
-                  ))}
-                  <div className="-mx-1 my-1 h-px bg-border" />
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left font-sans text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
-                    onClick={() => {
+                  <ProgrammeToolsMenu
+                    view={view}
+                    onSelect={(destination) => {
                       setProgrammeMenuOpen(false);
-                      setView('guide');
+                      if (destination === 'schedule') {
+                        setActiveTrainingTool('schedule');
+                      } else {
+                        setView(destination);
+                      }
                     }}
-                  >
-                    <BookOpen className="size-4" /> Training guide
-                  </button>
+                  />
                 </div>
               )}
             </div>
@@ -2379,9 +2344,9 @@ export function WorkoutApp() {
 
         {view === 'today' && (
           <div
-            className={`beta-today-layout grid gap-5 ${workoutFocus ? 'mx-auto max-w-3xl' : 'md:grid-cols-[minmax(0,1fr)_320px]'}`}
+            className={`beta-today-layout grid gap-5 ${workoutFocus ? 'mx-auto max-w-3xl' : 'lg:grid-cols-[minmax(0,1fr)_320px]'}`}
           >
-            <section className="beta-workout-column min-w-0 space-y-5">
+            <section className="beta-workout-column min-w-0 space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="text-sm font-semibold text-muted-foreground">
                   Phase {activePhase} · Week {activeDisplayWeek} · Day{' '}
@@ -2389,7 +2354,7 @@ export function WorkoutApp() {
                 </p>
                 <Button
                   type="button"
-                  variant="outline"
+                  variant={workoutFocus ? 'default' : 'secondary'}
                   aria-pressed={workoutFocus}
                   onClick={toggleWorkoutFocus}
                 >
@@ -2476,11 +2441,11 @@ export function WorkoutApp() {
                   <div className="beta-training-spotlight">
                     <div className="beta-training-spotlight-copy">
                       <p className="beta-eyebrow">Move well today</p>
-                      <h2 className="font-sans text-lg font-bold tracking-tight sm:text-xl">
+                      <h2 className="font-sans text-base font-bold tracking-tight sm:text-lg">
                         {exercise.name}
                       </h2>
                       <p className="mt-1 max-w-sm font-sans text-sm text-muted-foreground">
-                        {targetLabel(exercise)} · {exercise.muscles}
+                        {targetLabel(exercise)}
                       </p>
                     </div>
                     <div
@@ -2546,7 +2511,7 @@ export function WorkoutApp() {
                         <p className="font-sans text-xl font-bold text-primary-foreground">
                           {weeklyPercent}%
                         </p>
-                        <p className="font-sans text-[11px] text-primary-foreground/85">
+                        <p className="font-sans text-sm text-primary-foreground/90">
                           complete
                         </p>
                       </CardAction>
@@ -2787,7 +2752,9 @@ export function WorkoutApp() {
                     <Card className="beta-workout-card gap-0 border-0 py-0 shadow-sm shadow-slate-900/5 ring-border">
                       <CardHeader className="border-b bg-muted/35 pt-(--card-spacing)">
                         <div className="flex flex-wrap items-center gap-2">
-                          <Badge className="bg-day-c font-sans text-day-c-foreground">
+                          <Badge
+                            className={`font-sans ${dayPresentation[activeDay].badge}`}
+                          >
                             Day {activeDay}
                           </Badge>
                           <Badge variant="outline" className="font-sans">
@@ -2834,7 +2801,7 @@ export function WorkoutApp() {
                           <details
                             key={`${activeWeek}|${activeDay}|${exercise.order}|${workoutFocus}`}
                             open={!workoutFocus}
-                            className="mt-3 rounded-xl border border-primary/15 bg-background/90 p-3 shadow-sm shadow-slate-900/5"
+                            className="mt-3 rounded-xl border border-primary/15 bg-background/90 p-3"
                           >
                             <summary className="flex cursor-pointer list-none items-center gap-3 [&::-webkit-details-marker]:hidden">
                               <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-accent text-primary">
@@ -2845,7 +2812,7 @@ export function WorkoutApp() {
                                   Previous session
                                 </p>
                                 {previousEntry && (
-                                  <p className="font-sans text-xs font-medium text-muted-foreground">
+                                  <p className="font-sans text-sm font-medium text-muted-foreground">
                                     {formatWorkoutDate(
                                       previousEntry.completedAt ??
                                         previousEntry.updatedAt,
@@ -2866,7 +2833,7 @@ export function WorkoutApp() {
                                   {loggedSets(previousEntry).map((set) => (
                                     <span
                                       key={set.set}
-                                      className="rounded-lg bg-secondary px-2 py-1.5 font-sans text-xs font-medium tabular-nums"
+                                      className="rounded-lg bg-secondary px-2 py-1.5 font-sans text-sm font-medium tabular-nums"
                                     >
                                       Set {set.set}:{' '}
                                       {set.weight == null
@@ -2897,7 +2864,7 @@ export function WorkoutApp() {
                                       className="mt-0.5 size-4 shrink-0 text-primary"
                                       aria-hidden="true"
                                     />
-                                    <p className="min-w-0 break-words font-sans text-xs leading-relaxed text-muted-foreground">
+                                    <p className="min-w-0 break-words font-sans text-sm leading-relaxed text-muted-foreground">
                                       <span className="font-semibold text-foreground">
                                         Previous note:
                                       </span>{' '}
@@ -2907,7 +2874,7 @@ export function WorkoutApp() {
                                 )}
                               </div>
                             ) : (
-                              <p className="mt-2 font-sans text-xs leading-relaxed text-muted-foreground">
+                              <p className="mt-2 font-sans text-sm leading-relaxed text-muted-foreground">
                                 No earlier session for this exercise yet. Your
                                 last sets and date will appear here from Week 2
                                 onward.
@@ -3036,7 +3003,7 @@ export function WorkoutApp() {
                                                     event.target.value,
                                                   )
                                                 }
-                                                className="h-11 w-full min-w-0 bg-background text-center font-sans text-lg font-semibold text-foreground tabular-nums placeholder:font-medium placeholder:text-muted-foreground/35"
+                                                className="h-11 w-full min-w-0 bg-background text-center font-sans text-lg font-semibold text-foreground tabular-nums placeholder:font-normal placeholder:text-placeholder"
                                               />
                                               <Button
                                                 variant="outline"
@@ -3085,7 +3052,7 @@ export function WorkoutApp() {
                                                     event.target.value,
                                                   )
                                                 }
-                                                className="h-11 w-full min-w-0 bg-background text-center font-sans text-lg font-semibold text-foreground tabular-nums placeholder:font-medium placeholder:text-muted-foreground/35"
+                                                className="h-11 w-full min-w-0 bg-background text-center font-sans text-lg font-semibold text-foreground tabular-nums placeholder:font-normal placeholder:text-placeholder"
                                               />
                                               <Button
                                                 variant="outline"
@@ -3156,7 +3123,7 @@ export function WorkoutApp() {
                                   >
                                     Reps in reserve (RIR)
                                   </label>
-                                  <p className="font-sans text-xs text-muted-foreground">
+                                  <p className="font-sans text-sm text-muted-foreground">
                                     {activeWeek <= 2
                                       ? 'Aim for about 3 during ramp-in.'
                                       : 'Aim for 1–2 with clean form.'}
@@ -3179,7 +3146,7 @@ export function WorkoutApp() {
                                       rir: event.target.value,
                                     }))
                                   }
-                                  className="h-11 bg-background text-center font-sans text-lg font-semibold text-foreground placeholder:font-medium placeholder:text-muted-foreground/35"
+                                  className="h-11 bg-background text-center font-sans text-lg font-semibold text-foreground placeholder:font-normal placeholder:text-placeholder"
                                 />
                               </div>
 
@@ -3297,7 +3264,7 @@ export function WorkoutApp() {
                           className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-colors ${activeDay === day ? 'border-primary/35 bg-accent/45' : 'border-border/80 hover:bg-muted/60'}`}
                         >
                           <span
-                            className={`grid size-10 place-items-center rounded-xl font-sans font-bold ${complete ? 'bg-success-soft text-success' : day === activeDay ? 'bg-day-c text-day-c-foreground' : 'bg-secondary text-secondary-foreground'}`}
+                            className={`grid size-10 place-items-center rounded-xl font-sans font-bold ${complete ? 'bg-success-soft text-success' : dayPresentation[day].badge}`}
                           >
                             {day}
                           </span>
@@ -3305,7 +3272,7 @@ export function WorkoutApp() {
                             <span className="block font-sans font-semibold">
                               Day {day}
                             </span>
-                            <span className="block font-sans text-xs text-muted-foreground">
+                            <span className="block font-sans text-sm text-muted-foreground">
                               {count} of {total} exercises
                             </span>
                           </span>
@@ -3998,7 +3965,7 @@ export function WorkoutApp() {
         aria-label="Primary navigation"
         className="beta-bottom-nav fixed inset-x-0 bottom-0 z-30 border-t bg-card/95 px-2 pb-[max(.5rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-8px_30px_rgb(15_23_42/7%)] backdrop-blur md:hidden"
       >
-        <div className="mx-auto grid max-w-md grid-cols-4">
+        <div className="mx-auto grid max-w-md grid-cols-3">
           <NavButton
             view="today"
             active={view === 'today'}
@@ -4020,14 +3987,6 @@ export function WorkoutApp() {
             active={view === 'progress'}
             icon={BarChart3}
             label="Progress"
-            onChange={setView}
-            compact
-          />
-          <NavButton
-            view="nutrition"
-            active={view === 'nutrition'}
-            icon={Apple}
-            label="Nutrition"
             onChange={setView}
             compact
           />

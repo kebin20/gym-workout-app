@@ -4,17 +4,13 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
-  Download,
   Dumbbell,
-  FileSpreadsheet,
   History,
-  Loader2,
   Medal,
   NotebookPen,
   Sparkles,
   Target,
   TrendingUp,
-  Upload,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -40,8 +36,10 @@ import {
   type RoutineExercise,
 } from '@/lib/routine';
 import { workoutMetrics } from '@/lib/workout-metrics';
+import { dayPresentation } from '@/lib/day-presentation';
 import type { WorkoutEntry } from '@/lib/workout-types';
 import DayReportButton from './day-report-button';
+import ProgressDataMenu from './progress-data-menu';
 const ProgressChart = lazy(() => import('./progress-chart'));
 const ExerciseProgressChart = lazy(() => import('./exercise-progress-chart'));
 const AdvancedInsights = lazy(() => import('./advanced-insights'));
@@ -105,7 +103,7 @@ function HistoryWeekDisclosure({
         >
           Week {displayWeekNumber(entry.week)}
         </span>
-        <span className="ml-auto text-xs text-muted-foreground">
+        <span className="ml-auto text-sm text-muted-foreground">
           {formatWorkoutDate(entry.completedAt ?? entry.updatedAt)}
         </span>
         <ChevronRight
@@ -118,7 +116,7 @@ function HistoryWeekDisclosure({
             {loggedSets(entry).map((set) => (
               <span
                 key={set.set}
-                className="rounded-lg border border-border/80 bg-card px-2 py-1 font-sans text-xs font-medium"
+                className="rounded-lg border border-border/80 bg-card px-2 py-1 font-sans text-sm font-medium"
               >
                 Set {set.set}:{' '}
                 {set.weight == null
@@ -133,7 +131,7 @@ function HistoryWeekDisclosure({
             )}
           </div>
           {entry.notes && (
-            <p className="mt-2 flex gap-1.5 font-sans text-xs leading-relaxed text-muted-foreground">
+            <p className="mt-2 flex gap-1.5 font-sans text-sm leading-relaxed text-muted-foreground">
               <NotebookPen className="mt-0.5 size-3.5 shrink-0" />
               {entry.notes}
             </p>
@@ -287,55 +285,18 @@ export default function ProgressView({
             automatically.
           </p>
         </div>
-        <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
-          {activePhase === 1 && (
-            <>
-              <Button
-                variant="outline"
-                className="font-sans"
-                disabled={loadingImport || importingSheet || loading}
-                onClick={previewGoogleSheetImport}
-              >
-                {loadingImport ? (
-                  <Loader2 className="animate-spin" />
-                ) : (
-                  <Download />
-                )}{' '}
-                {loadingImport ? 'Checking…' : 'Import from Google Sheet'}
-              </Button>
-              <Button
-                variant="outline"
-                className="font-sans"
-                disabled={syncingSheet || loading}
-                onClick={syncGoogleSheet}
-              >
-                {syncingSheet ? (
-                  <Loader2 className="animate-spin" />
-                ) : (
-                  <FileSpreadsheet />
-                )}{' '}
-                {syncingSheet ? 'Sending…' : 'Send to Google Sheet'}
-              </Button>
-            </>
-          )}
-          <Button
-            variant="outline"
-            className="font-sans"
-            disabled={backupBusy || loading}
-            onClick={downloadBackup}
-          >
-            {backupBusy ? <Loader2 className="animate-spin" /> : <Download />}{' '}
-            Download backup
-          </Button>
-          <Button
-            variant="outline"
-            className="font-sans"
-            disabled={backupBusy || loading}
-            onClick={onRestoreBackup}
-          >
-            <Upload /> Restore backup
-          </Button>
-        </div>
+        <ProgressDataMenu
+          activePhase={activePhase}
+          loadingImport={loadingImport}
+          importingSheet={importingSheet}
+          loading={loading}
+          syncingSheet={syncingSheet}
+          backupBusy={backupBusy}
+          previewGoogleSheetImport={previewGoogleSheetImport}
+          syncGoogleSheet={syncGoogleSheet}
+          downloadBackup={downloadBackup}
+          onRestoreBackup={onRestoreBackup}
+        />
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         {[
@@ -582,12 +543,7 @@ export default function ProgressView({
                   ...activeRoutine.filter((item) => item.day === day),
                   ...customHistory.values(),
                 ];
-                const dayColor =
-                  day === 'A'
-                    ? 'bg-blue-100 text-blue-700'
-                    : day === 'B'
-                      ? 'bg-emerald-100 text-emerald-700'
-                      : 'bg-violet-100 text-violet-700';
+                const dayColor = dayPresentation[day].badge;
 
                 return (
                   <CarouselItem key={day}>
@@ -665,7 +621,7 @@ export default function ProgressView({
                                   <h3 className="font-sans text-sm font-semibold sm:text-base">
                                     {displayName}
                                   </h3>
-                                  <p className="mt-0.5 font-sans text-xs text-muted-foreground">
+                                  <p className="mt-0.5 font-sans text-sm text-muted-foreground">
                                     {targetLabel(item)} · {item.muscles}
                                   </p>
                                 </div>

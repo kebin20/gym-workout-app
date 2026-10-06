@@ -18,6 +18,7 @@ import {
   type TrainingDay,
 } from '@/lib/routine';
 import { planForSession } from '@/lib/session-plan';
+import { dayPresentation } from '@/lib/day-presentation';
 import type { SessionExercise } from '@/lib/workout-types';
 
 type PlanViewProps = {
@@ -68,19 +69,10 @@ export default function PlanView({
         {days.map((day) => {
           const sessionPlan = planForSession(sessionExercises, activeWeek, day);
           return (
-            <Card
-              key={day}
-              className={
-                day === 'A'
-                  ? 'ring-blue-200'
-                  : day === 'B'
-                    ? 'ring-emerald-200'
-                    : 'ring-violet-200'
-              }
-            >
+            <Card key={day} className={dayPresentation[day].ring}>
               <CardHeader>
                 <Badge
-                  className={`mb-2 font-sans ${day === 'A' ? 'bg-blue-100 text-blue-700' : day === 'B' ? 'bg-emerald-100 text-emerald-700' : 'bg-violet-100 text-violet-700'}`}
+                  className={`mb-2 font-sans ${dayPresentation[day].badge}`}
                 >
                   Day {day}
                 </Badge>
@@ -112,12 +104,12 @@ export default function PlanView({
                       >
                         {item.name}
                       </p>
-                      <p className="mt-1 font-sans text-xs text-muted-foreground">
+                      <p className="mt-1 font-sans text-sm text-muted-foreground">
                         {item.skipped
                           ? 'Skipped this session'
                           : `${targetLabel(item)} · ${item.rest}`}
                       </p>
-                      <p className="mt-1 font-sans text-[11px] text-muted-foreground">
+                      <p className="mt-1 font-sans text-sm text-muted-foreground">
                         {item.custom
                           ? 'Custom exercise'
                           : `Alt: ${item.alternative}`}

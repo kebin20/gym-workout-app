@@ -71,16 +71,25 @@ test('the refactored Today and Holiday loggers render on the server without brow
     const rirInput = html.match(/<input\b[^>]*\bid="rir"[^>]*>/)?.[0];
     assert.ok(rirInput);
     assert.ok(rirInput.includes('placeholder="2"'));
-    assert.ok(rirInput.includes('placeholder:text-muted-foreground/35'));
+    assert.ok(rirInput.includes('placeholder:text-placeholder'));
+    assert.ok(rirInput.includes('placeholder:font-normal'));
     assert.ok(html.includes('Save &amp; next'));
-    assert.ok(html.includes('3.12.2'));
+    assert.ok(html.includes('3.13.0'));
     assert.equal((html.match(/data-workout-set-row=""/g) ?? []).length, 3);
     assert.ok(html.includes('max-w-[21.5rem]'));
     assert.ok(!html.includes('max-w-60'));
+    const primaryNav = html.match(
+      /<nav\b[^>]*aria-label="Primary navigation"[^>]*>[\s\S]*?<\/nav>/,
+    )?.[0];
+    assert.ok(primaryNav);
+    assert.equal((primaryNav.match(/<button\b/g) ?? []).length, 3);
+    for (const label of ['Today', 'Plan', 'Progress'])
+      assert.ok(primaryNav.includes(label));
+    assert.ok(!primaryNav.includes('Nutrition'));
     const Holiday = fixture.load('app/holiday-workout.tsx').default;
     const holiday = renderToString(
       createElement(Holiday, {
-        appVersion: '3.12.2',
+        appVersion: '3.13.0',
         isOnline: true,
         onExit: () => {},
       }),
@@ -90,6 +99,182 @@ test('the refactored Today and Holiday loggers render on the server without brow
   } finally {
     fixture.close();
   }
+});
+
+test('the simplified programme menu opens Nutrition, schedule and guide without the removed tool entries', () => {
+  const fixture = routeFixture();
+  try {
+    const { ProgrammeToolsMenu } = fixture.load('app/programme-tools-menu.tsx');
+    const selected = [];
+    const menu = ProgrammeToolsMenu({
+      view: 'nutrition',
+      onSelect: (destination) => selected.push(destination),
+    });
+    const html = renderToString(menu);
+    for (const label of ['Training schedule', 'Nutrition', 'Training guide'])
+      assert.ok(html.includes(label));
+    for (const label of [
+      'Readiness check',
+      'Warm-up &amp; plates',
+      'Body metrics',
+    ])
+      assert.ok(!html.includes(label));
+    const buttons = [];
+    const visit = (node) => {
+      if (Array.isArray(node)) return node.forEach(visit);
+      if (!node || typeof node !== 'object') return;
+      if (node.type === 'button') buttons.push(node.props);
+      visit(node.props?.children);
+    };
+    visit(menu);
+    assert.equal(buttons.length, 3);
+    assert.equal(buttons[1]['aria-current'], 'page');
+    for (const button of buttons) button.onClick();
+    assert.deepEqual(selected, ['schedule', 'nutrition', 'guide']);
+    const NutritionView = fixture.load('app/nutrition-view.tsx').default;
+    assert.ok(renderToString(createElement(NutritionView)).includes('protein'));
+  } finally {
+    fixture.close();
+  }
+});
+
+test('UI polish keeps the focus toggle, desktop-only rail, day identity and all data actions', () => {
+  const fixture = routeFixture();
+  try {
+    const { WorkoutApp } = fixture.load('app/workout-app.tsx');
+    const html = renderToString(createElement(WorkoutApp));
+    const menuTrigger = html.match(
+      /<button\b[^>]*aria-controls="programme-tools-menu"[^>]*>[\s\S]*?<\/button>/,
+    )?.[0];
+    assert.ok(menuTrigger?.includes('Menu'));
+    assert.ok(menuTrigger?.includes('aria-haspopup="menu"'));
+    assert.ok(html.includes('lg:grid-cols-[minmax(0,1fr)_320px]'));
+    assert.ok(!html.includes('md:grid-cols-[minmax(0,1fr)_320px]'));
+    assert.ok(html.includes('aria-pressed="false"'));
+    assert.ok(html.includes('Workout focus'));
+
+    const { dayPresentation } = fixture.load('lib/day-presentation.ts');
+    const Plan = fixture.load('app/plan-view.tsx').default;
+    const planHtml = renderToString(
+      createElement(Plan, {
+        activePhase: 1,
+        activeDisplayWeek: 1,
+        activeWeek: 1,
+        sessionExercises: [],
+        onChooseDay: () => {},
+        onEditDay: () => {},
+      }),
+    );
+    for (const day of ['A', 'B', 'C']) {
+      assert.ok(planHtml.includes(dayPresentation[day].badge));
+      assert.ok(
+        planHtml.replaceAll('<!-- -->', '').includes(`Start Day ${day}`),
+      );
+      assert.ok(html.includes(dayPresentation[day].badge));
+    }
+
+    const DataMenu = fixture.load('app/progress-data-menu.tsx').default;
+    const { DropdownMenuItem } = fixture.load(
+      'components/ui/dropdown-menu.tsx',
+    );
+    const calls = [];
+    const props = {
+      activePhase: 1,
+      loading: false,
+      loadingImport: false,
+      importingSheet: false,
+      syncingSheet: false,
+      backupBusy: false,
+      previewGoogleSheetImport: () => calls.push('import'),
+      syncGoogleSheet: () => calls.push('sync'),
+      downloadBackup: () => calls.push('download'),
+      onRestoreBackup: () => calls.push('restore'),
+    };
+    const items = (element) => {
+      const found = [];
+      const visit = (node) => {
+        if (Array.isArray(node)) return node.forEach(visit);
+        if (!node || typeof node !== 'object') return;
+        if (node.type === DropdownMenuItem) found.push(node.props);
+        visit(node.props?.children);
+      };
+      visit(element);
+      return found;
+    };
+    const actions = items(DataMenu(props));
+    assert.equal(actions.length, 4);
+    for (const action of actions) {
+      assert.equal(action.disabled, false);
+      action.onClick();
+      assert.ok(action.className.includes('min-h-11'));
+    }
+    assert.deepEqual(calls, ['import', 'sync', 'download', 'restore']);
+    assert.equal(items(DataMenu({ ...props, activePhase: 2 })).length, 2);
+    assert.ok(
+      items(DataMenu({ ...props, loading: true })).every(
+        (item) => item.disabled,
+      ),
+    );
+    assert.deepEqual(
+      items(DataMenu({ ...props, loadingImport: true })).map(
+        (item) => item.disabled,
+      ),
+      [true, false, false, false],
+    );
+    assert.deepEqual(
+      items(DataMenu({ ...props, importingSheet: true })).map(
+        (item) => item.disabled,
+      ),
+      [true, false, false, false],
+    );
+    assert.deepEqual(
+      items(DataMenu({ ...props, syncingSheet: true })).map(
+        (item) => item.disabled,
+      ),
+      [false, true, false, false],
+    );
+    assert.deepEqual(
+      items(DataMenu({ ...props, backupBusy: true })).map(
+        (item) => item.disabled,
+      ),
+      [false, false, true, true],
+    );
+    const busyHtml = renderToString(
+      createElement(DataMenu, { ...props, syncingSheet: true }),
+    );
+    assert.ok(busyHtml.includes('role="status"'));
+    assert.ok(busyHtml.includes('Sending to Google Sheet'));
+    assert.ok(busyHtml.includes('aria-haspopup="menu"'));
+  } finally {
+    fixture.close();
+  }
+});
+
+test('numeric placeholder gray remains distinct and readable on the light input surface', () => {
+  const css = readFileSync(
+    new URL('../app/globals.css', import.meta.url),
+    'utf8',
+  );
+  const placeholder = css.match(/--placeholder: (#[\da-f]{6});/i)?.[1];
+  assert.ok(placeholder);
+  const luminance = (hex) => {
+    const rgb = hex
+      .match(/[\da-f]{2}/gi)
+      .map((part) => parseInt(part, 16) / 255);
+    const linear = rgb.map((channel) =>
+      channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4,
+    );
+    return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722;
+  };
+  const fg = luminance(placeholder.slice(1));
+  for (const surface of ['ffffff', 'f5f8ff', 'ecf2ff']) {
+    const bg = luminance(surface);
+    assert.ok(
+      (bg + 0.05) / (fg + 0.05) >= 4.5,
+      `Placeholder contrast on #${surface}`,
+    );
+  }
+  assert.notEqual(placeholder, '#101b49');
 });
 
 test('drafts recover all fields and stay isolated by week, day and exercise', () => {
