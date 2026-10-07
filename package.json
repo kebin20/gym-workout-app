@@ -1,6 +1,6 @@
 {
   "name": "sites-project",
-  "version": "3.13.1",
+  "version": "3.13.2",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
@@ -9,6 +9,7 @@
     "dev": "vinext dev",
     "prebuild": "npm run verify:brand",
     "build": "vinext build",
+    "postbuild": "node scripts/build-startup-assets.mjs",
     "start": "wrangler dev --config dist/server/wrangler.json",
     "lint": "oxlint",
     "format": "oxfmt",

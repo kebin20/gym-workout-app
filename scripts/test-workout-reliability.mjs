@@ -212,6 +212,12 @@ test('UI polish keeps the focus toggle, desktop-only rail, day identity and all 
       assert.ok(action.className.includes('min-h-11'));
     }
     assert.deepEqual(calls, ['import', 'sync', 'download', 'restore']);
+    const withDiagnostics = items(
+      DataMenu({ ...props, onStartupDetails: () => calls.push('startup') }),
+    );
+    assert.equal(withDiagnostics.length, 5);
+    withDiagnostics[4].onClick();
+    assert.equal(calls.at(-1), 'startup');
     assert.equal(items(DataMenu({ ...props, activePhase: 2 })).length, 2);
     assert.ok(
       items(DataMenu({ ...props, loading: true })).every(
@@ -893,7 +899,8 @@ function workerFixture({
     finishFetch = resolve;
   });
   const cache = {
-    match: async () => (cached ? { label: 'cached' } : undefined),
+    match: async (url) =>
+      cached && url === '/' ? { label: 'cached' } : undefined,
     put: async (...args) => writes.push(args),
   };
   vm.runInNewContext(workerSource, {
@@ -901,10 +908,35 @@ function workerFixture({
       addEventListener: (type, handler) => listeners.set(type, handler),
       location: { origin: 'https://liftline.test' },
     },
-    caches: { open: async () => cache },
-    fetch: () => fetchPromise,
+    caches: {
+      open: async () => cache,
+      keys: async () => [],
+      delete: async () => true,
+    },
+    fetch: (url) => {
+      if (url === '/startup-assets.json')
+        return Promise.resolve(
+          networkResponse('manifest', {
+            json: async () => ({
+              version: appVersion,
+              assets: ['/_next/static/main.js', '/_next/static/main.css'],
+            }),
+          }),
+        );
+      if (typeof url === 'string' && url.startsWith('/_next/static/'))
+        return Promise.resolve(
+          networkResponse('asset', {
+            headers: {
+              get: () =>
+                url.endsWith('.css') ? 'text/css' : 'application/javascript',
+            },
+          }),
+        );
+      return fetchPromise;
+    },
     URL,
     Response,
+    AbortSignal,
     setTimeout: (handler) => {
       timers.push(handler);
       return timers.length;
@@ -925,6 +957,8 @@ function workerFixture({
     type: 'basic',
     redirected: false,
     headers: { get: () => 'text/html' },
+    text: async () =>
+      `<meta name="liftline-build" content="${appVersion}"><script src="/_next/static/main.js"></script><link href="/_next/static/main.css">`,
     clone() {
       return this;
     },
@@ -950,7 +984,7 @@ test('installed startup returns cached UI immediately while a slow refresh conti
   assert.equal((await fixture.response).label, 'cached');
   fixture.finishFetch(fixture.networkResponse('fresh'));
   await Promise.all(fixture.waits);
-  assert.equal(fixture.writes[0][0], '/');
+  assert.ok(fixture.writes.some(([url]) => url === '/'));
 });
 
 test('background auth redirects never replace the cached shell, and sign-in/API routes bypass it', async () => {

@@ -93,6 +93,7 @@ import {
 import { findStartupWeek } from '@/lib/startup-week';
 import { latestDraftKey } from '@/lib/exercise-drafts';
 import { isBundledApp } from '@/lib/client-runtime';
+import { retainInstalledStorage } from '@/lib/startup-storage';
 import { sessionProgress } from '@/lib/session-progress';
 import { dayPresentation } from '@/lib/day-presentation';
 import ExerciseDraftBoundary, {
@@ -1294,6 +1295,7 @@ export function WorkoutApp() {
       frame = requestAnimationFrame(() => {
         if (!performance.getEntriesByName('liftline:ready').length)
           performance.mark('liftline:ready');
+        window.dispatchEvent(new Event('liftline:ready'));
       });
     };
     const observer = new MutationObserver(check);
@@ -1309,6 +1311,41 @@ export function WorkoutApp() {
       cancelAnimationFrame(frame);
     };
   }, [loading]);
+
+  useEffect(() => {
+    if (isBundledApp()) return;
+    const installed =
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (navigator as Navigator & { standalone?: boolean }).standalone === true;
+    if (!installed) return;
+    let cancelled = false;
+    let idle: number | undefined;
+    let timer: number | undefined;
+    const request = () => {
+      window.removeEventListener('liftline:ready', schedule);
+      if (typeof window.requestIdleCallback === 'function') {
+        idle = window.requestIdleCallback(
+          () => {
+            if (!cancelled) void retainInstalledStorage(navigator.storage);
+          },
+          { timeout: 5000 },
+        );
+      } else {
+        timer = window.setTimeout(() => {
+          if (!cancelled) void retainInstalledStorage(navigator.storage);
+        }, 1000);
+      }
+    };
+    const schedule = () => request();
+    if (performance.getEntriesByName('liftline:ready').length) request();
+    else window.addEventListener('liftline:ready', schedule, { once: true });
+    return () => {
+      cancelled = true;
+      window.removeEventListener('liftline:ready', schedule);
+      if (idle !== undefined) window.cancelIdleCallback(idle);
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, []);
 
   useEffect(() => {
     let tipTimer: number | undefined;
@@ -1409,8 +1446,8 @@ export function WorkoutApp() {
     [activePhase, entryIndex],
   );
   const totalRecords = useMemo(
-    () => totalPersonalRecords(phaseEntries),
-    [phaseEntries],
+    () => (view === 'progress' ? totalPersonalRecords(phaseEntries) : 0),
+    [phaseEntries, view],
   );
   const currentSessionEntries = useMemo(
     () => entryIndex.completedBySession.get(`${activeWeek}|${activeDay}`) ?? [],
@@ -1424,9 +1461,16 @@ export function WorkoutApp() {
     (sum, entry) => sum + loggedSets(entry).length,
     0,
   );
-  const currentSessionRecords = currentSessionEntries.reduce(
-    (sum, entry) => sum + personalRecordsFor(entry, phaseEntries).length,
-    0,
+  const currentSessionRecords = useMemo(
+    () =>
+      sessionSummaryOpen
+        ? currentSessionEntries.reduce(
+            (sum, entry) =>
+              sum + personalRecordsFor(entry, phaseEntries).length,
+            0,
+          )
+        : 0,
+    [sessionSummaryOpen, currentSessionEntries, phaseEntries],
   );
   const previousSessionVolume =
     activeWeek > phaseStartWeek
