@@ -28,6 +28,9 @@ import {
 } from '../lib/exercise-drafts.ts';
 import { sessionProgress } from '../lib/session-progress.ts';
 import { findStartupWeek } from '../lib/startup-week.ts';
+const { appVersion } = JSON.parse(
+  readFileSync(new URL('../app-release.json', import.meta.url), 'utf8'),
+);
 import {
   acknowledgeOutbox,
   enqueueOutbox,
@@ -74,7 +77,7 @@ test('the refactored Today and Holiday loggers render on the server without brow
     assert.ok(rirInput.includes('placeholder:text-placeholder'));
     assert.ok(rirInput.includes('placeholder:font-normal'));
     assert.ok(html.includes('Save &amp; next'));
-    assert.ok(html.includes('3.13.0'));
+    assert.ok(html.includes(appVersion));
     assert.equal((html.match(/data-workout-set-row=""/g) ?? []).length, 3);
     assert.ok(html.includes('max-w-[21.5rem]'));
     assert.ok(!html.includes('max-w-60'));
@@ -89,7 +92,7 @@ test('the refactored Today and Holiday loggers render on the server without brow
     const Holiday = fixture.load('app/holiday-workout.tsx').default;
     const holiday = renderToString(
       createElement(Holiday, {
-        appVersion: '3.13.0',
+        appVersion,
         isOnline: true,
         onExit: () => {},
       }),

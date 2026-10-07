@@ -1,6 +1,6 @@
 # Bundled iOS prototype (not ready for personal workout logging)
 
-Branch: `codex/fast-start-capacitor`. Nothing in this work should be merged until the native storage decision and device acceptance tests below are complete.
+Developed on `codex/fast-start-capacitor` and included in the v3.13.1 web release with user approval. The cached-web startup improvement is ready to ship; the native foundation remains guarded and must not be distributed as a usable workout logger until the storage decision and device acceptance tests below are complete. See [rollback notes](rollback.md) for the preserved pre-release source and deployment.
 
 ## What is implemented
 
@@ -37,7 +37,7 @@ Select your development team and target iPhone in Xcode. Build/run there. Do not
 ## Automated checks and launch comparison
 
 ```sh
-node --test scripts/test-workout-reliability.mjs scripts/test-day-report-alerts.mjs
+node --test scripts/test-native-bundle.mjs scripts/test-workout-reliability.mjs scripts/test-day-report-alerts.mjs
 npx tsc --noEmit --incremental false
 npm run build
 npm run build:mobile
@@ -45,7 +45,7 @@ npm run build:mobile
 
 For an isolated browser comparison, build the mobile client, run `node scripts/launch-fixture-server.mjs`, then launch an isolated headless Chrome with `--remote-debugging-port=9343 --user-data-dir=<temporary-directory>` and run `node scripts/test-launch-browser.mjs`.
 
-This uses synthetic records, real API handlers in an in-memory database, and the same compiled UI for original/updated shell strategies. No production records or private credentials are used. The baseline worker is read from `origin/main`; freeze that ref when reproducing the comparison after main changes.
+This uses synthetic records, real API handlers in an in-memory database, and the same compiled UI for original/updated shell strategies. No production records or private credentials are used. The baseline worker is read from the pinned pre-release commit, so later changes to `main` cannot silently replace the original strategy.
 
 The test closes/reopens five documents per variant, checks restored drafts and mobile overflow, tests both PWAs with networking disabled, and reloads the bundled client with APIs blocked. The “bundle” case serves local compiled assets over loopback: it does **not** measure WKWebView creation, iOS process startup, signing, or force-quitting a real device.
 
@@ -59,7 +59,7 @@ Measured on this Mac with Chrome, 7 October 2026 (five repeat document launches,
 
 This isolates the removed network wait, not a universal speed promise. The original worker uses the same compiled UI in this comparison; it is not a measurement of the live production site's full server/auth/CDN behaviour. Both production web and mobile client builds, TypeScript, Capacitor sync, and 35 automated checks passed. Native compilation and signing were not attempted without full Xcode. `npm audit --omit=dev` reported 21 advisories in the pre-existing web dependency tree and none named for the added Capacitor runtime packages; broad dependency upgrades are outside this branch's scope.
 
-## Required iPhone acceptance checks before merge
+## Required iPhone acceptance checks before native distribution
 
 - Launch offline on a fresh install, and repeat after importing existing records.
 - Log/undo/edit a workout; force-quit and reopen; verify all saved sets, notes, RIR, session edits and unfinished drafts.

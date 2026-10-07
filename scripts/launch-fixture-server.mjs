@@ -11,7 +11,8 @@ const fixture = routeFixture();
 const workouts = fixture.load('app/api/workouts/route.ts');
 const originalWorker = execFileSync(
   'git',
-  ['show', 'origin/main:public/sw.js'],
+  // Pin the original strategy: main may already include the optimization.
+  ['show', '687f87e61d736c51b21dbafea00f44c65c5ee596:public/sw.js'],
   { cwd: root, encoding: 'utf8' },
 );
 const updatedWorker = readFileSync(resolve(root, 'public/sw.js'), 'utf8');
