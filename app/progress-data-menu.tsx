@@ -6,6 +6,7 @@ import {
   Download,
   FileSpreadsheet,
   Upload,
+  Timer,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -29,6 +30,7 @@ export type ProgressDataMenuProps = {
   syncGoogleSheet: () => void;
   downloadBackup: () => void;
   onRestoreBackup: () => void;
+  onStartupDetails?: () => void;
 };
 
 export default function ProgressDataMenu(props: ProgressDataMenuProps) {
@@ -92,6 +94,17 @@ export default function ProgressDataMenu(props: ProgressDataMenuProps) {
               <Upload /> Restore backup
             </DropdownMenuItem>
           </DropdownMenuGroup>
+          {props.onStartupDetails && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="min-h-11 px-3"
+                onClick={props.onStartupDetails}
+              >
+                <Timer /> Startup details
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
       <p role="status" className="text-sm text-muted-foreground">

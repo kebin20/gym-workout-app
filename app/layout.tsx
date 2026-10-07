@@ -74,6 +74,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
+        <meta name="liftline-build" content={appRelease.appVersion} />
         <link
           rel="preload"
           as="image"

@@ -43,6 +43,7 @@ import ProgressDataMenu from './progress-data-menu';
 const ProgressChart = lazy(() => import('./progress-chart'));
 const ExerciseProgressChart = lazy(() => import('./exercise-progress-chart'));
 const AdvancedInsights = lazy(() => import('./advanced-insights'));
+const StartupDetails = lazy(() => import('./startup-details'));
 const setNumbers = [1, 2, 3, 4, 5] as const;
 function entryVolume(entry: WorkoutEntry) {
   return setNumbers.reduce((sum, set) => {
@@ -234,6 +235,7 @@ export default function ProgressView({
   selectWeek,
   setView,
 }: Props) {
+  const [startupOpen, setStartupOpen] = useState(false);
   const [progressExerciseKey, setProgressExerciseKey] = useState('A|1');
   const progressExerciseOptions = useMemo(() => {
     const customByKey = new Map<string, RoutineExercise>();
@@ -296,6 +298,7 @@ export default function ProgressView({
           syncGoogleSheet={syncGoogleSheet}
           downloadBackup={downloadBackup}
           onRestoreBackup={onRestoreBackup}
+          onStartupDetails={() => setStartupOpen(true)}
         />
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -670,6 +673,11 @@ export default function ProgressView({
           </Carousel>
         </CardContent>
       </Card>
+      {startupOpen && (
+        <Suspense fallback={null}>
+          <StartupDetails onClose={() => setStartupOpen(false)} />
+        </Suspense>
+      )}
     </section>
   );
 }

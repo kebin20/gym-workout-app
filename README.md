@@ -10,7 +10,7 @@ Made with ChatGPT Codex
 
 The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgpt.site](https://liftline-strength-plan.ktanzyl.chatgpt.site). Access is restricted to the site owner.
 
-Current production version: **v3.13.1**
+Current production version: **v3.13.2**
 
 The experimental [bundled iOS foundation](docs/native-ios.md) is included in the repository, but is not ready for personal logging: native devices display a setup guard until the storage/connection choice and real-device tests are complete. The private web app keeps its existing storage and functionality, with faster cached startup. See the [release rollback notes](docs/rollback.md) for the pre-release backup.
 
@@ -46,6 +46,8 @@ The experimental [bundled iOS foundation](docs/native-ios.md) is included in the
 - Session-only exercise substitution, reordering, skipping, and custom exercise additions
 - Downloadable JSON backups with preview-first, non-destructive restore
 - Fast installed-app startup with a cached interface and immediate device-local display of the latest synced workouts
+- Verified Today JavaScript/CSS caching, retained prior offline interfaces during interrupted updates, and optional persistent device-cache retention
+- Device-only startup timing and cache/storage checks under Progress → Data → Startup details
 - In-app animated movement guides with exercise-specific form cues and alternate movement choices
 - A mobile-friendly nutrition guide with daily targets, meal templates, practical restaurant choices, and progress rules
 - A separate tropical-themed Holiday mode with alternating A/B bodyweight sessions, rep-or-time logging, optional travel-equipment loads, exercise history, animated movement guides, and completion recaps
@@ -58,6 +60,7 @@ Minor fixes, visual refinements, and deployment maintenance are grouped into the
 
 ### v3.13 — Calmer, clearer workout UI
 
+- In v3.13.2, verify the production Today dependency graph before replacing the offline interface, retain two prior shell/asset pairs, request optional persistent storage after logger readiness, and defer Progress/session-summary personal-record scans until shown. Add on-demand Startup details, interrupted-update regressions and production-web repeat-launch checks. No database, authentication, icon or Capacitor changes.
 - In v3.13.1, return the installed web app's cached interface immediately while refreshing in the background, without caching sign-in redirects or APIs. Include a guarded bundled Capacitor iOS foundation and isolated repeat-launch regression tools; native workout logging remains unavailable until storage and device validation are complete.
 - Compact the Today spotlight and mobile metric cards so logging is reached sooner, while keeping every overview value and the existing persistent Workout focus control.
 - Reduce secondary-card shadows and remove hover elevation from passive statistics; retain emphasis for the workout card, weekly progress and primary actions.
