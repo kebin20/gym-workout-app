@@ -12,6 +12,8 @@ The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgp
 
 Current production version: **v3.13.0**
 
+An experimental [bundled iOS branch](docs/native-ios.md) is in progress. It is not merged or ready for personal logging: the native storage/connection choice and real-device tests are still required. The existing private web app remains unchanged until this branch is published.
+
 ## Features
 
 - Two complete 12-week plans with Day A, B, and C workouts

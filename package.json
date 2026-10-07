@@ -14,10 +14,19 @@
     "format": "oxfmt",
     "db:generate": "drizzle-kit generate",
     "verify:brand": "node scripts/verify-brand-assets.mjs",
-    "test:workout": "node --test scripts/test-workout-reliability.mjs"
+    "test:workout": "node --test scripts/test-workout-reliability.mjs",
+    "test:mobile": "node --test scripts/test-native-bundle.mjs",
+    "build:mobile": "vite build --config vite.mobile.config.ts",
+    "preview:mobile": "vite preview --config vite.mobile.config.ts --host 127.0.0.1",
+    "ios:sync": "npm run build:mobile && cap sync ios",
+    "ios:open": "cap open ios"
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",
+    "@capacitor/app": "8.1.2",
+    "@capacitor/core": "8.5.2",
+    "@capacitor/ios": "8.5.2",
+    "@capacitor/splash-screen": "8.0.2",
     "@pdf-lib/fontkit": "^1.1.1",
     "@shadcn/react": "0.3.0",
     "class-variance-authority": "0.7.1",
@@ -40,6 +49,7 @@
     "vinext": "1.0.0-beta.5"
   },
   "devDependencies": {
+    "@capacitor/cli": "8.5.2",
     "@cloudflare/vite-plugin": "1.37.1",
     "@cloudflare/workers-types": "4.20260515.1",
     "@openai/sites-vite-plugin": "0.2.0",
