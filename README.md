@@ -10,7 +10,9 @@ Made with ChatGPT Codex
 
 The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgpt.site](https://liftline-strength-plan.ktanzyl.chatgpt.site). Access is restricted to the site owner.
 
-Current production version: **v3.13.0**
+Current production version: **v3.13.1**
+
+The experimental [bundled iOS foundation](docs/native-ios.md) is included in the repository, but is not ready for personal logging: native devices display a setup guard until the storage/connection choice and real-device tests are complete. The private web app keeps its existing storage and functionality, with faster cached startup. See the [release rollback notes](docs/rollback.md) for the pre-release backup.
 
 ## Features
 
@@ -56,6 +58,7 @@ Minor fixes, visual refinements, and deployment maintenance are grouped into the
 
 ### v3.13 — Calmer, clearer workout UI
 
+- In v3.13.1, return the installed web app's cached interface immediately while refreshing in the background, without caching sign-in redirects or APIs. Include a guarded bundled Capacitor iOS foundation and isolated repeat-launch regression tools; native workout logging remains unavailable until storage and device validation are complete.
 - Compact the Today spotlight and mobile metric cards so logging is reached sooner, while keeping every overview value and the existing persistent Workout focus control.
 - Reduce secondary-card shadows and remove hover elevation from passive statistics; retain emphasis for the workout card, weekly progress and primary actions.
 - Label the programme dropdown “Menu” so Nutrition, schedule and guide are easier to discover; phase selection remains inside.

@@ -28,6 +28,9 @@ import {
 } from '../lib/exercise-drafts.ts';
 import { sessionProgress } from '../lib/session-progress.ts';
 import { findStartupWeek } from '../lib/startup-week.ts';
+const { appVersion } = JSON.parse(
+  readFileSync(new URL('../app-release.json', import.meta.url), 'utf8'),
+);
 import {
   acknowledgeOutbox,
   enqueueOutbox,
@@ -74,7 +77,7 @@ test('the refactored Today and Holiday loggers render on the server without brow
     assert.ok(rirInput.includes('placeholder:text-placeholder'));
     assert.ok(rirInput.includes('placeholder:font-normal'));
     assert.ok(html.includes('Save &amp; next'));
-    assert.ok(html.includes('3.13.0'));
+    assert.ok(html.includes(appVersion));
     assert.equal((html.match(/data-workout-set-row=""/g) ?? []).length, 3);
     assert.ok(html.includes('max-w-[21.5rem]'));
     assert.ok(!html.includes('max-w-60'));
@@ -89,7 +92,7 @@ test('the refactored Today and Holiday loggers render on the server without brow
     const Holiday = fixture.load('app/holiday-workout.tsx').default;
     const holiday = renderToString(
       createElement(Holiday, {
-        appVersion: '3.13.0',
+        appVersion,
         isOnline: true,
         onExit: () => {},
       }),
@@ -940,21 +943,21 @@ function workerFixture({
 }
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 
-test('slow installed startup returns cached UI after the bound and refreshes it in the background', async () => {
+test('installed startup returns cached UI immediately while a slow refresh continues in the background', async () => {
   const fixture = workerFixture();
   await tick();
-  assert.equal(fixture.timers.length, 1);
-  fixture.timers[0]();
+  assert.equal(fixture.timers.length, 0);
   assert.equal((await fixture.response).label, 'cached');
   fixture.finishFetch(fixture.networkResponse('fresh'));
   await Promise.all(fixture.waits);
   assert.equal(fixture.writes[0][0], '/');
 });
 
-test('fast auth redirects are returned but never cached, and platform sign-in/API routes bypass the shell', async () => {
+test('background auth redirects never replace the cached shell, and sign-in/API routes bypass it', async () => {
   const fixture = workerFixture();
   fixture.finishFetch(fixture.networkResponse('signin', { redirected: true }));
-  assert.equal((await fixture.response).label, 'signin');
+  assert.equal((await fixture.response).label, 'cached');
+  await Promise.all(fixture.waits);
   assert.equal(fixture.writes.length, 0);
   assert.equal(
     workerFixture({ url: '/signin-with-chatgpt?return_to=%2F' }).response,
@@ -964,6 +967,20 @@ test('fast auth redirects are returned but never cached, and platform sign-in/AP
     workerFixture({ url: '/api/workouts', mode: 'cors' }).response,
     undefined,
   );
+});
+
+test('uncached and explicitly refreshed launches return auth redirects without caching them', async () => {
+  for (const options of [
+    { cached: false },
+    { url: '/?source=pwa&v=current' },
+  ]) {
+    const fixture = workerFixture(options);
+    fixture.finishFetch(
+      fixture.networkResponse('signin', { redirected: true }),
+    );
+    assert.equal((await fixture.response).label, 'signin');
+    assert.equal(fixture.writes.length, 0);
+  }
 });
 
 test('first install and explicit version URLs await fresh content rather than racing a nonexistent or stale shell', async () => {

@@ -1,4 +1,4 @@
-const cacheVersion = 'liftline-3.13.0-1';
+const cacheVersion = 'liftline-3.13.1-1';
 const shellCache = `${cacheVersion}-shell`;
 const assetCache = `${cacheVersion}-assets`;
 
@@ -133,25 +133,6 @@ self.addEventListener('fetch', (event) => {
           }
         })();
 
-        if (
-          !preferFresh &&
-          cached &&
-          url.searchParams.get('source') === 'pwa'
-        ) {
-          // Give fast connections a chance to validate the private Site, but
-          // don't hold an installed launch behind a slow network indefinitely.
-          event.waitUntil(refresh);
-          let timer;
-          const response = await Promise.race([
-            refresh,
-            new Promise((resolve) => {
-              timer = setTimeout(() => resolve(null), 1000);
-            }),
-          ]);
-          clearTimeout(timer);
-          return response ?? cached;
-        }
-
         if (preferFresh) {
           const response = await refresh;
           if (response) return response;
@@ -160,6 +141,10 @@ self.addEventListener('fetch', (event) => {
         }
 
         if (cached) {
+          // The installed app already has a device-local shell. Paint it
+          // immediately instead of waiting for network validation (up to 1s).
+          // API requests and sign-in routes still go through the private gate;
+          // redirected sign-in HTML is never allowed to replace this shell.
           event.waitUntil(refresh);
           return cached;
         }
