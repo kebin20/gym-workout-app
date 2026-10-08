@@ -7,7 +7,7 @@ import ts from 'typescript';
 
 const root = path.resolve(new URL('..', import.meta.url).pathname);
 const require = createRequire(import.meta.url);
-export function routeFixture() {
+export function routeFixture({ sheetEntries = [] } = {}) {
   const sqlite = new DatabaseSync(':memory:');
   for (const file of readdirSync(path.join(root, 'drizzle'))
     .filter((file) => file.endsWith('.sql'))
@@ -79,6 +79,11 @@ export function routeFixture() {
         return { env: { DB: db }, waitUntil: (promise) => waits.push(promise) };
       if (name.includes('google-sheet-sync'))
         return {
+          readWorkoutEntriesFromSheet: async () => ({
+            ok: true,
+            configured: true,
+            entries: sheetEntries,
+          }),
           syncWorkoutEntries: async () => ({
             ok: true,
             configured: true,

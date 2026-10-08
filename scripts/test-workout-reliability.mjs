@@ -71,9 +71,11 @@ test('the refactored Today and Holiday loggers render on the server without brow
     const html = renderToString(createElement(WorkoutApp));
     assert.ok(!html.includes('Weight adjustment increment'));
     assert.ok(!html.includes('Weight steps'));
-    const rirInput = html.match(/<input\b[^>]*\bid="rir"[^>]*>/)?.[0];
+    const rirInput = html.match(/<input\b[^>]*\bid="set-1-rir"[^>]*>/)?.[0];
     assert.ok(rirInput);
-    assert.ok(rirInput.includes('placeholder="2"'));
+    assert.ok(rirInput.includes('placeholder="–"'));
+    assert.equal((html.match(/id="set-\d-rir"/g) ?? []).length, 3);
+    assert.ok(!html.includes('id="rir"'));
     assert.ok(rirInput.includes('placeholder:text-placeholder'));
     assert.ok(rirInput.includes('placeholder:font-normal'));
     assert.ok(html.includes('Save &amp; next'));

@@ -123,11 +123,13 @@ function HistoryWeekDisclosure({
                 {set.weight == null
                   ? `${set.reps} ${displayName === 'Plank' ? 'sec' : 'reps'}`
                   : `${set.weight} kg × ${set.reps}`}
+                {entry[`set${set.set}Rir`] != null &&
+                  ` · RIR ${entry[`set${set.set}Rir`]}`}
               </span>
             ))}
             {entry.rir != null && (
               <span className="rounded-lg border border-primary/20 bg-accent px-2 py-1 font-sans text-xs font-medium text-primary">
-                RIR {entry.rir}
+                Exercise RIR {entry.rir}
               </span>
             )}
           </div>

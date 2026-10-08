@@ -327,7 +327,7 @@ export async function createDayReportPdf(
       ensure(66);
       text(`${entry.exerciseOrder}. ${entry.exercise}`, 12, blue);
       text(
-        `Target: ${entry.target || 'Not recorded'} | ${entry.completed ? 'Logged' : 'Partial save'}${entry.offlinePending ? ' | Awaiting sync' : ''}${entry.rir === null ? '' : ` | RIR ${entry.rir}`}`,
+        `Target: ${entry.target || 'Not recorded'} | ${entry.completed ? 'Logged' : 'Partial save'}${entry.offlinePending ? ' | Awaiting sync' : ''}${entry.rir == null ? '' : ` | Exercise RIR ${entry.rir}`}`,
         9,
         muted,
       );
@@ -337,7 +337,7 @@ export async function createDayReportPdf(
           ? sets
               .map(
                 (set) =>
-                  `Set ${set.set}: ${set.weight === null ? '' : fmt(set.weight) + ' kg x '}${set.reps === null ? 'not recorded' : fmt(set.reps)} ${isTimedEntry(entry) ? 'sec' : 'reps'}`,
+                  `Set ${set.set}: ${set.weight === null ? '' : fmt(set.weight) + ' kg x '}${set.reps === null ? 'not recorded' : fmt(set.reps)} ${isTimedEntry(entry) ? 'sec' : 'reps'}${set.rir === null ? '' : ` · RIR ${set.rir}`}`,
               )
               .join('  |  ')
           : 'No set values recorded.',

@@ -112,14 +112,18 @@ import {
   singleFlight,
   type OutboxItem,
 } from '@/lib/workout-outbox';
-import type { SessionExercise, WorkoutEntry } from '@/lib/workout-types';
+import type {
+  SessionExercise,
+  WorkoutEntry,
+  SetRirValues,
+} from '@/lib/workout-types';
 import type { ProgramSchedule } from './training-tools-dialog';
 
 type View = 'today' | 'plan' | 'progress' | 'nutrition' | 'guide';
 type TrainingTool = 'schedule' | 'readiness' | 'calculator' | 'metrics';
 
 type Draft = {
-  sets: { weight: string; reps: string; done: boolean }[];
+  sets: { weight: string; reps: string; done: boolean; rir: string }[];
   rir: string;
   notes: string;
 };
@@ -132,7 +136,7 @@ type SheetSyncResult = {
   syncedAt?: string | null;
 };
 
-type WorkoutPayload = {
+type WorkoutPayload = SetRirValues & {
   week: number;
   day: TrainingDay;
   exerciseOrder: number;
@@ -190,6 +194,7 @@ const emptyDraft: Draft = {
   sets: Array.from({ length: 5 }, () => ({
     weight: '',
     reps: '',
+    rir: '',
     done: false,
   })),
   rir: '',
@@ -375,6 +380,11 @@ function optimisticEntry(
     set5Reps: payload.set5Reps,
     setCount: payload.setCount,
     rir: payload.rir,
+    set1Rir: payload.set1Rir,
+    set2Rir: payload.set2Rir,
+    set3Rir: payload.set3Rir,
+    set4Rir: payload.set4Rir,
+    set5Rir: payload.set5Rir,
     notes: payload.notes,
     completed: payload.completed,
     completedAt: payload.completedAt,
@@ -597,6 +607,7 @@ function draftFromEntry(entry?: WorkoutEntry): Draft {
       return {
         weight: weight == null ? '' : String(weight),
         reps: reps == null ? '' : String(reps),
+        rir: entry[`set${set}Rir`] == null ? '' : String(entry[`set${set}Rir`]),
         done: reps != null,
       };
     }),
@@ -615,7 +626,15 @@ function progressionAdvice(
     .map((set) => numberOrNull(set.reps));
   if (reps.some((value) => value == null))
     return 'Complete the working sets for guidance';
-  const rir = numberOrNull(draft.rir);
+  const efforts = draft.sets
+    .slice(0, activeSets)
+    .map((set) => numberOrNull(set.rir));
+  const hasPerSetEffort = efforts.some((effort) => effort !== null);
+  if (hasPerSetEffort && efforts.some((effort) => effort === null))
+    return 'Log RIR for each working set for guidance';
+  const rir = hasPerSetEffort
+    ? Math.max(...(efforts as number[]))
+    : numberOrNull(draft.rir);
   if (rir == null) return 'Log RIR for progression guidance';
   const numbers = exercise.repRange.match(/\d+/g)?.map(Number) ?? [];
   const top = numbers[1] ?? numbers[0] ?? 0;
@@ -1571,6 +1590,7 @@ export function WorkoutApp() {
       values: draft.sets.map((set) => set.reps),
       setCount: visibleSetCount,
       rir: draft.rir,
+      setRirs: draft.sets.map((set) => set.rir),
     });
     const readyToSave = inputError === null;
     if (!readyToSave) {
@@ -1599,6 +1619,11 @@ export function WorkoutApp() {
       set5Reps: numberOrNull(draft.sets[4].reps),
       setCount: visibleSetCount,
       rir: numberOrNull(draft.rir),
+      set1Rir: visibleSetCount >= 1 ? numberOrNull(draft.sets[0].rir) : null,
+      set2Rir: visibleSetCount >= 2 ? numberOrNull(draft.sets[1].rir) : null,
+      set3Rir: visibleSetCount >= 3 ? numberOrNull(draft.sets[2].rir) : null,
+      set4Rir: visibleSetCount >= 4 ? numberOrNull(draft.sets[3].rir) : null,
+      set5Rir: visibleSetCount >= 5 ? numberOrNull(draft.sets[4].rir) : null,
       notes: draft.notes,
       completed: true,
       completedAt: existingEntry?.completedAt ?? now,
@@ -2737,12 +2762,13 @@ export function WorkoutApp() {
                     values: draft.sets.map((set) => set.reps),
                     setCount: visibleSetCount,
                     rir: draft.rir,
+                    setRirs: draft.sets.map((set) => set.rir),
                   });
                   const readyToSave = inputError === null;
 
                   function updateSet(
                     index: number,
-                    key: 'weight' | 'reps',
+                    key: 'weight' | 'reps' | 'rir',
                     value: string,
                   ) {
                     setDraft((current) => ({
@@ -2777,7 +2803,7 @@ export function WorkoutApp() {
                       ...current,
                       sets: current.sets.map((set, index) =>
                         index === removedIndex
-                          ? { weight: '', reps: '', done: false }
+                          ? { weight: '', reps: '', rir: '', done: false }
                           : set,
                       ),
                     }));
@@ -2791,6 +2817,7 @@ export function WorkoutApp() {
                       values: [set.reps],
                       setCount: 1,
                       rir: null,
+                      setRirs: [set.rir],
                     });
                     if (!set.done && invalidSet) {
                       setError(invalidSet);
@@ -2813,7 +2840,11 @@ export function WorkoutApp() {
                     const previousDraft = draftFromEntry(previousEntry);
                     setDraft({
                       ...previousDraft,
-                      sets: recallSets(previousDraft.sets),
+                      sets: recallSets(previousDraft.sets).map((set) => ({
+                        ...set,
+                        rir: '',
+                      })),
+                      rir: '',
                       notes: '',
                     });
                     setVisibleSetCount(
@@ -2917,13 +2948,17 @@ export function WorkoutApp() {
                                       {set.weight == null
                                         ? `${set.reps} ${exercise.name === 'Plank' ? 'sec' : 'reps'}`
                                         : `${set.weight} kg × ${set.reps}`}
+                                      {previousEntry[
+                                        `set${set.set as 1 | 2 | 3 | 4 | 5}Rir`
+                                      ] != null &&
+                                        ` · RIR ${previousEntry[`set${set.set as 1 | 2 | 3 | 4 | 5}Rir`]}`}
                                     </span>
                                   ))}
                                 </div>
                                 <div className="mt-2 flex flex-wrap items-center gap-2">
                                   {previousEntry.rir != null && (
                                     <span className="rounded-lg bg-success-soft px-2.5 py-1.5 font-sans text-xs font-medium text-success">
-                                      RIR {previousEntry.rir}
+                                      Exercise RIR {previousEntry.rir}
                                     </span>
                                   )}
                                   <Button
@@ -3001,7 +3036,7 @@ export function WorkoutApp() {
                             <>
                               <div className="hidden grid-cols-[42px_minmax(0,1fr)_64px] items-center gap-2 border-b py-2 font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground md:grid">
                                 <span className="text-center">Set</span>
-                                <div className="grid grid-cols-2 gap-3">
+                                <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_3.5rem] gap-3">
                                   <span className="text-center">
                                     Weight (kg)
                                   </span>
@@ -3010,6 +3045,7 @@ export function WorkoutApp() {
                                       ? 'Seconds'
                                       : 'Reps'}
                                   </span>
+                                  <span className="text-center">RIR</span>
                                 </div>
                                 <span className="text-center">
                                   <span className="sr-only sm:not-sr-only">
@@ -3032,7 +3068,7 @@ export function WorkoutApp() {
                                       data-workout-set-row=""
                                       className="mx-auto grid w-full max-w-[21.5rem] grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center gap-x-2 border-b border-border/70 py-3 last:border-0 min-[32rem]:max-w-none md:grid-cols-[42px_minmax(0,1fr)_64px] md:gap-2"
                                     >
-                                      <div className="flex items-center justify-center self-center pt-5 min-[32rem]:h-11 min-[32rem]:self-end min-[32rem]:pt-0 md:self-center">
+                                      <div className="flex items-center justify-center self-center">
                                         <span className="relative grid size-11 place-items-center rounded-full bg-secondary font-sans text-sm font-bold md:size-8">
                                           {index + 1}
                                           {setLabel && (
@@ -3043,7 +3079,7 @@ export function WorkoutApp() {
                                         </span>
                                       </div>
                                       <div className="col-start-2 min-w-0">
-                                        <div className="grid gap-3 min-[32rem]:grid-cols-2">
+                                        <div className="grid items-center gap-3 min-[32rem]:grid-cols-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_3.5rem]">
                                           <div className="w-full min-w-0">
                                             <span className="mb-1 block font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground md:hidden">
                                               Weight (kg)
@@ -3144,9 +3180,42 @@ export function WorkoutApp() {
                                               </Button>
                                             </div>
                                           </div>
+                                          <div className="flex items-center justify-center gap-2 min-[32rem]:col-span-2 md:col-span-1">
+                                            <label
+                                              htmlFor={`set-${index + 1}-rir`}
+                                              className="font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground md:sr-only"
+                                            >
+                                              RIR{' '}
+                                              <span className="sr-only">
+                                                for set {index + 1} (optional)
+                                              </span>
+                                            </label>
+                                            <Input
+                                              id={`set-${index + 1}-rir`}
+                                              aria-label={`Set ${index + 1} reps in reserve (optional)`}
+                                              type="number"
+                                              inputMode="numeric"
+                                              min="0"
+                                              max="10"
+                                              step="1"
+                                              value={set.rir}
+                                              placeholder="–"
+                                              onFocus={(event) =>
+                                                event.currentTarget.select()
+                                              }
+                                              onChange={(event) =>
+                                                updateSet(
+                                                  index,
+                                                  'rir',
+                                                  event.target.value,
+                                                )
+                                              }
+                                              className="h-11 w-14 min-w-0 bg-background text-center font-sans text-base font-semibold text-foreground tabular-nums placeholder:font-normal placeholder:text-placeholder"
+                                            />
+                                          </div>
                                         </div>
                                       </div>
-                                      <div className="col-start-3 flex h-full items-center justify-center pt-5 min-[32rem]:h-11 min-[32rem]:self-end min-[32rem]:pt-0 md:self-center">
+                                      <div className="col-start-3 flex h-full items-center justify-center self-center">
                                         <button
                                           type="button"
                                           onClick={() =>
@@ -3193,39 +3262,20 @@ export function WorkoutApp() {
                                 </div>
                               </div>
 
-                              <div className="mt-4 grid grid-cols-[1fr_112px] items-end gap-3">
-                                <div>
-                                  <label
-                                    htmlFor="rir"
-                                    className="mb-1.5 block font-sans text-sm font-medium"
-                                  >
-                                    Reps in reserve (RIR)
-                                  </label>
-                                  <p className="font-sans text-sm text-muted-foreground">
-                                    {activeWeek <= 2
-                                      ? 'Aim for about 3 during ramp-in.'
-                                      : 'Aim for 1–2 with clean form.'}
+                              <div className="mt-3 font-sans text-sm text-muted-foreground">
+                                <p>
+                                  RIR is optional per set: 0 means no reps left;
+                                  10 means 10 or more.{' '}
+                                  {activeWeek <= 2
+                                    ? 'Aim for about 3 during ramp-in.'
+                                    : 'Aim for 1–2 with clean form.'}
+                                </p>
+                                {draft.rir !== '' && (
+                                  <p className="mt-1">
+                                    Previously recorded exercise RIR:{' '}
+                                    {draft.rir}.
                                   </p>
-                                </div>
-                                <Input
-                                  id="rir"
-                                  type="number"
-                                  inputMode="numeric"
-                                  value={draft.rir}
-                                  placeholder="2"
-                                  min="0"
-                                  max="5"
-                                  onFocus={(event) =>
-                                    event.currentTarget.select()
-                                  }
-                                  onChange={(event) =>
-                                    setDraft((current) => ({
-                                      ...current,
-                                      rir: event.target.value,
-                                    }))
-                                  }
-                                  className="h-11 bg-background text-center font-sans text-lg font-semibold text-foreground placeholder:font-normal placeholder:text-placeholder"
-                                />
+                                )}
                               </div>
 
                               <div className="mt-4 flex items-center justify-between rounded-xl bg-secondary/70 p-3">

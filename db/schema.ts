@@ -28,6 +28,11 @@ export const workoutEntries = sqliteTable(
     set5Reps: real('set5_reps'),
     setCount: integer('set_count'),
     rir: integer('rir'),
+    set1Rir: integer('set1_rir'),
+    set2Rir: integer('set2_rir'),
+    set3Rir: integer('set3_rir'),
+    set4Rir: integer('set4_rir'),
+    set5Rir: integer('set5_rir'),
     notes: text('notes'),
     completed: integer('completed', { mode: 'boolean' })
       .notNull()

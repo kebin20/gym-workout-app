@@ -14,9 +14,10 @@ import {
   workoutSelectColumns,
   type SessionExercise,
   type WorkoutEntry,
+  type SetRirValues,
 } from '@/lib/workout-types';
 
-type WorkoutPayload = {
+type WorkoutPayload = SetRirValues & {
   week: number;
   day: TrainingDay;
   exerciseOrder: number;
@@ -237,6 +238,13 @@ export async function POST(request: Request) {
       ],
       setCount,
       rir: body.rir,
+      setRirs: [
+        body.set1Rir,
+        body.set2Rir,
+        body.set3Rir,
+        body.set4Rir,
+        body.set5Rir,
+      ],
       completed: Boolean(body.completed),
     });
     if (invalid) return Response.json({ error: invalid }, { status: 400 });
@@ -253,8 +261,9 @@ export async function POST(request: Request) {
       .prepare(`INSERT INTO workout_entries (
       week, day, exercise_order, exercise, target, set1_weight, set1_reps, set2_weight,
       set2_reps, set3_weight, set3_reps, set4_weight, set4_reps, set5_weight, set5_reps,
-      set_count, rir, notes, completed, completed_at, sync_status, sheet_synced_at, sync_error, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?)
+      set_count, rir, notes, completed, completed_at, sync_status, sheet_synced_at, sync_error, updated_at,
+      set1_rir, set2_rir, set3_rir, set4_rir, set5_rir
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(week, day, exercise_order) DO UPDATE SET
       exercise = excluded.exercise, target = excluded.target,
       set1_weight = excluded.set1_weight, set1_reps = excluded.set1_reps,
@@ -266,6 +275,11 @@ export async function POST(request: Request) {
       rir = excluded.rir, notes = excluded.notes, completed = excluded.completed,
       completed_at = excluded.completed_at, sync_status = excluded.sync_status,
       sheet_synced_at = NULL, sync_error = NULL, updated_at = excluded.updated_at
+      ,set1_rir = CASE WHEN ? THEN excluded.set1_rir ELSE workout_entries.set1_rir END
+      ,set2_rir = CASE WHEN ? THEN excluded.set2_rir ELSE workout_entries.set2_rir END
+      ,set3_rir = CASE WHEN ? THEN excluded.set3_rir ELSE workout_entries.set3_rir END
+      ,set4_rir = CASE WHEN ? THEN excluded.set4_rir ELSE workout_entries.set4_rir END
+      ,set5_rir = CASE WHEN ? THEN excluded.set5_rir ELSE workout_entries.set5_rir END
     WHERE excluded.updated_at > workout_entries.updated_at
       AND (? IS NULL OR workout_entries.updated_at = ?)`)
       .bind(
@@ -291,6 +305,16 @@ export async function POST(request: Request) {
         completedAt,
         syncStatus,
         updatedAt,
+        nullableNumber(body.set1Rir),
+        nullableNumber(body.set2Rir),
+        nullableNumber(body.set3Rir),
+        nullableNumber(body.set4Rir),
+        nullableNumber(body.set5Rir),
+        Object.hasOwn(body, 'set1Rir') ? 1 : 0,
+        Object.hasOwn(body, 'set2Rir') ? 1 : 0,
+        Object.hasOwn(body, 'set3Rir') ? 1 : 0,
+        Object.hasOwn(body, 'set4Rir') ? 1 : 0,
+        Object.hasOwn(body, 'set5Rir') ? 1 : 0,
         body.expectedUpdatedAt ?? null,
         body.expectedUpdatedAt ?? null,
       )

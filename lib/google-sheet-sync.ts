@@ -1,8 +1,9 @@
 import { env } from 'cloudflare:workers';
 
 import type { HolidayWorkoutEntry } from '@/lib/holiday-workout-types';
+import type { SetRirValues } from '@/lib/workout-types';
 
-export type WorkoutSheetEntry = {
+export type WorkoutSheetEntry = SetRirValues & {
   week: number;
   day: string;
   exerciseOrder: number;

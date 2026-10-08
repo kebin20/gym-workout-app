@@ -118,6 +118,8 @@ test('the actual PDF generator produces valid multipage documents including long
     const records = Array.from({ length: 24 }, (_, index) =>
       sample({
         week: index + 1,
+        set1Rir: 0,
+        set2Rir: 2,
         notes: 'Form cue and machine settings. '.repeat(20),
       }),
     );

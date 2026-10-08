@@ -10,7 +10,7 @@ Made with ChatGPT Codex
 
 The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgpt.site](https://liftline-strength-plan.ktanzyl.chatgpt.site). Access is restricted to the site owner.
 
-Current production version: **v3.13.4**
+Current production version: **v3.14.0**
 
 The experimental [bundled iOS foundation](docs/native-ios.md) is included in the repository, but is not ready for personal logging: native devices display a setup guard until the storage/connection choice and real-device tests are complete. The private web app keeps its existing storage and functionality, with faster cached startup. See the [release rollback notes](docs/rollback.md) for the pre-release backup.
 
@@ -22,6 +22,7 @@ The experimental [bundled iOS foundation](docs/native-ios.md) is included in the
 - Phase-specific progress, workout history, guidance, and rotating training tips
 - Large mobile-friendly controls for entering weight, reps, and RIR
 - Per-exercise set controls supporting one to five saved sets
+- Optional per-set RIR (0–10) in the main workout logger, history, PDF reports and backups; older exercise-level RIR remains separately labeled
 - Exercise-aware rest timer with pause, resume, reset, and completion vibration where supported
 - Automatic rest-timer start when a set is marked complete, with optional background notifications
 - Switching exercises resets the previous rest timer; reopening the same exercise preserves an intentional rest

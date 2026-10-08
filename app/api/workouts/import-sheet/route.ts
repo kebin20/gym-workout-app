@@ -25,6 +25,14 @@ function nullableNumber(value: unknown) {
 }
 
 function normalizedEntry(entry: WorkoutSheetEntry): WorkoutSheetEntry | null {
+  for (const set of [1, 2, 3, 4, 5] as const) {
+    const effort = entry[`set${set}Rir`];
+    if (
+      effort != null &&
+      (!Number.isInteger(effort) || effort < 0 || effort > 10)
+    )
+      return null;
+  }
   const week = Number(entry.week);
   const day = String(entry.day).trim().toUpperCase() as TrainingDay;
   const exerciseOrder = Number(entry.exerciseOrder);
@@ -75,6 +83,14 @@ function workoutValuesMatch(left: WorkoutSheetEntry, right: WorkoutSheetEntry) {
     (left.set5Weight ?? null) === (right.set5Weight ?? null) &&
     (left.set5Reps ?? null) === (right.set5Reps ?? null) &&
     left.rir === right.rir &&
+    [1, 2, 3, 4, 5].every(
+      (set) =>
+        // Old connectors cannot represent per-set RIR. Do not interpret missing
+        // fields as a request to clear effort already recorded in Liftline.
+        left[`set${set}Rir` as keyof WorkoutSheetEntry] === undefined ||
+        (left[`set${set}Rir` as keyof WorkoutSheetEntry] ?? null) ===
+          (right[`set${set}Rir` as keyof WorkoutSheetEntry] ?? null),
+    ) &&
     String(left.notes ?? '') === String(right.notes ?? '') &&
     Boolean(left.completed) === Boolean(right.completed)
   );
@@ -204,8 +220,9 @@ export async function POST(request: Request) {
         env.DB.prepare(`INSERT INTO workout_entries (
         week, day, exercise_order, exercise, target, set1_weight, set1_reps, set2_weight,
         set2_reps, set3_weight, set3_reps, set4_weight, set4_reps, set5_weight, set5_reps,
-        set_count, rir, notes, completed, completed_at, sync_status, sheet_synced_at, sync_error, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 'synced', ?, NULL, ?)
+        set_count, rir, notes, completed, completed_at, sync_status, sheet_synced_at, sync_error, updated_at,
+        set1_rir, set2_rir, set3_rir, set4_rir, set5_rir
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 'synced', ?, NULL, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(week, day, exercise_order) DO UPDATE SET
         exercise = excluded.exercise, target = excluded.target,
         set1_weight = excluded.set1_weight, set1_reps = excluded.set1_reps,
@@ -217,7 +234,12 @@ export async function POST(request: Request) {
         rir = excluded.rir, notes = excluded.notes, completed = 1,
         completed_at = excluded.completed_at, sync_status = 'synced',
         sheet_synced_at = excluded.sheet_synced_at, sync_error = NULL,
-        updated_at = excluded.updated_at`).bind(
+        updated_at = excluded.updated_at,
+        set1_rir = CASE WHEN ? THEN excluded.set1_rir ELSE workout_entries.set1_rir END,
+        set2_rir = CASE WHEN ? THEN excluded.set2_rir ELSE workout_entries.set2_rir END,
+        set3_rir = CASE WHEN ? THEN excluded.set3_rir ELSE workout_entries.set3_rir END,
+        set4_rir = CASE WHEN ? THEN excluded.set4_rir ELSE workout_entries.set4_rir END,
+        set5_rir = CASE WHEN ? THEN excluded.set5_rir ELSE workout_entries.set5_rir END`).bind(
           source.week,
           source.day,
           source.exerciseOrder,
@@ -239,6 +261,16 @@ export async function POST(request: Request) {
           source.completedAt ?? null,
           now,
           now,
+          source.set1Rir ?? null,
+          source.set2Rir ?? null,
+          source.set3Rir ?? null,
+          source.set4Rir ?? null,
+          source.set5Rir ?? null,
+          source.set1Rir === undefined ? 0 : 1,
+          source.set2Rir === undefined ? 0 : 1,
+          source.set3Rir === undefined ? 0 : 1,
+          source.set4Rir === undefined ? 0 : 1,
+          source.set5Rir === undefined ? 0 : 1,
         ),
       );
     }
