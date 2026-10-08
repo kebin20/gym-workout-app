@@ -81,7 +81,9 @@ test('the refactored Today and Holiday loggers render on the server without brow
     assert.ok(html.includes('Save &amp; next'));
     assert.ok(html.includes(appVersion));
     assert.equal((html.match(/data-workout-set-row=""/g) ?? []).length, 3);
-    assert.ok(html.includes('max-w-[21.5rem]'));
+    assert.ok(html.includes('Mark done'));
+    assert.ok(html.includes('Adjust set 1'));
+    assert.ok(!html.includes('Decrease set 1 weight'));
     assert.ok(!html.includes('max-w-60'));
     const primaryNav = html.match(
       /<nav\b[^>]*aria-label="Primary navigation"[^>]*>[\s\S]*?<\/nav>/,
