@@ -17,7 +17,7 @@ import {
 } from '@/lib/rest-timer-state';
 import {
   prepareTimerSound,
-  playTimerSound,
+  playRestTimerSound,
   showRestNotification,
   shouldAlertForTimer,
 } from '@/lib/rest-timer-alerts';
@@ -74,34 +74,71 @@ async function updateWakeLock() {
   }
 }
 async function notifyComplete(state: TimerState) {
-  if (soundEnabled) playTimerSound();
+  const isCurrent = () =>
+    timerState?.id === state.id &&
+    timerState.endsAt === null &&
+    timerState.remaining === 0;
+  const requestedSound = soundEnabled;
+  const soundAttempt = requestedSound
+    ? playRestTimerSound(
+        800,
+        () => isCurrent() && shouldAlertForTimer(state.endsAt!, Date.now()),
+      )
+    : Promise.resolve(false);
   try {
     navigator.vibrate?.([160, 80, 160]);
   } catch {
     /* Not available on iOS. */
   }
-  if (!alertsEnabled) return;
-  if (!('Notification' in window) || Notification.permission !== 'granted') {
-    status(
-      'Notifications are blocked or unavailable. Use Alerts to check settings; the in-app sound still works while Liftline is open.',
-    );
-    return;
+  let notificationResult = 'Notifications are off.';
+  if (alertsEnabled) {
+    if (
+      !('Notification' in window) ||
+      Notification.permission !== 'granted' ||
+      !('serviceWorker' in navigator)
+    )
+      notificationResult =
+        'Notifications are blocked or unavailable. Check Alerts and device settings.';
+    else
+      try {
+        await showRestNotification(
+          () => navigator.serviceWorker.getRegistration(),
+          {
+            body: state.exerciseName + ': ready for your next set.',
+            icon: notificationIcon,
+            tag: state.id,
+            silent: !soundEnabled,
+            data: { url: '/' },
+          },
+          4000,
+          () =>
+            isCurrent() &&
+            alertsEnabled &&
+            Notification.permission === 'granted' &&
+            shouldAlertForTimer(state.endsAt!, Date.now()),
+        );
+        notificationResult =
+          'Notification request accepted by the device; banner and sound depend on device settings and Focus.';
+      } catch (error) {
+        notificationResult =
+          error instanceof Error
+            ? error.message
+            : 'The notification failed. Open Alerts and test again.';
+      }
   }
-  try {
-    await showRestNotification(navigator.serviceWorker.getRegistration(), {
-      body: state.exerciseName + ': ready for your next set.',
-      icon: notificationIcon,
-      tag: state.id,
-      silent: !soundEnabled,
-      data: { url: '/' },
-    });
-  } catch (error) {
-    status(
-      error instanceof Error
-        ? error.message
-        : 'The notification failed. Open Alerts and test again.',
-    );
-  }
+  const played = await soundAttempt;
+  if (!isCurrent()) return;
+  status(
+    [
+      'Rest complete.',
+      requestedSound
+        ? played
+          ? 'In-app sound started.'
+          : 'In-app sound was unavailable. Tap Start or Test alert to enable it.'
+        : 'In-app sound is off.',
+      notificationResult,
+    ].join(' '),
+  );
 }
 function tickEngine() {
   const state = timerState;
@@ -124,9 +161,7 @@ function updateEngine() {
   }
   void updateWakeLock();
 }
-function startEngine() {
-  if (engineStarted) return;
-  engineStarted = true;
+function refreshPreferences() {
   try {
     const enabled = localStorage.getItem('liftline.timer-alerts.v1');
     alertsEnabled =
@@ -136,28 +171,43 @@ function startEngine() {
         Notification.permission === 'granted');
     soundEnabled = localStorage.getItem('liftline.timer-sound.v1') !== 'off';
     keepAwake = localStorage.getItem('liftline.timer-awake.v1') !== 'off';
-    timerState = readTimerState(localStorage.getItem(storageKey));
   } catch {
     /* Storage disabled: retain session-only preferences. */
   }
+}
+function startEngine() {
+  if (engineStarted) return;
+  engineStarted = true;
+  refreshPreferences();
+  try {
+    timerState = readTimerState(localStorage.getItem(storageKey));
+  } catch {
+    /* Retain the in-memory timer if storage is blocked. */
+  }
   const reconcile = () => {
+    refreshPreferences();
     tickEngine();
     void updateWakeLock();
+    listeners.forEach((listener) => listener());
   };
   // One engine survives navigation away from Today, not one interval per mounted timer.
   document.addEventListener('visibilitychange', reconcile);
   window.addEventListener('pageshow', reconcile);
+  window.addEventListener('focus', reconcile);
   window.addEventListener('storage', (event) => {
     if (event.key === storageKey) {
       timerState = readTimerState(event.newValue);
       updateEngine();
       listeners.forEach((listener) => listener());
+    } else if (event.key?.startsWith('liftline.timer-')) {
+      reconcile();
     }
   });
   updateEngine();
   tickEngine();
 }
 function publish(state: TimerState | null) {
+  if (!state || state.id !== timerState?.id) alertStatus = '';
   timerState = state;
   try {
     if (state) localStorage.setItem(storageKey, JSON.stringify(state));
@@ -222,12 +272,16 @@ const RestTimer = forwardRef<
   useEffect(() => {
     notificationIcon = notificationIconHref;
     startEngine();
-    setSound(soundEnabled);
-    setAwake(keepAwake);
-    setSystemAlerts(alertsEnabled);
-    setNow(Date.now());
-    if ('Notification' in window && 'serviceWorker' in navigator)
-      setPermission(Notification.permission);
+    const refresh = () => {
+      setSound(soundEnabled);
+      setAwake(keepAwake);
+      setSystemAlerts(alertsEnabled);
+      setNow(Date.now());
+      if ('Notification' in window && 'serviceWorker' in navigator)
+        setPermission(Notification.permission);
+    };
+    refresh();
+    return subscribe(refresh);
   }, [notificationIconHref]);
 
   useEffect(() => {
@@ -326,7 +380,7 @@ const RestTimer = forwardRef<
       if (soundEnabled) {
         // resume() is async; wait one event turn before testing the oscillator.
         await new Promise((resolve) => setTimeout(resolve, 80));
-        played = playTimerSound();
+        played = await playRestTimerSound();
       }
       if (
         !('Notification' in window) ||
@@ -342,15 +396,23 @@ const RestTimer = forwardRef<
         );
         return;
       }
-      await showRestNotification(navigator.serviceWorker.getRegistration(), {
-        body: 'Test alert: ready for your next set.',
-        icon: notificationIconHref,
-        tag: 'liftline-rest-test',
-        silent: !soundEnabled,
-        data: { url: '/' },
-      });
+      await showRestNotification(
+        () => navigator.serviceWorker.getRegistration(),
+        {
+          body: 'Test alert: ready for your next set.',
+          icon: notificationIconHref,
+          tag: 'liftline-rest-test',
+          silent: !soundEnabled,
+          data: { url: '/' },
+        },
+      );
       status(
-        'Test notification sent. If it is silent, check Liftline notifications, sound settings and Focus. Apple controls whether alerts appear on iPhone or Watch.',
+        (played
+          ? 'In-app sound started. '
+          : soundEnabled
+            ? 'In-app sound was unavailable. '
+            : 'In-app sound is off. ') +
+          'Test notification request accepted by the device. Check notifications and Focus if no banner appears; Apple controls iPhone or Watch delivery.',
       );
     } catch (error) {
       status(

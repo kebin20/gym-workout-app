@@ -194,6 +194,11 @@ test('one actual timer engine survives view unmount, alerts in foreground once, 
     handles = [],
     events = new Map();
   const notifications = [];
+  const stateChanges = [];
+  const permission = { permission: 'granted' };
+  let soundPlays = true,
+    notificationFailure = false,
+    deliveryAttempts = 0;
   let timestamp = 100_000,
     sequence = 0,
     releases = 0;
@@ -226,7 +231,7 @@ test('one actual timer engine survives view unmount, alerts in foreground once, 
             useCallback: (callback) => callback,
             useEffect: (effect) => effects.push(effect),
             useImperativeHandle: (_, factory) => handles.push(factory()),
-            useState: (value) => [value, () => {}],
+            useState: (value) => [value, (next) => stateChanges.push(next)],
             useSyncExternalStore: (_, get) => get(),
           };
         if (name === '@/components/ui/button') return { Button: () => null };
@@ -241,9 +246,14 @@ test('one actual timer engine survives view unmount, alerts in foreground once, 
           return {
             prepareTimerSound: () => {},
             playTimerSound: () => true,
+            playRestTimerSound: async () => soundPlays,
             shouldAlertForTimer,
-            showRestNotification: async (_, options) =>
-              notifications.push(options),
+            showRestNotification: async (_, options) => {
+              deliveryAttempts++;
+              if (notificationFailure)
+                throw Error('Device rejected the notification');
+              notifications.push(options);
+            },
           };
         return require(name);
       },
@@ -253,7 +263,7 @@ test('one actual timer engine survives view unmount, alerts in foreground once, 
         }
       },
       crypto: { randomUUID: () => 'test-timer' },
-      Notification: { permission: 'granted' },
+      Notification: permission,
       window: {
         Notification: {},
         addEventListener: (type, fn) => events.set(type, fn),
@@ -371,6 +381,47 @@ test('one actual timer engine survives view unmount, alerts in foreground once, 
     next.cleanup.forEach((fn) => fn?.());
     assert.equal(storage.has('liftline.rest-timer.v2'), false);
     assert.equal(intervals.size, 0);
+    // Completion must report sound/delivery failure, not silently mark success.
+    soundPlays = false;
+    notificationFailure = true;
+    handles.at(-1).start();
+    timestamp += 1000;
+    [...intervals.values()].forEach((tick) => tick());
+    await new Promise((resolve) => setImmediate(resolve));
+    const text = (node) => {
+      if (Array.isArray(node)) return node.map(text).join(' ');
+      if (node && typeof node === 'object') return text(node.props?.children);
+      return typeof node === 'string' ? node : '';
+    };
+    const failed = render({ exerciseName: 'Row', contextKey: 'main:1:A:2' });
+    failed.cleanup.forEach((fn) => fn?.());
+    assert.match(text(failed.tree), /In-app sound was unavailable/);
+    assert.match(text(failed.tree), /notification failed/);
+    const attempts = deliveryAttempts;
+    events.get('focus')();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(
+      deliveryAttempts,
+      attempts,
+      'Completed timers never redispatch on focus',
+    );
+    storage.set('liftline.timer-alerts.v1', 'off');
+    events.get('storage')({ key: 'liftline.timer-alerts.v1', newValue: 'off' });
+    handles.at(-1).start();
+    timestamp += 1000;
+    [...intervals.values()].forEach((tick) => tick());
+    await new Promise((resolve) => setImmediate(resolve));
+    const off = render({ exerciseName: 'Row', contextKey: 'main:1:A:2' });
+    assert.match(text(off.tree), /Notifications are off/);
+    assert.equal(deliveryAttempts, attempts);
+    stateChanges.length = 0;
+    permission.permission = 'denied';
+    events.get('focus')();
+    assert.ok(
+      stateChanges.includes('denied'),
+      'Permission UI refreshes after returning from device settings',
+    );
+    off.cleanup.forEach((fn) => fn?.());
   } finally {
     fixture.close();
   }

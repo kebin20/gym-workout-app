@@ -66,6 +66,7 @@ export function routeFixture() {
     const module = { exports: {} };
     modules.set(file, module);
     const source = ts.transpileModule(readFileSync(file, 'utf8'), {
+      fileName: file,
       compilerOptions: {
         module: ts.ModuleKind.CommonJS,
         target: ts.ScriptTarget.ES2022,
