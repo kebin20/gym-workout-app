@@ -171,16 +171,34 @@ function publish(state: TimerState | null) {
 const formatTimer = (seconds: number) =>
   Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0');
 
+function matchesExercise(
+  state: TimerState,
+  contextKey: string,
+  exerciseName: string,
+) {
+  // Older saved timers used the exercise name alone.
+  return state.contextKey === undefined
+    ? state.exerciseName === exerciseName
+    : state.contextKey === contextKey;
+}
+
 const RestTimer = forwardRef<
   RestTimerHandle,
   {
     exerciseName: string;
+    contextKey?: string;
     restLabel: string;
     suggestedSeconds: number;
     notificationIconHref: string;
   }
 >(function RestTimer(
-  { exerciseName, restLabel, suggestedSeconds, notificationIconHref },
+  {
+    exerciseName,
+    contextKey = exerciseName,
+    restLabel,
+    suggestedSeconds,
+    notificationIconHref,
+  },
   ref,
 ) {
   const state = useSyncExternalStore(subscribe, snapshot, serverSnapshot);
@@ -195,9 +213,7 @@ const RestTimer = forwardRef<
   const [testing, setTesting] = useState(false);
   const [systemAlerts, setSystemAlerts] = useState(false);
   const active =
-    state && (state.endsAt !== null || state.exerciseName === exerciseName)
-      ? state
-      : null;
+    state && matchesExercise(state, contextKey, exerciseName) ? state : null;
   const seconds = active
     ? remainingSeconds(active, now || Date.now())
     : suggestedSeconds;
@@ -213,6 +229,14 @@ const RestTimer = forwardRef<
     if ('Notification' in window && 'serviceWorker' in navigator)
       setPermission(Notification.permission);
   }, [notificationIconHref]);
+
+  useEffect(() => {
+    // Navigation is not a rest-start action. Cancel the previous exercise's
+    // deadline and alerts, but preserve a timer when reopening the same one.
+    // No unmount cleanup: leaving Today must not cancel an intentional rest.
+    if (timerState && !matchesExercise(timerState, contextKey, exerciseName))
+      publish(null);
+  }, [contextKey, exerciseName]);
 
   useEffect(() => {
     if (!state?.endsAt) return;
@@ -237,12 +261,13 @@ const RestTimer = forwardRef<
     publish({
       id: crypto.randomUUID(),
       exerciseName,
+      contextKey,
       restLabel,
       endsAt: timestamp + suggestedSeconds * 1000,
       remaining: suggestedSeconds,
       updatedAt: timestamp,
     });
-  }, [exerciseName, restLabel, suggestedSeconds]);
+  }, [exerciseName, contextKey, restLabel, suggestedSeconds]);
   useImperativeHandle(ref, () => ({ start }), [start]);
   const toggle = () => {
     if (soundEnabled) prepareTimerSound();

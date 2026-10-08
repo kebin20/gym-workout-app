@@ -2870,6 +2870,7 @@ export function WorkoutApp() {
                           key={`${activeWeek}|${activeDay}|${exercise.order}|${suggestedRestSeconds}`}
                           ref={restTimerRef}
                           exerciseName={exercise.name}
+                          contextKey={`main:${activeWeek}:${activeDay}:${exercise.order}:${exercise.name}`}
                           restLabel={exercise.rest}
                           suggestedSeconds={suggestedRestSeconds}
                           notificationIconHref={notificationIconHref}

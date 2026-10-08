@@ -1,6 +1,7 @@
 export type TimerState = {
   id: string;
   exerciseName: string;
+  contextKey?: string;
   restLabel: string;
   endsAt: number | null;
   remaining: number;
@@ -19,6 +20,8 @@ export function readTimerState(
     return state &&
       typeof state.id === 'string' &&
       typeof state.exerciseName === 'string' &&
+      (state.contextKey === undefined ||
+        typeof state.contextKey === 'string') &&
       typeof state.restLabel === 'string' &&
       (state.endsAt === null || Number.isFinite(state.endsAt)) &&
       Number.isFinite(state.remaining) &&
