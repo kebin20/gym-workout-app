@@ -1065,6 +1065,7 @@ export default function HolidayWorkout({
               <CardContent className="p-4 sm:p-6">
                 <RestTimer
                   exerciseName={exercise.name}
+                  contextKey={`holiday:${sessionId}:${sessionType}:${exercise.order}:${exercise.name}`}
                   restLabel="60–90 sec"
                   suggestedSeconds={90}
                   notificationIconHref={notificationIconHref}

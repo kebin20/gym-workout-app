@@ -4,7 +4,13 @@ const maxDrafts = 32;
 const maxAge = 30 * 24 * 60 * 60 * 1000;
 
 export type ExerciseDraft = {
-  sets: { weight: string; reps?: string; value?: string; done?: boolean }[];
+  sets: {
+    weight: string;
+    reps?: string;
+    value?: string;
+    done?: boolean;
+    rir?: string;
+  }[];
   setCount: number;
   rir: string;
   notes: string;
@@ -29,7 +35,8 @@ function validDraft(value: unknown): value is ExerciseDraft {
         set &&
         typeof set.weight === 'string' &&
         (typeof set.reps === 'string' || typeof set.value === 'string') &&
-        (set.done === undefined || typeof set.done === 'boolean'),
+        (set.done === undefined || typeof set.done === 'boolean') &&
+        (set.rir === undefined || typeof set.rir === 'string'),
     )
   );
 }
@@ -100,19 +107,28 @@ export function readExerciseDraft<T extends ExerciseDraft>(
   const saved = (
     parseStored(storage.getItem(storageKey(key))) ?? legacyDrafts(storage)[key]
   )?.value;
+  // Older drafts have exercise-level RIR only. Add blank per-set fields without
+  // copying an aggregate effort estimate into individual sets or discarding input.
+  const compatible = saved && {
+    ...saved,
+    sets: saved.sets.map((set, index) => ({
+      ...(typeof fallback.sets[index].rir === 'string' ? { rir: '' } : {}),
+      ...set,
+    })),
+  };
   // Do not restore a main-plan record into a Holiday input, or vice versa.
   if (
-    !saved ||
+    !compatible ||
     !fallback.sets.every((set, index) =>
       Object.keys(set).every(
         (field) =>
-          typeof saved.sets[index][field as keyof typeof set] ===
+          typeof compatible.sets[index][field as keyof typeof set] ===
           typeof set[field as keyof typeof set],
       ),
     )
   )
     return null;
-  return saved as T;
+  return compatible as T;
 }
 
 export function writeExerciseDraft(

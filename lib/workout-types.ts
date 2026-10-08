@@ -2,7 +2,15 @@ import type { TrainingDay } from '@/lib/routine';
 
 export type SyncStatus = 'pending' | 'synced' | 'failed' | 'not_applicable';
 
-export type WorkoutEntry = {
+export type SetRirValues = {
+  set1Rir?: number | null;
+  set2Rir?: number | null;
+  set3Rir?: number | null;
+  set4Rir?: number | null;
+  set5Rir?: number | null;
+};
+
+export type WorkoutEntry = SetRirValues & {
   id?: number;
   week: number;
   day: TrainingDay;
@@ -54,7 +62,9 @@ export const workoutSelectColumns = `id, week, day, exercise_order AS exerciseOr
   set2_reps AS set2Reps, set3_weight AS set3Weight, set3_reps AS set3Reps,
   set4_weight AS set4Weight, set4_reps AS set4Reps, set5_weight AS set5Weight,
   set5_reps AS set5Reps, set_count AS setCount,
-  rir, notes, completed, completed_at AS completedAt, sync_status AS syncStatus,
+  rir, set1_rir AS set1Rir, set2_rir AS set2Rir, set3_rir AS set3Rir,
+  set4_rir AS set4Rir, set5_rir AS set5Rir,
+  notes, completed, completed_at AS completedAt, sync_status AS syncStatus,
   sheet_synced_at AS sheetSyncedAt, sync_error AS syncError, updated_at AS updatedAt, server_revision AS serverRevision`;
 
 export const sessionExerciseSelectColumns = `id, week, day, exercise_order AS exerciseOrder,

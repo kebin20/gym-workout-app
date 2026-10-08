@@ -2,10 +2,38 @@
 let audio: AudioContext | null = null;
 export function prepareTimerSound() {
   try {
-    if (!audio) audio = new AudioContext();
+    if (!audio || audio.state === 'closed') audio = new AudioContext();
     void audio.resume().catch(() => undefined);
   } catch {
     /* Sound is optional; notifications and the visible timer remain usable. */
+  }
+}
+
+// iOS may interrupt an existing audio context after switching apps. Resume it
+// best-effort, but never let audio readiness delay the system notification.
+export async function playRestTimerSound(
+  timeoutMs = 800,
+  isCurrent = () => true,
+) {
+  if (!audio) return false;
+  const deadline = Date.now() + timeoutMs;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    if (audio.state !== 'running')
+      await Promise.race([
+        audio.resume(),
+        new Promise<never>((_, reject) => {
+          timeout = setTimeout(
+            () => reject(Error('Sound unavailable')),
+            timeoutMs,
+          );
+        }),
+      ]);
+    return isCurrent() && Date.now() < deadline && playTimerSound();
+  } catch {
+    return false;
+  } finally {
+    if (timeout) clearTimeout(timeout);
   }
 }
 export function playTimerSound() {
@@ -35,35 +63,77 @@ export function playTimerSound() {
 }
 
 export async function showRestNotification(
-  registration: Promise<ServiceWorkerRegistration | undefined>,
+  registration:
+    | Promise<ServiceWorkerRegistration | undefined>
+    | (() => Promise<ServiceWorkerRegistration | undefined>),
   options: NotificationOptions,
   timeoutMs = 4000,
+  isCurrent = () => true,
 ) {
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  try {
-    await Promise.race([
-      registration.then(async (worker) => {
-        if (!worker?.active)
-          throw new Error(
-            'Alerts are not ready. Reload Liftline, then test again.',
-          );
-        await worker.showNotification('Liftline rest complete', options);
-      }),
-      new Promise<never>((_, reject) => {
-        timeout = setTimeout(
-          () =>
-            reject(
-              new Error(
-                'The alert could not be confirmed. Check notification settings, then test again.',
+  const deadline = Date.now() + timeoutMs;
+  const cancelled = () => {
+    if (!isCurrent()) throw new Error('The alert was cancelled.');
+  };
+  const withinDeadline = async <T>(promise: Promise<T>): Promise<T> => {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        promise,
+        new Promise<never>((_, reject) => {
+          timeout = setTimeout(
+            () =>
+              reject(
+                new Error(
+                  'The alert could not be confirmed. Check notification settings, then test again.',
+                ),
               ),
-            ),
-          timeoutMs,
+            Math.max(0, deadline - Date.now()),
+          );
+        }),
+      ]);
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
+  };
+  const getWorker =
+    typeof registration === 'function' ? registration : () => registration;
+  let rejectedAttempts = 0;
+  while (Date.now() < deadline) {
+    cancelled();
+    const worker = await withinDeadline(getWorker());
+    cancelled();
+    // Do not send after an unresolved readiness request exceeds its deadline.
+    if (Date.now() >= deadline) break;
+    if (worker?.active) {
+      try {
+        await withinDeadline(
+          worker.showNotification('Liftline rest complete', options),
         );
-      }),
-    ]);
-  } finally {
-    if (timeout) clearTimeout(timeout);
+        return;
+      } catch (error) {
+        // InvalidStateError means no active worker: the request was rejected,
+        // not delivered. Reacquire registration after an update, at most twice.
+        // Never retry permission errors or uncertain delivery timeouts.
+        if (
+          typeof registration !== 'function' ||
+          !error ||
+          typeof error !== 'object' ||
+          !('name' in error) ||
+          error.name !== 'InvalidStateError' ||
+          ++rejectedAttempts > 2
+        )
+          throw error;
+      }
+    } else if (typeof registration !== 'function') {
+      throw new Error(
+        'Alerts are not ready. Reload Liftline, then test again.',
+      );
+    }
+    await withinDeadline(
+      new Promise<void>((resolve) => setTimeout(resolve, 100)),
+    );
   }
+  throw new Error('Alerts are not ready. Reload Liftline, then test again.');
 }
 
 export const shouldAlertForTimer = (endsAt: number, now: number) =>

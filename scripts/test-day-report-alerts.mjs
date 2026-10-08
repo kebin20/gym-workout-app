@@ -118,6 +118,8 @@ test('the actual PDF generator produces valid multipage documents including long
     const records = Array.from({ length: 24 }, (_, index) =>
       sample({
         week: index + 1,
+        set1Rir: 0,
+        set2Rir: 2,
         notes: 'Form cue and machine settings. '.repeat(20),
       }),
     );
@@ -194,6 +196,11 @@ test('one actual timer engine survives view unmount, alerts in foreground once, 
     handles = [],
     events = new Map();
   const notifications = [];
+  const stateChanges = [];
+  const permission = { permission: 'granted' };
+  let soundPlays = true,
+    notificationFailure = false,
+    deliveryAttempts = 0;
   let timestamp = 100_000,
     sequence = 0,
     releases = 0;
@@ -226,19 +233,29 @@ test('one actual timer engine survives view unmount, alerts in foreground once, 
             useCallback: (callback) => callback,
             useEffect: (effect) => effects.push(effect),
             useImperativeHandle: (_, factory) => handles.push(factory()),
-            useState: (value) => [value, () => {}],
+            useState: (value) => [value, (next) => stateChanges.push(next)],
             useSyncExternalStore: (_, get) => get(),
           };
         if (name === '@/components/ui/button') return { Button: () => null };
-        if (name === '@/lib/rest-timer-state')
-          return fixture.load('lib/rest-timer-state.ts');
+        if (name === '@/lib/rest-timer-state') {
+          const state = fixture.load('lib/rest-timer-state.ts');
+          return {
+            ...state,
+            readTimerState: (value) => state.readTimerState(value, timestamp),
+          };
+        }
         if (name === '@/lib/rest-timer-alerts')
           return {
             prepareTimerSound: () => {},
             playTimerSound: () => true,
+            playRestTimerSound: async () => soundPlays,
             shouldAlertForTimer,
-            showRestNotification: async (_, options) =>
-              notifications.push(options),
+            showRestNotification: async (_, options) => {
+              deliveryAttempts++;
+              if (notificationFailure)
+                throw Error('Device rejected the notification');
+              notifications.push(options);
+            },
           };
         return require(name);
       },
@@ -248,12 +265,17 @@ test('one actual timer engine survives view unmount, alerts in foreground once, 
         }
       },
       crypto: { randomUUID: () => 'test-timer' },
-      Notification: { permission: 'granted' },
+      Notification: permission,
       window: {
         Notification: {},
         addEventListener: (type, fn) => events.set(type, fn),
-        setInterval,
-        clearInterval,
+        removeEventListener: () => {},
+        setInterval: (fn) => {
+          const id = ++sequence;
+          intervals.set(id, fn);
+          return id;
+        },
+        clearInterval: (id) => intervals.delete(id),
       },
       document: {
         hidden: false,
@@ -277,16 +299,19 @@ test('one actual timer engine survives view unmount, alerts in foreground once, 
       },
       clearInterval: (id) => intervals.delete(id),
     });
-    module.exports.default(
-      {
-        exerciseName: 'Squat',
-        restLabel: '1 sec',
-        suggestedSeconds: 1,
-        notificationIconHref: '/icon.png',
-      },
-      null,
-    );
-    const cleanup = effects.map((effect) => effect());
+    const props = {
+      exerciseName: 'Squat',
+      contextKey: 'main:1:A:1',
+      restLabel: '1 sec',
+      suggestedSeconds: 1,
+      notificationIconHref: '/icon.png',
+    };
+    const render = (patch = {}) => {
+      const tree = module.exports.default({ ...props, ...patch }, null);
+      const cleanup = effects.splice(0).map((effect) => effect());
+      return { tree, cleanup };
+    };
+    const { cleanup } = render();
     handles[0].start();
     await Promise.resolve();
     // Simulate the timer component leaving the page. The engine is not its UI interval.
@@ -305,6 +330,100 @@ test('one actual timer engine survives view unmount, alerts in foreground once, 
     );
     events.get('pageshow')();
     assert.equal(notifications.length, 1);
+
+    // Reopening the same exercise must preserve an intentionally started rest.
+    handles.at(-1).start();
+    const running = storage.get('liftline.rest-timer.v2');
+    const resumed = render();
+    resumed.cleanup.forEach((fn) => fn?.());
+    assert.equal(storage.get('liftline.rest-timer.v2'), running);
+    assert.equal(intervals.size, 1);
+
+    // The same exercise name in another week is a different workout context.
+    const changed = render({ contextKey: 'main:2:A:1' });
+    changed.cleanup.forEach((fn) => fn?.());
+    assert.equal(storage.has('liftline.rest-timer.v2'), false);
+    assert.equal(intervals.size, 0);
+    timestamp += 1000;
+    [...intervals.values()].forEach((tick) => tick());
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(notifications.length, 1, 'Cancelled rests must not alert');
+    handles.at(-1).start();
+    assert.equal(
+      JSON.parse(storage.get('liftline.rest-timer.v2')).contextKey,
+      'main:2:A:1',
+    );
+    const holiday = render({
+      contextKey: 'holiday:session-1:1',
+      exerciseName: 'Split squat',
+    });
+    holiday.cleanup.forEach((fn) => fn?.());
+    assert.equal(storage.has('liftline.rest-timer.v2'), false);
+    assert.equal(intervals.size, 0);
+
+    // Legacy persisted timers remain readable, but never follow a new exercise.
+    const legacy = {
+      id: 'old-timer',
+      exerciseName: 'Squat',
+      restLabel: '1 sec',
+      endsAt: timestamp + 1000,
+      remaining: 1,
+      updatedAt: timestamp,
+    };
+    storage.set('liftline.rest-timer.v2', JSON.stringify(legacy));
+    events.get('storage')({
+      key: 'liftline.rest-timer.v2',
+      newValue: JSON.stringify(legacy),
+    });
+    const old = render();
+    old.cleanup.forEach((fn) => fn?.());
+    assert.equal(storage.has('liftline.rest-timer.v2'), true);
+    assert.equal(intervals.size, 1);
+    const next = render({ exerciseName: 'Row', contextKey: 'main:1:A:2' });
+    next.cleanup.forEach((fn) => fn?.());
+    assert.equal(storage.has('liftline.rest-timer.v2'), false);
+    assert.equal(intervals.size, 0);
+    // Completion must report sound/delivery failure, not silently mark success.
+    soundPlays = false;
+    notificationFailure = true;
+    handles.at(-1).start();
+    timestamp += 1000;
+    [...intervals.values()].forEach((tick) => tick());
+    await new Promise((resolve) => setImmediate(resolve));
+    const text = (node) => {
+      if (Array.isArray(node)) return node.map(text).join(' ');
+      if (node && typeof node === 'object') return text(node.props?.children);
+      return typeof node === 'string' ? node : '';
+    };
+    const failed = render({ exerciseName: 'Row', contextKey: 'main:1:A:2' });
+    failed.cleanup.forEach((fn) => fn?.());
+    assert.match(text(failed.tree), /In-app sound was unavailable/);
+    assert.match(text(failed.tree), /notification failed/);
+    const attempts = deliveryAttempts;
+    events.get('focus')();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(
+      deliveryAttempts,
+      attempts,
+      'Completed timers never redispatch on focus',
+    );
+    storage.set('liftline.timer-alerts.v1', 'off');
+    events.get('storage')({ key: 'liftline.timer-alerts.v1', newValue: 'off' });
+    handles.at(-1).start();
+    timestamp += 1000;
+    [...intervals.values()].forEach((tick) => tick());
+    await new Promise((resolve) => setImmediate(resolve));
+    const off = render({ exerciseName: 'Row', contextKey: 'main:1:A:2' });
+    assert.match(text(off.tree), /Notifications are off/);
+    assert.equal(deliveryAttempts, attempts);
+    stateChanges.length = 0;
+    permission.permission = 'denied';
+    events.get('focus')();
+    assert.ok(
+      stateChanges.includes('denied'),
+      'Permission UI refreshes after returning from device settings',
+    );
+    off.cleanup.forEach((fn) => fn?.());
   } finally {
     fixture.close();
   }

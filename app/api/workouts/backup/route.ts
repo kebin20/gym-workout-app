@@ -7,6 +7,7 @@ import {
   type WorkoutEntry,
 } from '@/lib/workout-types';
 import type { TrainingDay } from '@/lib/routine';
+import { validateWorkoutNumbers } from '@/lib/workout-validation';
 import {
   holidayWorkoutSelectColumns,
   type HolidayWorkoutEntry,
@@ -150,6 +151,23 @@ function normalizeWorkout(value: unknown): WorkoutEntry | null {
   )
     return null;
   const setCount = Math.min(5, Math.max(1, Number(entry.setCount) || 1));
+  if (
+    validateWorkoutNumbers({
+      weights: [],
+      values: [],
+      setCount,
+      rir: null,
+      completed: false,
+      setRirs: [
+        entry.set1Rir,
+        entry.set2Rir,
+        entry.set3Rir,
+        entry.set4Rir,
+        entry.set5Rir,
+      ],
+    })
+  )
+    return null;
   const completed = Boolean(entry.completed);
   return {
     week,
@@ -169,6 +187,11 @@ function normalizeWorkout(value: unknown): WorkoutEntry | null {
     set5Reps: nullableNumber(entry.set5Reps),
     setCount,
     rir: nullableNumber(entry.rir),
+    set1Rir: nullableNumber(entry.set1Rir),
+    set2Rir: nullableNumber(entry.set2Rir),
+    set3Rir: nullableNumber(entry.set3Rir),
+    set4Rir: nullableNumber(entry.set4Rir),
+    set5Rir: nullableNumber(entry.set5Rir),
     notes: cleanText(entry.notes, 1000),
     completed,
     completedAt: completed ? isoDateOrNull(entry.completedAt) : null,
@@ -453,8 +476,9 @@ export async function POST(request: Request) {
           .DB!.prepare(`INSERT INTO workout_entries (
         week, day, exercise_order, exercise, target, set1_weight, set1_reps, set2_weight,
         set2_reps, set3_weight, set3_reps, set4_weight, set4_reps, set5_weight, set5_reps,
-        set_count, rir, notes, completed, completed_at, sync_status, sheet_synced_at, sync_error, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?)
+        set_count, rir, notes, completed, completed_at, sync_status, sheet_synced_at, sync_error, updated_at,
+        set1_rir, set2_rir, set3_rir, set4_rir, set5_rir
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(week, day, exercise_order) DO UPDATE SET
         exercise = excluded.exercise, target = excluded.target,
         set1_weight = excluded.set1_weight, set1_reps = excluded.set1_reps,
@@ -465,7 +489,9 @@ export async function POST(request: Request) {
         set_count = excluded.set_count, rir = excluded.rir, notes = excluded.notes,
         completed = excluded.completed, completed_at = excluded.completed_at,
         sync_status = excluded.sync_status, sheet_synced_at = NULL, sync_error = NULL,
-        updated_at = excluded.updated_at`)
+        updated_at = excluded.updated_at,
+        set1_rir = excluded.set1_rir, set2_rir = excluded.set2_rir,
+        set3_rir = excluded.set3_rir, set4_rir = excluded.set4_rir, set5_rir = excluded.set5_rir`)
           .bind(
             entry.week,
             entry.day,
@@ -489,6 +515,11 @@ export async function POST(request: Request) {
             entry.completedAt ?? null,
             entry.syncStatus,
             now,
+            entry.set1Rir ?? null,
+            entry.set2Rir ?? null,
+            entry.set3Rir ?? null,
+            entry.set4Rir ?? null,
+            entry.set5Rir ?? null,
           ),
       ),
       ...bodyMetrics.map((metric) =>

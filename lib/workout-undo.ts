@@ -23,6 +23,8 @@ export function undoWorkoutPayload(saved: WorkoutEntry, before?: WorkoutEntry) {
       before?.[`set${set}Weight` as keyof WorkoutEntry] ?? null;
     payload[`set${set}Reps`] =
       before?.[`set${set}Reps` as keyof WorkoutEntry] ?? null;
+    payload[`set${set}Rir`] =
+      before?.[`set${set}Rir` as keyof WorkoutEntry] ?? null;
   }
   return payload;
 }

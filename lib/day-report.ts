@@ -5,12 +5,14 @@ export type ReportSet = {
   set: number;
   weight: number | null;
   reps: number | null;
+  rir: number | null;
 };
 export function reportSets(entry: WorkoutEntry): ReportSet[] {
   return ([1, 2, 3, 4, 5] as const).flatMap((set) => {
     const weight = entry[`set${set}Weight`] ?? null;
     const reps = entry[`set${set}Reps`] ?? null;
-    return weight === null && reps === null ? [] : [{ set, weight, reps }];
+    const rir = entry[`set${set}Rir`] ?? null;
+    return weight === null && reps === null ? [] : [{ set, weight, reps, rir }];
   });
 }
 export const reportPhase = (week: number) => (week > 12 ? 2 : 1);
