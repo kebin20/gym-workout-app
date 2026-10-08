@@ -70,8 +70,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
+import { Input, Textarea } from '@/components/liftline-form-controls';
 import {
   days,
   displayWeekNumber,
@@ -3117,7 +3116,7 @@ export function WorkoutApp() {
                                                     event.target.value,
                                                   )
                                                 }
-                                                className="h-11 w-full min-w-0 bg-background text-center font-sans text-lg font-semibold text-foreground tabular-nums placeholder:font-normal placeholder:text-placeholder"
+                                                className="h-11 w-full min-w-0 bg-background text-center font-sans text-lg font-semibold text-foreground tabular-nums placeholder:font-normal placeholder:text-placeholder md:text-lg"
                                               />
                                               <Button
                                                 variant="outline"
@@ -3166,7 +3165,7 @@ export function WorkoutApp() {
                                                     event.target.value,
                                                   )
                                                 }
-                                                className="h-11 w-full min-w-0 bg-background text-center font-sans text-lg font-semibold text-foreground tabular-nums placeholder:font-normal placeholder:text-placeholder"
+                                                className="h-11 w-full min-w-0 bg-background text-center font-sans text-lg font-semibold text-foreground tabular-nums placeholder:font-normal placeholder:text-placeholder md:text-lg"
                                               />
                                               <Button
                                                 variant="outline"

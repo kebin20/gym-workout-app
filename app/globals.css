@@ -4,6 +4,7 @@
 
 @source './**/*.{ts,tsx}';
 @source '../components/ui/{alert,badge,button,card,carousel,checkbox,dialog,dropdown-menu,input,textarea,chart}.tsx';
+@source '../components/liftline-form-controls.tsx';
 @source '../lib/**/*.{ts,tsx}';
 
 @custom-variant dark (&:is(.dark *));
