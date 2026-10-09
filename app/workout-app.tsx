@@ -102,6 +102,12 @@ import ExerciseDraftBoundary, {
 import { useOutboxRetry } from './use-outbox-retry';
 import { recallSets, validateWorkoutNumbers } from '@/lib/workout-validation';
 import {
+  removeLastDraftSet,
+  restoreRemovedDraftSet,
+  stepWorkoutSetValue,
+  updateWorkoutSet,
+} from '@/lib/workout-set-safeguards';
+import {
   acknowledgeOutbox,
   blockOutbox,
   enqueueOutbox,
@@ -2774,7 +2780,9 @@ export function WorkoutApp() {
                     setDraft((current) => ({
                       ...current,
                       sets: current.sets.map((set, setIndex) =>
-                        setIndex === index ? { ...set, [key]: value } : set,
+                        setIndex === index
+                          ? updateWorkoutSet(set, key, value)
+                          : set,
                       ),
                     }));
                   }
@@ -2784,30 +2792,38 @@ export function WorkoutApp() {
                     key: 'weight' | 'reps',
                     amount: number,
                   ) {
-                    const current = Number(draft.sets[index][key] || 0);
-                    const next = Math.max(
-                      0,
-                      Math.round((current + amount) * 1000) / 1000,
+                    updateSet(
+                      index,
+                      key,
+                      stepWorkoutSetValue(draft.sets[index][key], key, amount),
                     );
-                    updateSet(index, key, String(next));
                   }
 
                   function addSet() {
+                    exerciseDraft.setRemovedSets([]);
                     setVisibleSetCount((count) => Math.min(5, count + 1));
                   }
 
                   function removeSet() {
                     if (visibleSetCount <= 1) return;
-                    const removedIndex = visibleSetCount - 1;
-                    setDraft((current) => ({
+                    const removal = removeLastDraftSet(draft);
+                    if (!removal.removed) return;
+                    exerciseDraft.setRemovedSets((current) => [
                       ...current,
-                      sets: current.sets.map((set, index) =>
-                        index === removedIndex
-                          ? { weight: '', reps: '', rir: '', done: false }
-                          : set,
-                      ),
-                    }));
-                    setVisibleSetCount((count) => Math.max(1, count - 1));
+                      removal.removed!,
+                    ]);
+                    exerciseDraft.setValue(removal.draft);
+                  }
+
+                  function undoRemoveSet() {
+                    const removed = exerciseDraft.removedSets.at(-1);
+                    if (!removed) return;
+                    exerciseDraft.setValue((current) =>
+                      restoreRemovedDraftSet(current, removed),
+                    );
+                    exerciseDraft.setRemovedSets((current) =>
+                      current.slice(0, -1),
+                    );
                   }
 
                   function toggleSetComplete(index: number) {
@@ -2837,6 +2853,8 @@ export function WorkoutApp() {
 
                   function usePreviousSession() {
                     if (!previousEntry) return;
+                    exerciseDraft.setRemovedSets([]);
+                    exerciseDraft.setShowValidation(false);
                     const previousDraft = draftFromEntry(previousEntry);
                     setDraft({
                       ...previousDraft,
@@ -3049,6 +3067,9 @@ export function WorkoutApp() {
                                           : ''
                                     }
                                     timed={exercise.name === 'Plank'}
+                                    showValidation={
+                                      exerciseDraft.showValidation
+                                    }
                                     onChange={(field, value) =>
                                       updateSet(index, field, value)
                                     }
@@ -3090,6 +3111,28 @@ export function WorkoutApp() {
                                   </Button>
                                 </div>
                               </div>
+
+                              {exerciseDraft.removedSets.length > 0 && (
+                                <div className="mt-2 flex flex-wrap items-center gap-2 font-sans text-sm">
+                                  <span
+                                    role="status"
+                                    className="text-muted-foreground"
+                                  >
+                                    Set{' '}
+                                    {exerciseDraft.removedSets.at(-1)!.index +
+                                      1}{' '}
+                                    removed.
+                                  </span>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    className="h-11"
+                                    onClick={undoRemoveSet}
+                                  >
+                                    Undo remove
+                                  </Button>
+                                </div>
+                              )}
 
                               <div className="mt-3 font-sans text-sm text-muted-foreground">
                                 <p>
@@ -3165,13 +3208,14 @@ export function WorkoutApp() {
                                 size="lg"
                                 className="mt-4 h-12 w-full rounded-xl font-sans text-base shadow-md shadow-primary/20"
                                 disabled={saving || loading}
-                                onClick={() =>
+                                onClick={() => {
+                                  exerciseDraft.setShowValidation(true);
                                   void saveExercise(
                                     draft,
                                     visibleSetCount,
                                     exerciseDraft.clear,
-                                  )
-                                }
+                                  );
+                                }}
                               >
                                 {saving ? (
                                   <Loader2 className="animate-spin" />

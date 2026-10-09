@@ -1,4 +1,4 @@
-const startupVersion = '3.14.2';
+const startupVersion = '3.14.3';
 const cacheVersion = `liftline-${startupVersion}-1`;
 const shellCache = `${cacheVersion}-shell`;
 const assetCache = `${cacheVersion}-assets`;

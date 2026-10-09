@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { writeFileSync } from 'node:fs';
 const endpoint = 'http://127.0.0.1:9343';
-const weightInput = `document.querySelector(${JSON.stringify('input[aria-label="Set 1 weight in kilograms"]')})`;
+const weightInput = `document.querySelector(${JSON.stringify('input[aria-label="Set 1 Weight (kg)"]')})`;
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 async function open(url, { bootstrap, logger = true } = {}) {
   const target = await (
@@ -93,7 +93,7 @@ for (const [name, port] of [
     true,
   );
   await page.js(`(() => {
-    const input = document.querySelector('input[aria-label="Set 1 weight in kilograms"]');
+    const input = document.querySelector('input[aria-label="Set 1 Weight (kg)"]');
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, '42.5');
     input.dispatchEvent(new Event('input', { bubbles: true }));
   })()`);

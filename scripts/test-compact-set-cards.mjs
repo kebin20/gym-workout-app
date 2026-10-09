@@ -25,7 +25,10 @@ test('compact cards put three labeled inputs together and hide adjustment button
       /grid-cols-\[minmax\(0,1\.4fr\)_minmax\(0,1fr\)_minmax\(0,0\.8fr\)\]/,
     );
     assert.match(html, /aria-label="Adjust set 1"[^>]*aria-expanded="false"/);
-    assert.match(html, /aria-label="Complete set 1"[^>]*aria-pressed="false"/);
+    assert.match(
+      html,
+      /aria-label="Mark done, set 1"[^>]*aria-pressed="false"/,
+    );
     assert.match(html, /Mark done/);
     assert.doesNotMatch(html, /Decrease set|Increase set/);
     assert.match(html, /value="62\.5"/);
@@ -55,10 +58,10 @@ test('completion, optional/extra identity and timed inputs remain explicit', () 
     assert.match(completed, /Extra set/);
     assert.match(
       completed,
-      /aria-label="Reopen set 5"[^>]*aria-pressed="true"/,
+      /aria-label="Done, set 5\. Activate to reopen"[^>]*aria-pressed="true"/,
     );
     assert.match(completed, /Done/);
-    assert.match(completed, /aria-label="Set 5 seconds"/);
+    assert.match(completed, /aria-label="Set 5 Seconds"/);
     assert.match(completed, /value="45"/);
     assert.match(completed, /id="set-5-rir"/);
     const optional = renderToStaticMarkup(
@@ -68,6 +71,26 @@ test('completion, optional/extra identity and timed inputs remain explicit', () 
       }),
     );
     assert.match(optional, /Optional set/);
+  } finally {
+    fixture.close();
+  }
+});
+
+test('invalid fields are identified beside the set without crowding every column', () => {
+  const fixture = routeFixture();
+  try {
+    const { WorkoutSetCard } = fixture.load('app/workout-set-card.tsx');
+    const html = renderToStaticMarkup(
+      createElement(WorkoutSetCard, {
+        ...props,
+        showValidation: true,
+        set: { weight: '-1', reps: '0', rir: '11', done: false },
+      }),
+    );
+    assert.equal((html.match(/aria-invalid="true"/g) ?? []).length, 3);
+    assert.match(html, /role="alert"/);
+    assert.match(html, /Weight: Enter zero or a positive weight\./);
+    assert.match(html, /Mark done, set 1/);
   } finally {
     fixture.close();
   }

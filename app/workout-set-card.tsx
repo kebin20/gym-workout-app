@@ -4,12 +4,14 @@ import { useId, useState } from 'react';
 import { Check, Minus, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/liftline-form-controls';
+import { workoutSetFieldErrors } from '@/lib/workout-set-safeguards';
 
 type WorkoutSetCardProps = {
   number: number;
   set: { weight: string; reps: string; rir: string; done: boolean };
   setLabel?: string;
   timed: boolean;
+  showValidation?: boolean;
   onChange: (field: 'weight' | 'reps' | 'rir', value: string) => void;
   onStep: (field: 'weight' | 'reps', amount: number) => void;
   onToggleDone: () => void;
@@ -20,12 +22,27 @@ export function WorkoutSetCard({
   set,
   setLabel,
   timed,
+  showValidation = false,
   onChange,
   onStep,
   onToggleDone,
 }: WorkoutSetCardProps) {
   const [adjusting, setAdjusting] = useState(false);
+  const [attemptedDone, setAttemptedDone] = useState(false);
+  const [touched, setTouched] = useState<
+    Partial<Record<'weight' | 'reps' | 'rir', boolean>>
+  >({});
   const id = useId();
+  const errors = workoutSetFieldErrors(set, {
+    requireReps: showValidation || attemptedDone || Boolean(touched.reps),
+    timed,
+  });
+  const firstError = Object.entries(errors)[0] as
+    | ['weight' | 'reps' | 'rir', string]
+    | undefined;
+  const errorLabel = firstError
+    ? `${firstError[0] === 'weight' ? 'Weight' : firstError[0] === 'reps' ? (timed ? 'Seconds' : 'Reps') : 'RIR'}: ${firstError[1]}`
+    : '';
   const adjustmentId = `${id}-adjustments`;
   const inputClass =
     'h-12 w-full min-w-0 bg-background text-center font-sans text-lg font-semibold text-foreground tabular-nums placeholder:font-normal placeholder:text-placeholder md:text-lg';
@@ -59,9 +76,12 @@ export function WorkoutSetCard({
           <Button
             type="button"
             variant="outline"
-            aria-label={`${set.done ? 'Reopen' : 'Complete'} set ${number}`}
+            aria-label={`${set.done ? 'Done' : 'Mark done'}, set ${number}${set.done ? '. Activate to reopen' : ''}`}
             aria-pressed={set.done}
-            onClick={onToggleDone}
+            onClick={() => {
+              setAttemptedDone(true);
+              onToggleDone();
+            }}
             className={`h-11 gap-1.5 px-2.5 font-sans text-sm ${set.done ? 'border-success bg-success text-white hover:bg-success/90 hover:text-white' : 'bg-card'}`}
           >
             {set.done && <Check aria-hidden="true" />}
@@ -78,7 +98,9 @@ export function WorkoutSetCard({
           <span className="block">Weight (kg)</span>
           <Input
             id={`${id}-weight`}
-            aria-label={`Set ${number} weight in kilograms`}
+            aria-label={`Set ${number} Weight (kg)`}
+            aria-invalid={Boolean(errors.weight)}
+            aria-describedby={errors.weight ? `${id}-weight-error` : undefined}
             inputMode="decimal"
             type="number"
             min="0"
@@ -89,6 +111,11 @@ export function WorkoutSetCard({
             onChange={(event) => onChange('weight', event.target.value)}
             className={inputClass}
           />
+          {errors.weight && (
+            <span id={`${id}-weight-error`} className="sr-only">
+              {errors.weight}
+            </span>
+          )}
         </label>
         <label
           htmlFor={`${id}-reps`}
@@ -97,7 +124,9 @@ export function WorkoutSetCard({
           <span className="block">{timed ? 'Seconds' : 'Reps'}</span>
           <Input
             id={`${id}-reps`}
-            aria-label={`Set ${number} ${timed ? 'seconds' : 'repetitions'}`}
+            aria-label={`Set ${number} ${timed ? 'Seconds' : 'Reps'}`}
+            aria-invalid={Boolean(errors.reps)}
+            aria-describedby={errors.reps ? `${id}-reps-error` : undefined}
             inputMode="numeric"
             type="number"
             min="1"
@@ -105,9 +134,15 @@ export function WorkoutSetCard({
             value={set.reps}
             placeholder="0"
             onFocus={(event) => event.currentTarget.select()}
+            onBlur={() => setTouched((current) => ({ ...current, reps: true }))}
             onChange={(event) => onChange('reps', event.target.value)}
             className={inputClass}
           />
+          {errors.reps && (
+            <span id={`${id}-reps-error`} className="sr-only">
+              {errors.reps}
+            </span>
+          )}
         </label>
         <label
           htmlFor={`set-${number}-rir`}
@@ -116,7 +151,9 @@ export function WorkoutSetCard({
           <span className="block">RIR</span>
           <Input
             id={`set-${number}-rir`}
-            aria-label={`Set ${number} reps in reserve (optional)`}
+            aria-label={`Set ${number} RIR (reps in reserve, optional)`}
+            aria-invalid={Boolean(errors.rir)}
+            aria-describedby={errors.rir ? `${id}-rir-error` : undefined}
             type="number"
             inputMode="numeric"
             min="0"
@@ -128,8 +165,19 @@ export function WorkoutSetCard({
             onChange={(event) => onChange('rir', event.target.value)}
             className={inputClass}
           />
+          {errors.rir && (
+            <span id={`${id}-rir-error`} className="sr-only">
+              {errors.rir}
+            </span>
+          )}
         </label>
       </div>
+
+      {firstError && (
+        <p className="font-sans text-sm text-destructive" role="alert">
+          {errorLabel}
+        </p>
+      )}
 
       <div id={adjustmentId} hidden={!adjusting}>
         {adjusting && (
@@ -154,6 +202,10 @@ export function WorkoutSetCard({
                       type="button"
                       variant="outline"
                       className="h-11 min-w-11"
+                      disabled={
+                        direction < 0 &&
+                        Number(set[field] || 0) <= (field === 'weight' ? 0 : 1)
+                      }
                       aria-label={`${direction < 0 ? 'Decrease' : 'Increase'} set ${number} ${field === 'weight' ? 'weight' : timed ? 'seconds' : 'repetitions'}`}
                       onClick={() =>
                         onStep(

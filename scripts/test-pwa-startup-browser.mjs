@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 // bundle. Document relaunches are not an iOS process cold-launch benchmark.
 const endpoint = 'http://127.0.0.1:9343';
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const input = `document.querySelector('input[aria-label="Set 1 weight in kilograms"]')`;
+const input = `document.querySelector('input[aria-label="Set 1 Weight (kg)"]')`;
 async function open(url, installed = false) {
   const target = await (
     await fetch(`${endpoint}/json/new?about:blank`, { method: 'PUT' })
