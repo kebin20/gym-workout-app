@@ -28,6 +28,12 @@ import {
 } from '../lib/exercise-drafts.ts';
 import { sessionProgress } from '../lib/session-progress.ts';
 import { findStartupWeek } from '../lib/startup-week.ts';
+import {
+  removeLastDraftSet,
+  restoreRemovedDraftSet,
+  stepWorkoutSetValue,
+  updateWorkoutSet,
+} from '../lib/workout-set-safeguards.ts';
 const { appVersion } = JSON.parse(
   readFileSync(new URL('../app-release.json', import.meta.url), 'utf8'),
 );
@@ -53,6 +59,43 @@ function memoryStorage() {
     removeItem: (key) => data.delete(key),
   };
 }
+
+test('set controls keep valid minimums, clear invalid completion and undo draft removal', () => {
+  assert.equal(stepWorkoutSetValue('1', 'reps', -1), '1');
+  assert.equal(stepWorkoutSetValue('', 'reps', -1), '1');
+  assert.equal(stepWorkoutSetValue('0', 'weight', -2.5), '0');
+  assert.equal(stepWorkoutSetValue('62.5', 'weight', 2.5), '65');
+
+  const completed = { weight: '50', reps: '10', rir: '2', done: true };
+  assert.equal(updateWorkoutSet(completed, 'reps', '12').done, true);
+  assert.equal(updateWorkoutSet(completed, 'reps', '0').done, false);
+  assert.equal(updateWorkoutSet(completed, 'rir', '11').done, false);
+
+  const original = {
+    sets: Array.from({ length: 5 }, (_, index) => ({
+      weight: index === 2 ? '70' : '',
+      reps: index === 2 ? '8' : '',
+      rir: index === 2 ? '1' : '',
+      done: index === 2,
+    })),
+    setCount: 3,
+    rir: '',
+    notes: '',
+  };
+  const removal = removeLastDraftSet(original);
+  assert.equal(removal.draft.setCount, 2);
+  assert.deepEqual(removal.draft.sets[2], {
+    weight: '',
+    reps: '',
+    rir: '',
+    done: false,
+  });
+  assert.ok(removal.removed);
+  assert.deepEqual(
+    restoreRemovedDraftSet(removal.draft, removal.removed),
+    original,
+  );
+});
 const draft = {
   sets: Array.from({ length: 5 }, (_, index) => ({
     weight: index === 0 ? '51.3' : '',
@@ -81,7 +124,9 @@ test('the refactored Today and Holiday loggers render on the server without brow
     assert.ok(html.includes('Save &amp; next'));
     assert.ok(html.includes(appVersion));
     assert.equal((html.match(/data-workout-set-row=""/g) ?? []).length, 3);
-    assert.ok(html.includes('max-w-[21.5rem]'));
+    assert.ok(html.includes('Mark done'));
+    assert.ok(html.includes('Adjust set 1'));
+    assert.ok(!html.includes('Decrease set 1 weight'));
     assert.ok(!html.includes('max-w-60'));
     const primaryNav = html.match(
       /<nav\b[^>]*aria-label="Primary navigation"[^>]*>[\s\S]*?<\/nav>/,

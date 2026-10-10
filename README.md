@@ -10,7 +10,7 @@ Made with ChatGPT Codex
 
 The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgpt.site](https://liftline-strength-plan.ktanzyl.chatgpt.site). Access is restricted to the site owner.
 
-Current production version: **v3.14.0**
+Current production version: **v3.14.4**
 
 The experimental [bundled iOS foundation](docs/native-ios.md) is included in the repository, but is not ready for personal logging: native devices display a setup guard until the storage/connection choice and real-device tests are complete. The private web app keeps its existing storage and functionality, with faster cached startup. See the [release rollback notes](docs/rollback.md) for the pre-release backup.
 
@@ -21,6 +21,8 @@ The experimental [bundled iOS foundation](docs/native-ios.md) is included in the
 - Specialized Phase 2 programming with chest/quad, back/posterior-chain, and shoulders/arms emphasis
 - Phase-specific progress, workout history, guidance, and rotating training tips
 - Large mobile-friendly controls for entering weight, reps, and RIR
+- Compact set cards with aligned weight/reps/RIR fields, labeled completion, and optional 2.5 kg/one-rep adjustment controls
+- Readable form text across portrait and landscape to avoid iOS input-focus zoom, while retaining accessible pinch-to-zoom
 - Per-exercise set controls supporting one to five saved sets
 - Optional per-set RIR (0–10) in the main workout logger, history, PDF reports and backups; older exercise-level RIR remains separately labeled
 - Exercise-aware rest timer with pause, resume, reset, and completion vibration where supported
@@ -60,6 +62,12 @@ The experimental [bundled iOS foundation](docs/native-ios.md) is included in the
 ## Version history
 
 Minor fixes, visual refinements, and deployment maintenance are grouped into the nearest feature release so this history focuses on meaningful product changes.
+
+### v3.14 — Compact, safer set logging
+
+- Place Weight, Reps and per-set RIR in compact aligned cards with optional adjustment controls.
+- In v3.14.3, keep rep adjustments at one or above, clear a misleading completion state after an invalid edit, show field-specific validation, align visible and spoken control labels, and provide Undo after removing a draft set.
+- In v3.14.4, restore startup timing and deferred persistent-storage requests with a stable logger marker, and keep session-editor checkbox code out of the initial offline cache.
 
 ### v3.13 — Calmer, clearer workout UI
 

@@ -70,8 +70,8 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
+import { Input, Textarea } from '@/components/liftline-form-controls';
+import { WorkoutSetCard } from './workout-set-card';
 import {
   days,
   displayWeekNumber,
@@ -94,6 +94,7 @@ import { findStartupWeek } from '@/lib/startup-week';
 import { latestDraftKey } from '@/lib/exercise-drafts';
 import { isBundledApp } from '@/lib/client-runtime';
 import { retainInstalledStorage } from '@/lib/startup-storage';
+import { observeWorkoutLoggerReady } from '@/lib/startup-readiness';
 import { sessionProgress } from '@/lib/session-progress';
 import { dayPresentation } from '@/lib/day-presentation';
 import ExerciseDraftBoundary, {
@@ -101,6 +102,12 @@ import ExerciseDraftBoundary, {
 } from './exercise-draft-boundary';
 import { useOutboxRetry } from './use-outbox-retry';
 import { recallSets, validateWorkoutNumbers } from '@/lib/workout-validation';
+import {
+  removeLastDraftSet,
+  restoreRemovedDraftSet,
+  stepWorkoutSetValue,
+  updateWorkoutSet,
+} from '@/lib/workout-set-safeguards';
 import {
   acknowledgeOutbox,
   blockOutbox,
@@ -1302,33 +1309,13 @@ export function WorkoutApp() {
   useEffect(() => {
     if (loading || performance.getEntriesByName('liftline:ready').length)
       return;
-    // Wait for the actual enabled logger, including lazy UI primitives, rather
-    // than measuring a loading flag while the form is still suspended.
-    let frame = 0;
-    const check = () => {
-      const input = document.querySelector(
-        'input[aria-label="Set 1 weight in kilograms"]',
-      );
-      if (!input || input.matches(':disabled') || frame) return;
-      observer.disconnect();
-      frame = requestAnimationFrame(() => {
-        if (!performance.getEntriesByName('liftline:ready').length)
-          performance.mark('liftline:ready');
-        window.dispatchEvent(new Event('liftline:ready'));
-      });
-    };
-    const observer = new MutationObserver(check);
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ['disabled'],
+    // Wait for an enabled logger after its draft has hydrated. The internal
+    // marker survives changes to visible and accessible field labels.
+    return observeWorkoutLoggerReady(() => {
+      if (!performance.getEntriesByName('liftline:ready').length)
+        performance.mark('liftline:ready');
+      window.dispatchEvent(new Event('liftline:ready'));
     });
-    check();
-    return () => {
-      observer.disconnect();
-      cancelAnimationFrame(frame);
-    };
   }, [loading]);
 
   useEffect(() => {
@@ -2774,7 +2761,9 @@ export function WorkoutApp() {
                     setDraft((current) => ({
                       ...current,
                       sets: current.sets.map((set, setIndex) =>
-                        setIndex === index ? { ...set, [key]: value } : set,
+                        setIndex === index
+                          ? updateWorkoutSet(set, key, value)
+                          : set,
                       ),
                     }));
                   }
@@ -2784,30 +2773,38 @@ export function WorkoutApp() {
                     key: 'weight' | 'reps',
                     amount: number,
                   ) {
-                    const current = Number(draft.sets[index][key] || 0);
-                    const next = Math.max(
-                      0,
-                      Math.round((current + amount) * 1000) / 1000,
+                    updateSet(
+                      index,
+                      key,
+                      stepWorkoutSetValue(draft.sets[index][key], key, amount),
                     );
-                    updateSet(index, key, String(next));
                   }
 
                   function addSet() {
+                    exerciseDraft.setRemovedSets([]);
                     setVisibleSetCount((count) => Math.min(5, count + 1));
                   }
 
                   function removeSet() {
                     if (visibleSetCount <= 1) return;
-                    const removedIndex = visibleSetCount - 1;
-                    setDraft((current) => ({
+                    const removal = removeLastDraftSet(draft);
+                    if (!removal.removed) return;
+                    exerciseDraft.setRemovedSets((current) => [
                       ...current,
-                      sets: current.sets.map((set, index) =>
-                        index === removedIndex
-                          ? { weight: '', reps: '', rir: '', done: false }
-                          : set,
-                      ),
-                    }));
-                    setVisibleSetCount((count) => Math.max(1, count - 1));
+                      removal.removed!,
+                    ]);
+                    exerciseDraft.setValue(removal.draft);
+                  }
+
+                  function undoRemoveSet() {
+                    const removed = exerciseDraft.removedSets.at(-1);
+                    if (!removed) return;
+                    exerciseDraft.setValue((current) =>
+                      restoreRemovedDraftSet(current, removed),
+                    );
+                    exerciseDraft.setRemovedSets((current) =>
+                      current.slice(0, -1),
+                    );
                   }
 
                   function toggleSetComplete(index: number) {
@@ -2837,6 +2834,8 @@ export function WorkoutApp() {
 
                   function usePreviousSession() {
                     if (!previousEntry) return;
+                    exerciseDraft.setRemovedSets([]);
+                    exerciseDraft.setShowValidation(false);
                     const previousDraft = draftFromEntry(previousEntry);
                     setDraft({
                       ...previousDraft,
@@ -3034,203 +3033,35 @@ export function WorkoutApp() {
                             </div>
                           ) : (
                             <>
-                              <div className="hidden grid-cols-[42px_minmax(0,1fr)_64px] items-center gap-2 border-b py-2 font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground md:grid">
-                                <span className="text-center">Set</span>
-                                <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_3.5rem] gap-3">
-                                  <span className="text-center">
-                                    Weight (kg)
-                                  </span>
-                                  <span className="text-center">
-                                    {exercise.name === 'Plank'
-                                      ? 'Seconds'
-                                      : 'Reps'}
-                                  </span>
-                                  <span className="text-center">RIR</span>
-                                </div>
-                                <span className="text-center">
-                                  <span className="sr-only sm:not-sr-only">
-                                    Status
-                                  </span>
-                                </span>
-                              </div>
                               {draft.sets
                                 .slice(0, visibleSetCount)
-                                .map((set, index) => {
-                                  const setLabel =
-                                    index >= exercise.targetSets
-                                      ? 'EXTRA'
-                                      : index >= activeSets
-                                        ? 'OPT'
-                                        : '';
-                                  return (
-                                    <div
-                                      key={index}
-                                      data-workout-set-row=""
-                                      className="mx-auto grid w-full max-w-[21.5rem] grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center gap-x-2 border-b border-border/70 py-3 last:border-0 min-[32rem]:max-w-none md:grid-cols-[42px_minmax(0,1fr)_64px] md:gap-2"
-                                    >
-                                      <div className="flex items-center justify-center self-center">
-                                        <span className="relative grid size-11 place-items-center rounded-full bg-secondary font-sans text-sm font-bold md:size-8">
-                                          {index + 1}
-                                          {setLabel && (
-                                            <span className="absolute -right-3 -top-2 rounded bg-warning-soft px-1 font-sans text-[8px] text-warning-foreground">
-                                              {setLabel}
-                                            </span>
-                                          )}
-                                        </span>
-                                      </div>
-                                      <div className="col-start-2 min-w-0">
-                                        <div className="grid items-center gap-3 min-[32rem]:grid-cols-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_3.5rem]">
-                                          <div className="w-full min-w-0">
-                                            <span className="mb-1 block font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground md:hidden">
-                                              Weight (kg)
-                                            </span>
-                                            <div className="grid w-full grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center justify-items-center gap-2 min-[32rem]:gap-1">
-                                              <Button
-                                                variant="outline"
-                                                size="icon-sm"
-                                                aria-label={`Decrease set ${index + 1} weight`}
-                                                onClick={() =>
-                                                  stepSet(index, 'weight', -2.5)
-                                                }
-                                              >
-                                                <Minus />
-                                              </Button>
-                                              <Input
-                                                aria-label={`Set ${index + 1} weight in kilograms`}
-                                                inputMode="decimal"
-                                                type="number"
-                                                min="0"
-                                                step="any"
-                                                value={set.weight}
-                                                placeholder={
-                                                  exercise.name === 'Plank'
-                                                    ? 'Optional'
-                                                    : '0'
-                                                }
-                                                onFocus={(event) =>
-                                                  event.currentTarget.select()
-                                                }
-                                                onChange={(event) =>
-                                                  updateSet(
-                                                    index,
-                                                    'weight',
-                                                    event.target.value,
-                                                  )
-                                                }
-                                                className="h-11 w-full min-w-0 bg-background text-center font-sans text-lg font-semibold text-foreground tabular-nums placeholder:font-normal placeholder:text-placeholder"
-                                              />
-                                              <Button
-                                                variant="outline"
-                                                size="icon-sm"
-                                                aria-label={`Increase set ${index + 1} weight`}
-                                                onClick={() =>
-                                                  stepSet(index, 'weight', 2.5)
-                                                }
-                                              >
-                                                <Plus />
-                                              </Button>
-                                            </div>
-                                          </div>
-                                          <div className="w-full min-w-0">
-                                            <span className="mb-1 block font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground md:hidden">
-                                              {exercise.name === 'Plank'
-                                                ? 'Seconds'
-                                                : 'Reps'}
-                                            </span>
-                                            <div className="grid w-full grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center justify-items-center gap-2 min-[32rem]:gap-1">
-                                              <Button
-                                                variant="outline"
-                                                size="icon-sm"
-                                                aria-label={`Decrease set ${index + 1} repetitions`}
-                                                onClick={() =>
-                                                  stepSet(index, 'reps', -1)
-                                                }
-                                              >
-                                                <Minus />
-                                              </Button>
-                                              <Input
-                                                aria-label={`Set ${index + 1} ${exercise.name === 'Plank' ? 'seconds' : 'repetitions'}`}
-                                                inputMode="numeric"
-                                                type="number"
-                                                min="1"
-                                                step="1"
-                                                value={set.reps}
-                                                placeholder="0"
-                                                onFocus={(event) =>
-                                                  event.currentTarget.select()
-                                                }
-                                                onChange={(event) =>
-                                                  updateSet(
-                                                    index,
-                                                    'reps',
-                                                    event.target.value,
-                                                  )
-                                                }
-                                                className="h-11 w-full min-w-0 bg-background text-center font-sans text-lg font-semibold text-foreground tabular-nums placeholder:font-normal placeholder:text-placeholder"
-                                              />
-                                              <Button
-                                                variant="outline"
-                                                size="icon-sm"
-                                                aria-label={`Increase set ${index + 1} repetitions`}
-                                                onClick={() =>
-                                                  stepSet(index, 'reps', 1)
-                                                }
-                                              >
-                                                <Plus />
-                                              </Button>
-                                            </div>
-                                          </div>
-                                          <div className="flex items-center justify-center gap-2 min-[32rem]:col-span-2 md:col-span-1">
-                                            <label
-                                              htmlFor={`set-${index + 1}-rir`}
-                                              className="font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground md:sr-only"
-                                            >
-                                              RIR{' '}
-                                              <span className="sr-only">
-                                                for set {index + 1} (optional)
-                                              </span>
-                                            </label>
-                                            <Input
-                                              id={`set-${index + 1}-rir`}
-                                              aria-label={`Set ${index + 1} reps in reserve (optional)`}
-                                              type="number"
-                                              inputMode="numeric"
-                                              min="0"
-                                              max="10"
-                                              step="1"
-                                              value={set.rir}
-                                              placeholder="–"
-                                              onFocus={(event) =>
-                                                event.currentTarget.select()
-                                              }
-                                              onChange={(event) =>
-                                                updateSet(
-                                                  index,
-                                                  'rir',
-                                                  event.target.value,
-                                                )
-                                              }
-                                              className="h-11 w-14 min-w-0 bg-background text-center font-sans text-base font-semibold text-foreground tabular-nums placeholder:font-normal placeholder:text-placeholder"
-                                            />
-                                          </div>
-                                        </div>
-                                      </div>
-                                      <div className="col-start-3 flex h-full items-center justify-center self-center">
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            toggleSetComplete(index)
-                                          }
-                                          aria-label={`${set.done ? 'Reopen' : 'Complete'} set ${index + 1}`}
-                                          aria-pressed={set.done}
-                                          className={`grid size-11 place-items-center rounded-full border-2 transition-colors md:size-8 ${set.done ? 'border-success bg-success text-white' : 'border-border bg-background text-transparent hover:border-primary'}`}
-                                        >
-                                          <Check className="size-4" />
-                                        </button>
-                                      </div>
-                                    </div>
-                                  );
-                                })}
+                                .map((set, index) => (
+                                  <WorkoutSetCard
+                                    key={`${activeWeek}|${activeDay}|${exercise.order}|${exercise.name}|${index}`}
+                                    number={index + 1}
+                                    set={set}
+                                    setLabel={
+                                      index >= exercise.targetSets
+                                        ? 'Extra'
+                                        : index >= activeSets
+                                          ? 'Optional'
+                                          : ''
+                                    }
+                                    timed={exercise.name === 'Plank'}
+                                    showValidation={
+                                      exerciseDraft.showValidation
+                                    }
+                                    onChange={(field, value) =>
+                                      updateSet(index, field, value)
+                                    }
+                                    onStep={(field, amount) =>
+                                      stepSet(index, field, amount)
+                                    }
+                                    onToggleDone={() =>
+                                      toggleSetComplete(index)
+                                    }
+                                  />
+                                ))}
 
                               <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-muted/55 p-2.5">
                                 <p className="px-1 font-sans text-xs text-muted-foreground">
@@ -3261,6 +3092,28 @@ export function WorkoutApp() {
                                   </Button>
                                 </div>
                               </div>
+
+                              {exerciseDraft.removedSets.length > 0 && (
+                                <div className="mt-2 flex flex-wrap items-center gap-2 font-sans text-sm">
+                                  <span
+                                    role="status"
+                                    className="text-muted-foreground"
+                                  >
+                                    Set{' '}
+                                    {exerciseDraft.removedSets.at(-1)!.index +
+                                      1}{' '}
+                                    removed.
+                                  </span>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    className="h-11"
+                                    onClick={undoRemoveSet}
+                                  >
+                                    Undo remove
+                                  </Button>
+                                </div>
+                              )}
 
                               <div className="mt-3 font-sans text-sm text-muted-foreground">
                                 <p>
@@ -3336,13 +3189,14 @@ export function WorkoutApp() {
                                 size="lg"
                                 className="mt-4 h-12 w-full rounded-xl font-sans text-base shadow-md shadow-primary/20"
                                 disabled={saving || loading}
-                                onClick={() =>
+                                onClick={() => {
+                                  exerciseDraft.setShowValidation(true);
                                   void saveExercise(
                                     draft,
                                     visibleSetCount,
                                     exerciseDraft.clear,
-                                  )
-                                }
+                                  );
+                                }}
                               >
                                 {saving ? (
                                   <Loader2 className="animate-spin" />

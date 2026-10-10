@@ -22,8 +22,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
+import { Input, Textarea } from '@/components/liftline-form-controls';
 import type { TrainingDay } from '@/lib/routine';
 
 type TrainingTool = 'schedule' | 'readiness' | 'calculator' | 'metrics';
