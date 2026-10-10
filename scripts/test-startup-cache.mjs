@@ -283,7 +283,6 @@ test('startup asset manifest uses the production graph and excludes optional vie
   const manifest = JSON.parse(readFileSync(file, 'utf8'));
   assert.equal(manifest.version, appVersion);
   assert.ok(manifest.assets.some((url) => url.includes('workout-app-')));
-  assert.ok(manifest.assets.some((url) => url.includes('checkbox-')));
   assert.ok(
     manifest.assets.some((url) => url.includes('layout-segment-context-')),
   );
@@ -293,7 +292,7 @@ test('startup asset manifest uses the production graph and excludes optional vie
     assert.ok(existsSync(new URL('../dist/client' + url, import.meta.url)));
     assert.doesNotMatch(
       url,
-      /progress-view|startup-details|day-report-pdf|\.ttf|nutrition-view|holiday-workout/,
+      /checkbox-|progress-view|startup-details|day-report-pdf|\.ttf|nutrition-view|holiday-workout/,
     );
   }
 });

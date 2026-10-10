@@ -94,6 +94,7 @@ import { findStartupWeek } from '@/lib/startup-week';
 import { latestDraftKey } from '@/lib/exercise-drafts';
 import { isBundledApp } from '@/lib/client-runtime';
 import { retainInstalledStorage } from '@/lib/startup-storage';
+import { observeWorkoutLoggerReady } from '@/lib/startup-readiness';
 import { sessionProgress } from '@/lib/session-progress';
 import { dayPresentation } from '@/lib/day-presentation';
 import ExerciseDraftBoundary, {
@@ -1308,33 +1309,13 @@ export function WorkoutApp() {
   useEffect(() => {
     if (loading || performance.getEntriesByName('liftline:ready').length)
       return;
-    // Wait for the actual enabled logger, including lazy UI primitives, rather
-    // than measuring a loading flag while the form is still suspended.
-    let frame = 0;
-    const check = () => {
-      const input = document.querySelector(
-        'input[aria-label="Set 1 weight in kilograms"]',
-      );
-      if (!input || input.matches(':disabled') || frame) return;
-      observer.disconnect();
-      frame = requestAnimationFrame(() => {
-        if (!performance.getEntriesByName('liftline:ready').length)
-          performance.mark('liftline:ready');
-        window.dispatchEvent(new Event('liftline:ready'));
-      });
-    };
-    const observer = new MutationObserver(check);
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ['disabled'],
+    // Wait for an enabled logger after its draft has hydrated. The internal
+    // marker survives changes to visible and accessible field labels.
+    return observeWorkoutLoggerReady(() => {
+      if (!performance.getEntriesByName('liftline:ready').length)
+        performance.mark('liftline:ready');
+      window.dispatchEvent(new Event('liftline:ready'));
     });
-    check();
-    return () => {
-      observer.disconnect();
-      cancelAnimationFrame(frame);
-    };
   }, [loading]);
 
   useEffect(() => {

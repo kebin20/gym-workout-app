@@ -1,11 +1,12 @@
-# Installed web-app startup — v3.13.2
+# Installed web-app startup — v3.14.4
 
 ## Changes
 
-- A post-build step generates `dist/client/startup-assets.json` from the production bundler's browser, Today, layout-context and checkbox dependency graphs plus CSS. Each listed file must exist or the build fails. Optional Progress, Holiday, nutrition, PDF/font and diagnostics chunks are not precached by this list.
+- A post-build step generates `dist/client/startup-assets.json` from the production bundler's browser, Today and layout-context dependency graphs plus CSS. Each listed file must exist or the build fails. Optional session-editor checkbox, Progress, Holiday, nutrition, PDF/font and diagnostics chunks are not precached by this list.
 - The worker verifies the HTML build marker, manifest version, referenced script/style URLs and every cached/downloaded asset's content type before committing the replacement HTML. Bounded parallel requests and timeouts keep warming best-effort; asset warming never blocks an online document response.
 - An interrupted install, sign-in redirect, quota failure or unavailable asset retains the previous root shell and assets. Only a verified replacement permits cleanup; two prior shell/asset pairs remain. Cache creation order, not lexical version sorting, determines retention. API and sign-in routes still bypass shell caching.
 - Home Screen launches request persistent storage after the enabled-logger milestone during idle time (with a timer fallback). Unsupported APIs, denial and exceptions are harmless. D1 remains authoritative; this is not a replacement for backup, nor a guarantee against user-initiated deletion.
+- In v3.14.4, an internal marker on the first weight input replaces the obsolete accessible-label selector. Readiness runs once at the next animation frame after the logger is enabled, and rechecks that it is still enabled; label changes cannot silently disable timing or the deferred storage request. This is not a measurement of completed paint.
 - Progress's aggregate personal-record scan and the closed session-summary record scan no longer run during Today startup. Existing record calculations and callbacks are preserved and execute when those surfaces are opened.
 - Progress → Data → Startup details loads on demand and shows page-to-logger time, Home Screen mode, verified offline-interface status and granted/best-effort storage. It makes no telemetry request and reads no workout records.
 
@@ -16,14 +17,18 @@ Use Node >=22.13.0:
 ```sh
 npm run build
 npx tsc --noEmit --incremental false
-node --test scripts/test-startup-cache.mjs scripts/test-workout-reliability.mjs scripts/test-day-report-alerts.mjs
+node --test scripts/test-startup-cache.mjs scripts/test-startup-readiness.mjs scripts/test-workout-reliability.mjs scripts/test-day-report-alerts.mjs
 ```
 
 The suite covers complete installs, failed assets, redirected sign-in pages, mismatched manifests, malformed cached JavaScript, quota failures, previous-cache retention, preload reuse, optional persistent storage, deferred computation and the existing workout/draft/outbox/timer/PDF regressions.
 
+For v3.14.4, the production build verified 31 startup files, compared with v3.14.3's 34 files (659,946 raw / 193,161 gzip bytes). Gzip sizes are local estimates, not measured transfer sizes. The removed checkbox dependencies stay available on demand in the session editor. The 63 automated regressions, TypeScript check and production build passed. New readiness tests cover the actual rendered marker, disabled-to-enabled transition, rechecking readiness at the animation frame, one-shot delivery and cleanup. Browser relaunches and real iPhone launch times were not remeasured for this patch; the smaller precache is not proof of a particular cached cold-launch speed gain.
+
 For production-web browser fixtures, start the local production Worker on port 9350, then `node scripts/pwa-startup-fixture.mjs`. Launch a disposable headless Chrome profile on debugging port 9343 and run `node scripts/test-pwa-startup-browser.mjs`. All API handlers use synthetic records in an in-memory database. No production data or private credentials are used. Ports 9340/9341 serve the same current web build with the v3.13.1/current worker strategies; neither serves a native bundle.
 
 Checks cover five document relaunches per strategy, recovered drafts, 393px overflow, offline reopen, every actually requested startup JS/CSS URL, denied persistence after readiness, the diagnostics dialog, and recovery after a deliberately failed critical asset followed by connectivity recovery.
+
+### Historical desktop benchmark (v3.13.2)
 
 The final controlled run on this Mac returned a 96ms median for both worker strategies, with the same current UI and a 1,500ms HTML-server delay. Five launches ranged from 79–894ms for v3.13.1 and 81–120ms for the new worker. An earlier run returned medians of 79ms and 96ms respectively. These small desktop samples do not establish an additional speed improvement: v3.13.1 already removed the network wait. The current changes primarily reduce cold-cache/update failures and remove unnecessary startup work. A synthetic 288-record phase's previously unconditional personal-record scan took about 1.7ms median on this Mac; Today now skips it. These are desktop measurements, not iPhone results. All 41 automated regression tests passed, along with the production-web browser checks.
 

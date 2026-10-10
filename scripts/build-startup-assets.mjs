@@ -16,7 +16,6 @@ const entries = [
   'virtual:vinext-app-browser-entry',
   'node_modules/vinext/dist/shims/layout-segment-context.js',
   'app/workout-app.tsx',
-  'components/ui/checkbox.tsx',
 ];
 const assets = new Set(graph.appBootstrapPreinitModules);
 for (const entry of entries) {

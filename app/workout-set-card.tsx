@@ -98,6 +98,7 @@ export function WorkoutSetCard({
           <span className="block">Weight (kg)</span>
           <Input
             id={`${id}-weight`}
+            data-startup-logger={number === 1 ? '' : undefined}
             aria-label={`Set ${number} Weight (kg)`}
             aria-invalid={Boolean(errors.weight)}
             aria-describedby={errors.weight ? `${id}-weight-error` : undefined}
