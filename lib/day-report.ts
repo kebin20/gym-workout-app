@@ -1,4 +1,8 @@
-import { displayWeekNumber, type TrainingDay } from './routine';
+import {
+  displayWeekNumber,
+  correctedExerciseName,
+  type TrainingDay,
+} from './routine';
 import type { WorkoutEntry } from './workout-types';
 
 export type ReportSet = {
@@ -48,7 +52,15 @@ export function reportMetrics(entry: WorkoutEntry) {
 export function buildDayReport(day: TrainingDay, entries: WorkoutEntry[]) {
   // Include partial saved logs and device-local queued saves, but not undo tombstones.
   const byKey = new Map<string, WorkoutEntry>();
-  for (const entry of entries) {
+  for (const stored of entries) {
+    const name = correctedExerciseName(
+      stored.week,
+      stored.day,
+      stored.exerciseOrder,
+      stored.exercise,
+    );
+    const entry =
+      name === stored.exercise ? stored : { ...stored, exercise: name };
     if (entry.day !== day) continue;
     const key = `${entry.week}|${entry.exerciseOrder}`;
     const previous = byKey.get(key);

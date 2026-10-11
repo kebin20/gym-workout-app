@@ -78,7 +78,13 @@ import {
   type RoutineExercise,
   type TrainingDay,
 } from '@/lib/routine';
-import { planForSession, type PlannedExercise } from '@/lib/session-plan';
+import {
+  planForSession,
+  workoutDraftKey,
+  correctedSessionExercise,
+  type PlannedExercise,
+} from '@/lib/session-plan';
+import { correctedExerciseName } from '@/lib/routine';
 import {
   personalRecordsFor,
   totalPersonalRecords,
@@ -205,13 +211,19 @@ const emptyDraft: Draft = {
 function normaliseWorkoutEntries(entries: WorkoutEntry[]) {
   return entries.map((entry) => ({
     ...entry,
+    exercise: correctedExerciseName(
+      entry.week,
+      entry.day,
+      entry.exerciseOrder,
+      entry.exercise,
+    ),
     completed: Boolean(entry.completed),
   }));
 }
 
 function normaliseSessionExercises(exercises: SessionExercise[]) {
   return exercises.map((exercise) => ({
-    ...exercise,
+    ...correctedSessionExercise(exercise),
     skipped: Boolean(exercise.skipped),
     custom: Boolean(exercise.custom),
   }));
@@ -318,9 +330,7 @@ function resumeDraftIndex(
     return Math.max(
       0,
       plan.findIndex(
-        (item) =>
-          !item.skipped &&
-          key === `workout:${week}:${day}:${item.order}:${item.name}`,
+        (item) => !item.skipped && key === workoutDraftKey(week, day, item),
       ),
     );
   } catch {
@@ -342,10 +352,23 @@ function readPendingWorkouts(): PendingWorkout[] {
         custom: false,
       } as PlannedExercise);
     });
-    return readOutbox<WorkoutEntry>(
-      'workout',
-      window.localStorage,
-    ) as PendingWorkout[];
+    return (
+      readOutbox<WorkoutEntry>(
+        'workout',
+        window.localStorage,
+      ) as PendingWorkout[]
+    ).map((pending) => ({
+      ...pending,
+      record: {
+        ...pending.record,
+        exercise: correctedExerciseName(
+          pending.record.week,
+          pending.record.day,
+          pending.record.exerciseOrder,
+          pending.record.exercise,
+        ),
+      },
+    }));
   } catch {
     return [];
   }
@@ -1038,7 +1061,7 @@ export function WorkoutApp() {
         }),
       )
     : undefined;
-  const draftKey = `workout:${activeWeek}:${activeDay}:${exercise.order}:${exercise.name}`;
+  const draftKey = workoutDraftKey(activeWeek, activeDay, exercise);
   const dayProgress = useMemo(
     () =>
       Object.fromEntries(

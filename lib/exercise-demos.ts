@@ -3,6 +3,7 @@ export type ExerciseDemoVariant = {
   gif: string;
   cues: readonly string[];
   note?: string;
+  source?: { label: string; url: string };
 };
 
 export type ExerciseDemo = {
@@ -74,6 +75,23 @@ const exerciseDemos: Record<string, ExerciseDemo> = {
         ],
         'The animation shows the same knee-curl pattern from a standing machine. Use your seated-machine setup as programmed.',
       ),
+    ],
+  },
+  'Leg Extension': {
+    variants: [
+      {
+        label: 'Leg extension',
+        gif: 'https://www.strengthlog.com/wp-content/uploads/2020/03/leg-extension-seated.gif',
+        cues: [
+          'Adjust the seat so your knees align with the machine pivot, with the roller just above your ankles.',
+          'Keep your back and hips supported while straightening your knees smoothly; avoid kicking or forcing them backward.',
+          'Lower slowly through a comfortable range without letting the weight stack slam.',
+        ],
+        source: {
+          label: 'StrengthLog leg-extension guide',
+          url: 'https://www.strengthlog.com/leg-extension/',
+        },
+      },
     ],
   },
   'Dumbbell or Cable Lateral Raise': {
@@ -420,6 +438,7 @@ const aliases: readonly [string, string][] = [
   ['chest press', 'Machine Chest Press or Dumbbell Bench'],
   ['lat pulldown', 'Lat Pulldown'],
   ['leg curl', 'Seated Leg Curl'],
+  ['leg extension', 'Leg Extension'],
   ['lateral raise', 'Dumbbell or Cable Lateral Raise'],
   ['cable crunch', 'Cable Crunch'],
   ['romanian deadlift', 'Romanian Deadlift (DB, barbell or Smith)'],

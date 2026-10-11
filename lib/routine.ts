@@ -11,6 +11,23 @@ export type RoutineExercise = {
   alternative: string;
 };
 
+// Correct the mislabeled Phase 1 slot without rewriting stored workout data
+// or renaming actual leg curls elsewhere (including Phase 2/substitutions).
+export function correctedExerciseName(
+  week: number,
+  day: string,
+  order: number,
+  name: string,
+) {
+  return week >= 1 &&
+    week <= 12 &&
+    day === 'A' &&
+    order === 4 &&
+    name === 'Seated Leg Curl'
+    ? 'Leg Extension'
+    : name;
+}
+
 export const routine: RoutineExercise[] = [
   {
     day: 'A',
@@ -45,12 +62,12 @@ export const routine: RoutineExercise[] = [
   {
     day: 'A',
     order: 4,
-    name: 'Seated Leg Curl',
+    name: 'Leg Extension',
     targetSets: 2,
     repRange: '10–15',
     rest: '60–90 sec',
-    muscles: 'Hamstrings',
-    alternative: 'Lying leg curl',
+    muscles: 'Quads',
+    alternative: 'Single-leg leg extension',
   },
   {
     day: 'A',

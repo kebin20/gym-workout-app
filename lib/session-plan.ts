@@ -1,5 +1,6 @@
 import {
   routineForWeek,
+  correctedExerciseName,
   type RoutineExercise,
   type TrainingDay,
 } from '@/lib/routine';
@@ -10,6 +11,45 @@ export type PlannedExercise = RoutineExercise & {
   skipped: boolean;
   custom: boolean;
 };
+
+export function workoutDraftKey(
+  week: number,
+  day: TrainingDay,
+  exercise: Pick<PlannedExercise, 'order' | 'name' | 'custom'>,
+) {
+  // Keep the existing storage identity for this label correction. No draft
+  // migration, pruning, or cross-exercise copying is needed.
+  const name =
+    week >= 1 &&
+    week <= 12 &&
+    day === 'A' &&
+    exercise.order === 4 &&
+    !exercise.custom &&
+    exercise.name === 'Leg Extension'
+      ? 'Seated Leg Curl'
+      : exercise.name;
+  return `workout:${week}:${day}:${exercise.order}:${name}`;
+}
+
+export function correctedSessionExercise<T extends SessionExercise>(
+  exercise: T,
+): T {
+  const name = exercise.custom
+    ? exercise.name
+    : correctedExerciseName(
+        exercise.week,
+        exercise.day,
+        exercise.exerciseOrder,
+        exercise.name,
+      );
+  if (name === exercise.name) return exercise;
+  return {
+    ...exercise,
+    name,
+    muscles: 'Quads',
+    alternative: 'Single-leg leg extension',
+  };
+}
 
 export function defaultSessionPlan(
   week: number,
@@ -40,6 +80,7 @@ export function planForSession(
 ): PlannedExercise[] {
   const saved = sessionExercises
     .filter((exercise) => exercise.week === week && exercise.day === day)
+    .map(correctedSessionExercise)
     .sort((left, right) => left.displayOrder - right.displayOrder);
   const source = saved.length > 0 ? saved : defaultSessionPlan(week, day);
   return source.map((exercise) => ({
