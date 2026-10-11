@@ -130,12 +130,12 @@ export default function ExerciseDemoDialog({
               Use this as a movement reference, not a substitute for in-person
               coaching. Animation from the{' '}
               <a
-                href={exerciseDemoSource}
+                href={exerciseDemoVariant.source?.url ?? exerciseDemoSource}
                 target="_blank"
                 rel="noreferrer"
                 className="font-semibold text-primary underline-offset-2 hover:underline"
               >
-                open exercise library
+                {exerciseDemoVariant.source?.label ?? 'open exercise library'}
               </a>
               .
             </p>

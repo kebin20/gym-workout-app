@@ -1,6 +1,7 @@
 import { env, waitUntil } from 'cloudflare:workers';
 
 import { syncWorkoutEntries } from '@/lib/google-sheet-sync';
+import { correctedSessionExercise } from '@/lib/session-plan';
 import { parseSyncCursor } from '@/lib/sync-cursor';
 import { validateWorkoutNumbers } from '@/lib/workout-validation';
 import {
@@ -89,7 +90,9 @@ async function resolveExercise(
     .first<SessionExercise>();
   if (sessionExercise)
     return {
-      exercise: routineFromSessionExercise(sessionExercise),
+      exercise: routineFromSessionExercise(
+        correctedSessionExercise(sessionExercise),
+      ),
       custom: Boolean(sessionExercise.custom),
     };
 
