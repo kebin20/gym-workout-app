@@ -1,4 +1,4 @@
-# Installed web-app startup — v3.14.4
+# Installed web-app startup — v3.14.5
 
 ## Changes
 
@@ -9,6 +9,8 @@
 - In v3.14.4, an internal marker on the first weight input replaces the obsolete accessible-label selector. Readiness runs once at the next animation frame after the logger is enabled, and rechecks that it is still enabled; label changes cannot silently disable timing or the deferred storage request. This is not a measurement of completed paint.
 - Progress's aggregate personal-record scan and the closed session-summary record scan no longer run during Today startup. Existing record calculations and callbacks are preserved and execute when those surfaces are opened.
 - Progress → Data → Startup details loads on demand and shows page-to-logger time, Home Screen mode, verified offline-interface status and granted/best-effort storage. It makes no telemetry request and reads no workout records.
+- In v3.14.5, Today reads the workout queue once for initial overlay/count/blocked status. Ordinary renders use an in-memory snapshot; save, sync and cross-tab storage events refresh it from durable storage. Empty queues no longer trigger an extra startup flush/read. Queue acknowledgement and concurrent-revision protections are unchanged.
+- The session editor, session recap and personal-record dialog now live in an on-demand module. Their controls and callbacks remain unchanged; recap sorting also avoids mutating the caller's history array. Full cached history still hydrates before logging so the correct unfinished week, exercise and draft can be recovered. Further history deferral remains conditional on real-device profiling.
 
 ## Verification
 
@@ -17,12 +19,14 @@ Use Node >=22.13.0:
 ```sh
 npm run build
 npx tsc --noEmit --incremental false
-node --test scripts/test-startup-cache.mjs scripts/test-startup-readiness.mjs scripts/test-workout-reliability.mjs scripts/test-day-report-alerts.mjs
+node --test scripts/test-startup-cache.mjs scripts/test-startup-readiness.mjs scripts/test-startup-dialogs.mjs scripts/test-workout-reliability.mjs scripts/test-day-report-alerts.mjs
 ```
 
 The suite covers complete installs, failed assets, redirected sign-in pages, mismatched manifests, malformed cached JavaScript, quota failures, previous-cache retention, preload reuse, optional persistent storage, deferred computation and the existing workout/draft/outbox/timer/PDF regressions.
 
 For v3.14.4, the production build verified 31 startup files, compared with v3.14.3's 34 files (659,946 raw / 193,161 gzip bytes). Gzip sizes are local estimates, not measured transfer sizes. The removed checkbox dependencies stay available on demand in the session editor. The 63 automated regressions, TypeScript check and production build passed. New readiness tests cover the actual rendered marker, disabled-to-enabled transition, rechecking readiness at the animation frame, one-shot delivery and cleanup. Browser relaunches and real iPhone launch times were not remeasured for this patch; the smaller precache is not proof of a particular cached cold-launch speed gain.
+
+For v3.14.5, the startup graph totals 632,862 raw bytes / 183,013 gzip bytes, compared with v3.14.4's 638,666 / 184,099 bytes. The 5,804-byte raw reduction removes code from the initial parse path, while gzip falls by 1,086 bytes. The bundler emits 33 startup files instead of 31 because it extracts shared helper/icon chunks; byte totals are more informative than the file count alone. These are modest bundle savings, not a claimed percentage reduction in iPhone launch time. The 68 automated regressions, TypeScript check and build passed; added coverage checks on-demand assets, editor actions/save guards, recap continuation, record dismissal and queue snapshot freshness without render-time storage reads.
 
 For production-web browser fixtures, start the local production Worker on port 9350, then `node scripts/pwa-startup-fixture.mjs`. Launch a disposable headless Chrome profile on debugging port 9343 and run `node scripts/test-pwa-startup-browser.mjs`. All API handlers use synthetic records in an in-memory database. No production data or private credentials are used. Ports 9340/9341 serve the same current web build with the v3.13.1/current worker strategies; neither serves a native bundle.
 

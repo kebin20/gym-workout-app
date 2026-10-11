@@ -79,6 +79,7 @@ test('focus-safe controls preserve numeric zero, constraints and accessibility l
 test('all Liftline form surfaces use the shared typography and keep pinch zoom available', () => {
   for (const file of [
     'app/workout-app.tsx',
+    'app/workout-session-dialogs.tsx',
     'app/holiday-workout.tsx',
     'app/training-tools-dialog.tsx',
   ]) {

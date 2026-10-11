@@ -292,7 +292,7 @@ test('startup asset manifest uses the production graph and excludes optional vie
     assert.ok(existsSync(new URL('../dist/client' + url, import.meta.url)));
     assert.doesNotMatch(
       url,
-      /checkbox-|progress-view|startup-details|day-report-pdf|\.ttf|nutrition-view|holiday-workout/,
+      /checkbox-|workout-session-dialogs|progress-view|startup-details|day-report-pdf|\.ttf|nutrition-view|holiday-workout/,
     );
   }
 });
