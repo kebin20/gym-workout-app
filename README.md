@@ -10,7 +10,7 @@ Made with ChatGPT Codex
 
 The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgpt.site](https://liftline-strength-plan.ktanzyl.chatgpt.site). Access is restricted to the site owner.
 
-Current production version: **v3.14.4**
+Current production version: **v3.14.5**
 
 The experimental [bundled iOS foundation](docs/native-ios.md) is included in the repository, but is not ready for personal logging: native devices display a setup guard until the storage/connection choice and real-device tests are complete. The private web app keeps its existing storage and functionality, with faster cached startup. See the [release rollback notes](docs/rollback.md) for the pre-release backup.
 
@@ -68,6 +68,7 @@ Minor fixes, visual refinements, and deployment maintenance are grouped into the
 - Place Weight, Reps and per-set RIR in compact aligned cards with optional adjustment controls.
 - In v3.14.3, keep rep adjustments at one or above, clear a misleading completion state after an invalid edit, show field-specific validation, align visible and spoken control labels, and provide Undo after removing a draft set.
 - In v3.14.4, restore startup timing and deferred persistent-storage requests with a stable logger marker, and keep session-editor checkbox code out of the initial offline cache.
+- In v3.14.5, render the offline queue from memory, reuse the startup queue snapshot, and load the session editor, recap and personal-record dialogs on demand. Fresh durable queue reads remain at save/sync boundaries.
 
 ### v3.13 — Calmer, clearer workout UI
 
