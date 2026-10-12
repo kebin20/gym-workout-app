@@ -4,10 +4,16 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { DatabaseSync } from 'node:sqlite';
 import ts from 'typescript';
+import { webcrypto } from 'node:crypto';
 
 const root = path.resolve(new URL('..', import.meta.url).pathname);
 const require = createRequire(import.meta.url);
-export function routeFixture({ sheetEntries = [] } = {}) {
+export function routeFixture({
+  sheetEntries = [],
+  beforeBatch,
+  failBatchAt,
+  beforeRun,
+} = {}) {
   const sqlite = new DatabaseSync(':memory:');
   for (const file of readdirSync(path.join(root, 'drizzle'))
     .filter((file) => file.endsWith('.sql'))
@@ -33,6 +39,7 @@ export function routeFixture({ sheetEntries = [] } = {}) {
           };
         },
         async run() {
+          if (beforeRun) await beforeRun(sql, sqlite);
           return {
             meta: {
               changes: Number(sqlite.prepare(sql).run(...values).changes),
@@ -43,15 +50,19 @@ export function routeFixture({ sheetEntries = [] } = {}) {
       return statement;
     },
     async batch(statements) {
+      if (beforeBatch) await beforeBatch(statements, sqlite);
       sqlite.exec('BEGIN');
       try {
         const results = [];
-        for (const statement of statements)
+        for (const statement of statements) {
+          if (failBatchAt !== undefined && results.length === failBatchAt)
+            throw new Error('Synthetic transaction failure');
           results.push(
             /^\s*SELECT/i.test(statement.sql)
               ? await statement.all()
               : await statement.run(),
           );
+        }
         sqlite.exec('COMMIT');
         return results;
       } catch (error) {
@@ -125,6 +136,7 @@ export function routeFixture({ sheetEntries = [] } = {}) {
         TextEncoder,
         structuredClone,
         console,
+        crypto: webcrypto,
       },
       { filename: file },
     );

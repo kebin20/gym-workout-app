@@ -1,4 +1,9 @@
 import { env } from 'cloudflare:workers';
+import {
+  activeProgrammeId,
+  programmeGuardSql,
+  programmeMatches,
+} from '@/lib/programme-storage';
 
 import { routineForWeek, type TrainingDay } from '@/lib/routine';
 import {
@@ -7,6 +12,7 @@ import {
 } from '@/lib/workout-types';
 
 type ProgramPayload = {
+  programmeId?: string;
   week?: unknown;
   day?: unknown;
   exercises?: unknown;
@@ -67,6 +73,15 @@ export async function POST(request: Request) {
   try {
     if (!env.DB) throw new Error('Workout database is unavailable.');
     const body = (await request.json()) as ProgramPayload;
+    const programmeId = await activeProgrammeId(env.DB);
+    if (!programmeMatches(body.programmeId, programmeId))
+      return Response.json(
+        {
+          error:
+            'This edit belongs to another programme. Reload before editing.',
+        },
+        { status: 409 },
+      );
     const week = Number(body.week);
     const day = (
       typeof body.day === 'string' ? body.day : ''
@@ -138,14 +153,14 @@ export async function POST(request: Request) {
 
     const statements = [
       env.DB.prepare(
-        'DELETE FROM session_exercises WHERE week = ? AND day = ?',
-      ).bind(week, day),
+        `DELETE FROM session_exercises WHERE week = ? AND day = ? AND ${programmeGuardSql}`,
+      ).bind(week, day, programmeId),
       ...validExercises.map((exercise) =>
         env
           .DB!.prepare(`INSERT INTO session_exercises (
         week, day, exercise_order, display_order, name, target_sets, rep_range, rest,
         muscles, alternative, skipped, custom, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${programmeGuardSql}`)
           .bind(
             exercise.week,
             exercise.day,
@@ -160,10 +175,16 @@ export async function POST(request: Request) {
             exercise.skipped ? 1 : 0,
             exercise.custom ? 1 : 0,
             exercise.updatedAt,
+            programmeId,
           ),
       ),
     ];
     await env.DB.batch(statements);
+    if (!programmeMatches(programmeId, await activeProgrammeId(env.DB)))
+      return Response.json(
+        { error: 'The programme changed while editing. Reload.' },
+        { status: 409 },
+      );
 
     const saved = await env.DB.prepare(
       `SELECT ${sessionExerciseSelectColumns} FROM session_exercises WHERE week = ? AND day = ? ORDER BY display_order`,

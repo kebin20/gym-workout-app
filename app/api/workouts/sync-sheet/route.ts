@@ -1,4 +1,5 @@
 import { env } from 'cloudflare:workers';
+import { activeProgrammeId } from '@/lib/programme-storage';
 
 import {
   syncWorkoutEntries,
@@ -9,6 +10,14 @@ import { workoutSelectColumns } from '@/lib/workout-types';
 export async function POST() {
   try {
     if (!env.DB) throw new Error('Workout database is unavailable.');
+    if ((await activeProgrammeId(env.DB)) !== 'initial')
+      return Response.json(
+        {
+          error:
+            'The existing Google Sheet belongs to the original programme. Use JSON backups and PDF reports for later programmes.',
+        },
+        { status: 409 },
+      );
     const results = await env.DB.prepare(
       `SELECT ${workoutSelectColumns} FROM workout_entries WHERE completed = 1 AND exercise_order < 100 AND week <= 12 ORDER BY week, day, exercise_order`,
     ).all<WorkoutSheetEntry>();

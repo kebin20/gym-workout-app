@@ -44,6 +44,7 @@ type BodyMetric = {
 };
 
 type Props = {
+  programmeId?: string;
   tool: TrainingTool;
   schedule: ProgramSchedule;
   activeWeek: number;
@@ -157,6 +158,7 @@ function ScorePicker({
 }
 
 export default function TrainingToolsDialog({
+  programmeId = 'initial',
   tool,
   schedule,
   activeWeek,
@@ -244,7 +246,7 @@ export default function TrainingToolsDialog({
       const response = await fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(scheduleDraft),
+        body: JSON.stringify({ ...scheduleDraft, programmeId }),
       });
       const data = (await response.json()) as { error?: string };
       if (!response.ok)

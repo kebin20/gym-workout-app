@@ -1,4 +1,5 @@
 import type { WorkoutEntry } from '@/lib/workout-types';
+import { exerciseIdentity } from './exercise-identity';
 
 const setNumbers = [1, 2, 3, 4, 5] as const;
 
@@ -39,9 +40,8 @@ export function personalRecordsFor(
     .filter(
       (candidate) =>
         candidate.completed &&
-        candidate.day === entry.day &&
-        candidate.exerciseOrder === entry.exerciseOrder &&
-        candidate.week !== entry.week,
+        exerciseIdentity(candidate) === exerciseIdentity(entry) &&
+        candidate.week < entry.week,
     )
     .map(workoutMetrics);
   if (previous.length === 0 || current.sets === 0) return [];

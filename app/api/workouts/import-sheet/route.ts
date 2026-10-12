@@ -1,4 +1,5 @@
 import { env } from 'cloudflare:workers';
+import { activeProgrammeId } from '@/lib/programme-storage';
 
 import {
   readWorkoutEntriesFromSheet,
@@ -110,6 +111,10 @@ function validKeys(value: unknown) {
 
 async function loadComparison() {
   if (!env.DB) throw new Error('Workout database is unavailable.');
+  if ((await activeProgrammeId(env.DB)) !== 'initial')
+    throw new Error(
+      'The Google Sheet belongs to the original programme. Later programmes use JSON backups and PDF reports.',
+    );
   const sheetResult = await readWorkoutEntriesFromSheet();
   if (!sheetResult.ok)
     throw new Error(sheetResult.message ?? 'Unable to read the Google Sheet.');
@@ -222,7 +227,7 @@ export async function POST(request: Request) {
         set2_reps, set3_weight, set3_reps, set4_weight, set4_reps, set5_weight, set5_reps,
         set_count, rir, notes, completed, completed_at, sync_status, sheet_synced_at, sync_error, updated_at,
         set1_rir, set2_rir, set3_rir, set4_rir, set5_rir
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 'synced', ?, NULL, ?, ?, ?, ?, ?, ?)
+      ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 'synced', ?, NULL, ?, ?, ?, ?, ?, ? WHERE COALESCE((SELECT value FROM app_settings WHERE key='programmeId'),'initial')='initial'
       ON CONFLICT(week, day, exercise_order) DO UPDATE SET
         exercise = excluded.exercise, target = excluded.target,
         set1_weight = excluded.set1_weight, set1_reps = excluded.set1_reps,

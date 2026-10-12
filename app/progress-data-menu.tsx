@@ -31,6 +31,9 @@ export type ProgressDataMenuProps = {
   downloadBackup: () => void;
   onRestoreBackup: () => void;
   onStartupDetails?: () => void;
+  onDeviceRecovery?: () => void;
+  onProgrammes?: () => void;
+  sheetAvailable?: boolean;
 };
 
 export default function ProgressDataMenu(props: ProgressDataMenuProps) {
@@ -55,7 +58,7 @@ export default function ProgressDataMenu(props: ProgressDataMenuProps) {
           align="end"
           className="w-64 max-w-[calc(100vw-2rem)] font-sans"
         >
-          {props.activePhase === 1 && (
+          {props.activePhase === 1 && props.sheetAvailable !== false && (
             <DropdownMenuGroup>
               <DropdownMenuLabel>Google Sheet</DropdownMenuLabel>
               <DropdownMenuItem
@@ -93,6 +96,22 @@ export default function ProgressDataMenu(props: ProgressDataMenuProps) {
             >
               <Upload /> Restore backup
             </DropdownMenuItem>
+            {props.onDeviceRecovery && (
+              <DropdownMenuItem
+                className="min-h-11 px-3"
+                onClick={props.onDeviceRecovery}
+              >
+                <Download /> Export device recovery
+              </DropdownMenuItem>
+            )}
+            {props.onProgrammes && (
+              <DropdownMenuItem
+                className="min-h-11 px-3"
+                onClick={props.onProgrammes}
+              >
+                <Database /> Programme history &amp; restart
+              </DropdownMenuItem>
+            )}
           </DropdownMenuGroup>
           {props.onStartupDetails && (
             <>

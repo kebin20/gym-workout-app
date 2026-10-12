@@ -11,6 +11,7 @@ export type SetRirValues = {
 };
 
 export type WorkoutEntry = SetRirValues & {
+  programmeId?: string;
   id?: number;
   week: number;
   day: TrainingDay;

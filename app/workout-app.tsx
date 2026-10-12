@@ -85,6 +85,12 @@ import {
   type PlannedExercise,
 } from '@/lib/session-plan';
 import { correctedExerciseName } from '@/lib/routine';
+import { deviceRecoverySnapshot } from '@/lib/device-recovery';
+import {
+  programmeOutboxKey,
+  overlayProgrammeRecords,
+} from '@/lib/programme-client';
+import { exerciseNameMatches } from '@/lib/exercise-identity';
 import {
   personalRecordsFor,
   totalPersonalRecords,
@@ -113,7 +119,6 @@ import {
   blockOutbox,
   enqueueOutbox,
   migrateWorkoutOutbox,
-  overlayOutbox,
   readOutbox,
   retryableStatus,
   singleFlight,
@@ -144,6 +149,7 @@ type SheetSyncResult = {
 };
 
 type WorkoutPayload = SetRirValues & {
+  programmeId?: string;
   week: number;
   day: TrainingDay;
   exerciseOrder: number;
@@ -176,6 +182,7 @@ type BackupSummary = {
   bodyMeasurements?: number;
   readinessChecks?: number;
   holidayRecords?: number;
+  archivedProgrammes?: number;
 };
 
 type SheetImportItem = {
@@ -232,6 +239,7 @@ function normaliseSessionExercises(exercises: SessionExercise[]) {
 function readCachedWorkoutEntries(): {
   entries: WorkoutEntry[];
   syncedAt: string | null;
+  programmeId: string;
 } | null {
   try {
     const cached = window.localStorage.getItem(workoutCacheKey);
@@ -239,10 +247,12 @@ function readCachedWorkoutEntries(): {
     const parsed = JSON.parse(cached) as {
       entries?: WorkoutEntry[];
       syncedAt?: string;
+      programmeId?: string;
     };
     return Array.isArray(parsed.entries)
       ? {
           entries: normaliseWorkoutEntries(parsed.entries),
+          programmeId: parsed.programmeId ?? 'initial',
           syncedAt:
             typeof parsed.syncedAt === 'string' ? parsed.syncedAt : null,
         }
@@ -252,7 +262,11 @@ function readCachedWorkoutEntries(): {
   }
 }
 
-function cacheWorkoutEntries(entries: WorkoutEntry[], syncedAt?: string) {
+function cacheWorkoutEntries(
+  entries: WorkoutEntry[],
+  syncedAt?: string,
+  programmeId?: string,
+) {
   try {
     const current = window.localStorage.getItem(workoutCacheKey);
     const currentSyncedAt = current
@@ -262,6 +276,12 @@ function cacheWorkoutEntries(entries: WorkoutEntry[], syncedAt?: string) {
       workoutCacheKey,
       JSON.stringify({
         entries,
+        programmeId:
+          programmeId ??
+          (current
+            ? (JSON.parse(current) as { programmeId?: string }).programmeId
+            : undefined) ??
+          'initial',
         cachedAt: Date.now(),
         syncedAt: syncedAt ?? currentSyncedAt ?? null,
       }),
@@ -324,13 +344,19 @@ function resumeDraftIndex(
   plan: PlannedExercise[],
   week: number,
   day: TrainingDay,
+  programmeId = 'initial',
 ) {
   try {
-    const key = latestDraftKey(`workout:${week}:${day}:`, window.localStorage);
+    const key = latestDraftKey(
+      `workout:${programmeId === 'initial' ? '' : programmeId + ':'}${week}:${day}:`,
+      window.localStorage,
+    );
     return Math.max(
       0,
       plan.findIndex(
-        (item) => !item.skipped && key === workoutDraftKey(week, day, item),
+        (item) =>
+          !item.skipped &&
+          key === workoutDraftKey(week, day, item, programmeId),
       ),
     );
   } catch {
@@ -380,6 +406,14 @@ function workoutKey(value: {
   exerciseOrder: number;
 }) {
   return `${value.week}|${value.day}|${value.exerciseOrder}`;
+}
+
+function programmeOverlay(
+  entries: WorkoutEntry[],
+  pending: PendingWorkout[],
+  programmeId: string,
+) {
+  return overlayProgrammeRecords(entries, pending, programmeId);
 }
 
 function optimisticEntry(
@@ -450,6 +484,7 @@ const HolidayWorkout = lazy(() => import('./holiday-workout'));
 const NutritionView = lazy(() => import('./nutrition-view'));
 const TrainingGuideView = lazy(() => import('./training-guide-view'));
 const PlanView = lazy(() => import('./plan-view'));
+const ProgrammeManager = lazy(() => import('./programme-manager'));
 const ProgramEditorDialog = lazy(() =>
   import('./workout-session-dialogs').then((module) => ({
     default: module.ProgramEditorDialog,
@@ -908,6 +943,9 @@ function DashboardMetric({
 export function WorkoutApp() {
   const initialWeek = scheduledWeekForToday(defaultSchedule, false);
   const [view, setView] = useState<View>('today');
+  const [programmeId, setProgrammeId] = useState('initial');
+  const programmeIdRef = useRef('initial');
+  const [programmesOpen, setProgrammesOpen] = useState(false);
   const [holidayMode, setHolidayMode] = useState(false);
   const [activeWeek, setActiveWeek] = useState(initialWeek);
   const [activeDay, setActiveDay] = useState<TrainingDay>('A');
@@ -977,7 +1015,7 @@ export function WorkoutApp() {
   const refreshSequence = useRef(0);
   const mutationSequence = useRef(0);
   const currentSelection = useRef('');
-  currentSelection.current = `${activeWeek}|${activeDay}|${activeIndex}`;
+  currentSelection.current = `${programmeId}|${activeWeek}|${activeDay}|${activeIndex}`;
 
   const activePhase = activeWeek > 12 ? 2 : 1;
   const phaseStartWeek = activePhase === 1 ? 1 : 13;
@@ -1061,7 +1099,12 @@ export function WorkoutApp() {
         }),
       )
     : undefined;
-  const draftKey = workoutDraftKey(activeWeek, activeDay, exercise);
+  const draftKey = workoutDraftKey(
+    activeWeek,
+    activeDay,
+    exercise,
+    programmeId,
+  );
   const dayProgress = useMemo(
     () =>
       Object.fromEntries(
@@ -1078,7 +1121,11 @@ export function WorkoutApp() {
   const previousEntry = exercise
     ? entryIndex.completedByExercise
         .get(`${activePhase}|${activeDay}|${exercise.order}`)
-        ?.find((entry) => entry.week < activeWeek)
+        ?.find(
+          (entry) =>
+            entry.week < activeWeek &&
+            exerciseNameMatches(entry, exercise.name),
+        )
     : undefined;
   const activeSets = exercise ? workingSetsForWeek(exercise, activeWeek) : 1;
   const suggestedRestSeconds = exercise
@@ -1091,7 +1138,7 @@ export function WorkoutApp() {
       const mutation = mutationSequence.current;
       const query =
         cachedEntries && syncedAt
-          ? `?cursor=${encodeURIComponent(syncedAt)}`
+          ? `?cursor=${encodeURIComponent(syncedAt)}&programmeId=${encodeURIComponent(programmeIdRef.current)}`
           : '';
       const response = await fetch(`/api/workouts${query}`, {
         cache: 'no-store',
@@ -1104,6 +1151,7 @@ export function WorkoutApp() {
         cursor?: string;
         schedule?: ProgramSchedule;
         error?: string;
+        programmeId?: string;
       };
       if (!response.ok)
         throw new Error(data.error ?? 'Unable to load workouts.');
@@ -1113,25 +1161,60 @@ export function WorkoutApp() {
       )
         return readCachedWorkoutEntries()?.entries ?? [];
       const incomingEntries = normaliseWorkoutEntries(data.entries ?? []);
+      const nextProgrammeId = data.programmeId ?? 'initial';
+      const programmeChanged = nextProgrammeId !== programmeIdRef.current;
+      programmeIdRef.current = nextProgrammeId;
+      setProgrammeId(nextProgrammeId);
+      if (programmeChanged) {
+        setLastSave(null);
+        setSessionSummaryOpen(false);
+        setPersonalRecordOpen(false);
+      }
       const serverEntries =
-        data.partial && cachedEntries
+        data.partial && cachedEntries && !programmeChanged
           ? mergeWorkoutEntries(cachedEntries, incomingEntries)
           : incomingEntries;
-      const freshEntries = overlayOutbox(
+      const freshEntries = programmeOverlay(
         serverEntries,
         refreshPendingWorkouts(),
-        workoutKey,
+        nextProgrammeId,
       );
       const freshSessionExercises = normaliseSessionExercises(
         data.sessionExercises ?? [],
       );
+      if (programmeChanged) {
+        const unlocked = weeklySummariesForPhase(
+          freshEntries,
+          freshSessionExercises,
+          1,
+        ).every((week) => week.sessions === 3);
+        const selection = startupSessionForWeek(
+          freshEntries,
+          freshSessionExercises,
+          scheduledWeekForToday(data.schedule ?? defaultSchedule, unlocked),
+        );
+        setActiveWeek(selection.week);
+        setActiveDay(selection.day);
+        setActiveIndex(
+          resumeDraftIndex(
+            planForSession(
+              freshSessionExercises,
+              selection.week,
+              selection.day,
+            ),
+            selection.week,
+            selection.day,
+            nextProgrammeId,
+          ),
+        );
+      }
       setEntries(freshEntries);
       setSessionExercises(freshSessionExercises);
       if (data.schedule) {
         setSchedule(data.schedule);
         cacheSchedule(data.schedule);
       }
-      cacheWorkoutEntries(freshEntries, data.cursor);
+      cacheWorkoutEntries(freshEntries, data.cursor, nextProgrammeId);
       cacheSessionExercises(freshSessionExercises);
       return freshEntries;
     },
@@ -1205,12 +1288,16 @@ export function WorkoutApp() {
     let cancelled = false;
     const cachedSnapshot = readCachedWorkoutEntries();
     const cachedEntries = cachedSnapshot?.entries ?? null;
+    programmeIdRef.current = cachedSnapshot?.programmeId ?? 'initial';
+    setProgrammeId(programmeIdRef.current);
     const cachedSessionExercises = readCachedSessionExercises();
     const cachedSchedule = readCachedSchedule();
     const pending = refreshPendingWorkouts();
     if (cachedSchedule) setSchedule(cachedSchedule);
     if (cachedEntries) {
-      setEntries(overlayOutbox(cachedEntries, pending, workoutKey));
+      setEntries(
+        programmeOverlay(cachedEntries, pending, programmeIdRef.current),
+      );
       const cachedPhaseTwoUnlocked = weeklySummariesForPhase(
         cachedEntries,
         cachedSessionExercises,
@@ -1235,6 +1322,7 @@ export function WorkoutApp() {
           ),
           startupSession.week,
           startupSession.day,
+          programmeIdRef.current,
         ),
       );
       // Cached workouts are usable immediately; refresh the authoritative data
@@ -1242,7 +1330,7 @@ export function WorkoutApp() {
       startupWeekApplied.current = true;
       setLoading(false);
     } else if (pending.length) {
-      setEntries(overlayOutbox([], pending, workoutKey));
+      setEntries(programmeOverlay([], pending, programmeIdRef.current));
       setLoading(false);
     }
     if (cachedSessionExercises.length > 0)
@@ -1269,7 +1357,9 @@ export function WorkoutApp() {
     const handleStorage = () => {
       const pending = refreshPendingWorkouts();
       setQueueIssue(outboxStorageIssue(window.localStorage));
-      setEntries((current) => overlayOutbox(current, pending, workoutKey));
+      setEntries((current) =>
+        programmeOverlay(current, pending, programmeIdRef.current),
+      );
     };
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
@@ -1454,7 +1544,12 @@ export function WorkoutApp() {
       startupSession.day,
     );
     setActiveIndex(
-      resumeDraftIndex(startupPlan, startupSession.week, startupSession.day),
+      resumeDraftIndex(
+        startupPlan,
+        startupSession.week,
+        startupSession.day,
+        programmeId,
+      ),
     );
   }, [entries, loading, phaseTwoUnlocked, schedule, sessionExercises]);
 
@@ -1614,6 +1709,7 @@ export function WorkoutApp() {
     setNotice('');
     const now = new Date().toISOString();
     const payload: WorkoutPayload = {
+      programmeId,
       week: activeWeek,
       day: activeDay,
       exerciseOrder: exercise.order,
@@ -1641,7 +1737,7 @@ export function WorkoutApp() {
     };
     const localEntry = optimisticEntry(payload, exercise);
     const previousPending = readPendingWorkouts().filter(
-      (item) => item.key === workoutKey(payload),
+      (item) => item.key === programmeOutboxKey(payload, programmeId),
     );
     const records = personalRecordsFor(localEntry, phaseEntries);
     const nextEntries = replaceWorkoutEntry(entries, localEntry);
@@ -1666,7 +1762,7 @@ export function WorkoutApp() {
     }
 
     const queueForLater = () => {
-      const key = workoutKey(payload);
+      const key = programmeOutboxKey(payload, programmeId);
       if (
         !enqueueOutbox(
           'workout',
@@ -1674,8 +1770,10 @@ export function WorkoutApp() {
           window.localStorage,
         )
       ) {
-        setEntries(entries);
-        cacheWorkoutEntries(entries);
+        if ((payload.programmeId ?? 'initial') === programmeIdRef.current) {
+          setEntries(entries);
+          cacheWorkoutEntries(entries);
+        }
         setSessionCelebrationPending(false);
         setPersonalRecordOpen(false);
         return false;
@@ -1720,6 +1818,13 @@ export function WorkoutApp() {
         sheetSyncQueued?: boolean;
         error?: string;
       };
+      if ((payload.programmeId ?? 'initial') !== programmeIdRef.current) {
+        setError(
+          'The programme changed while saving. Old drafts remain available in device recovery.',
+        );
+        void refreshWorkoutData().catch(() => undefined);
+        return;
+      }
       if (!response.ok && !retryableStatus(response.status)) {
         setEntries(entries);
         cacheWorkoutEntries(entries);
@@ -1780,7 +1885,7 @@ export function WorkoutApp() {
       !lastSave ||
       !navigator.onLine ||
       readPendingWorkouts().some(
-        (item) => item.key === workoutKey(lastSave.saved),
+        (item) => item.key === programmeOutboxKey(lastSave.saved, programmeId),
       )
     ) {
       setError('Reconnect and sync pending changes before undoing this save.');
@@ -1792,9 +1897,10 @@ export function WorkoutApp() {
       const response = await fetch('/api/workouts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(
-          undoWorkoutPayload(lastSave.saved, lastSave.before),
-        ),
+        body: JSON.stringify({
+          ...undoWorkoutPayload(lastSave.saved, lastSave.before),
+          programmeId,
+        }),
         signal: AbortSignal.timeout(15_000),
       });
       const result = (await response.json()) as {
@@ -2037,6 +2143,7 @@ export function WorkoutApp() {
           week: activeWeek,
           day: activeDay,
           exercises: programDraft,
+          programmeId,
         }),
       });
       const result = (await response.json()) as {
@@ -2104,6 +2211,31 @@ export function WorkoutApp() {
     }
   }
 
+  function downloadDeviceRecovery() {
+    try {
+      const content = deviceRecoverySnapshot(window.localStorage);
+      const url = URL.createObjectURL(
+        new Blob([JSON.stringify(content, null, 2)], {
+          type: 'application/json',
+        }),
+      );
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `liftline-device-recovery-${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 120000);
+      setNotice(
+        'Device recovery exported. Keep it private: it contains drafts and unsynced records, not a complete backup.',
+      );
+    } catch (e) {
+      setError(
+        e instanceof Error
+          ? e.message
+          : 'Cannot export device recovery. Storage has not been changed.',
+      );
+    }
+  }
+
   async function previewBackupFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -2116,7 +2248,7 @@ export function WorkoutApp() {
       const response = await fetch('/api/workouts/backup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'preview', backup: parsed }),
+        body: JSON.stringify({ mode: 'preview', backup: parsed, programmeId }),
       });
       const result = (await response.json()) as {
         ok?: boolean;
@@ -2141,13 +2273,28 @@ export function WorkoutApp() {
 
   async function restoreBackup() {
     if (!backupData) return;
+    if (
+      hasPendingOutbox(window.localStorage) ||
+      exerciseDraft.dirty ||
+      saving ||
+      programSaving
+    ) {
+      setError(
+        'Sync queued saves and save or discard the current draft before restoring. Export device recovery first if a record needs review.',
+      );
+      return;
+    }
     setBackupBusy(true);
     setError('');
     try {
       const response = await fetch('/api/workouts/backup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'restore', backup: backupData }),
+        body: JSON.stringify({
+          mode: 'restore',
+          backup: backupData,
+          programmeId,
+        }),
       });
       const result = (await response.json()) as {
         ok?: boolean;
@@ -3388,6 +3535,9 @@ export function WorkoutApp() {
               previewGoogleSheetImport={previewGoogleSheetImport}
               syncGoogleSheet={syncGoogleSheet}
               downloadBackup={downloadBackup}
+              sheetAvailable={programmeId === 'initial'}
+              onDeviceRecovery={downloadDeviceRecovery}
+              onProgrammes={() => setProgrammesOpen(true)}
               onRestoreBackup={() => {
                 setBackupOpen(true);
                 setBackupSummary(null);
@@ -3516,6 +3666,7 @@ export function WorkoutApp() {
       {activeTrainingTool && (
         <Suspense fallback={null}>
           <TrainingToolsDialog
+            programmeId={programmeId}
             tool={activeTrainingTool}
             schedule={schedule}
             activeWeek={activeWeek}
@@ -3585,6 +3736,35 @@ export function WorkoutApp() {
         </Suspense>
       )}
 
+      {programmesOpen && (
+        <Suspense fallback={null}>
+          <ProgrammeManager
+            programmeId={programmeId}
+            onClose={() => setProgrammesOpen(false)}
+            onBeforeStart={() => {
+              if (
+                hasPendingOutbox(window.localStorage) ||
+                exerciseDraft.dirty ||
+                saving ||
+                programSaving ||
+                undoing ||
+                backupBusy
+              )
+                throw new Error(
+                  'Sync queued saves and finish the current draft before starting another programme. Export device recovery if a record needs review.',
+                );
+            }}
+            onStarted={async () => {
+              mutationSequence.current++;
+              await refreshWorkoutData();
+              setView('today');
+              setNotice(
+                'Previous programme archived safely. New programme starts at Phase 1, Week 1.',
+              );
+            }}
+          />
+        </Suspense>
+      )}
       {(backupOpen || importOpen) && (
         <Suspense fallback={null}>
           <DataManagementDialogs

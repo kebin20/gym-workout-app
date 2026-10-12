@@ -11,6 +11,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import type { RoutineExercise } from '@/lib/routine';
 import { workoutMetrics } from '@/lib/workout-metrics';
+import { exerciseIdentity, effortValues } from '@/lib/exercise-identity';
 import type { WorkoutEntry } from '@/lib/workout-types';
 
 type Props = {
@@ -22,7 +23,7 @@ export default function AdvancedInsights({ entries, routine }: Props) {
   const completed = entries.filter((entry) => entry.completed);
   const groups = new Map<string, WorkoutEntry[]>();
   completed.forEach((entry) => {
-    const key = `${entry.day}|${entry.exerciseOrder}`;
+    const key = exerciseIdentity(entry);
     groups.set(key, [...(groups.get(key) ?? []), entry]);
   });
 
@@ -71,8 +72,8 @@ export default function AdvancedInsights({ entries, routine }: Props) {
   const topMuscles = [...muscleSets.entries()]
     .sort((left, right) => right[1] - left[1])
     .slice(0, 4);
-  const lowRirCount = trends.filter(
-    (trend) => trend.latestEntry.rir != null && trend.latestEntry.rir <= 1,
+  const lowRirCount = trends.filter((trend) =>
+    effortValues(trend.latestEntry).some((rir) => rir <= 1),
   ).length;
 
   if (completed.length === 0) {
@@ -119,10 +120,11 @@ export default function AdvancedInsights({ entries, routine }: Props) {
         </p>
         <p className="mt-2 font-sans text-2xl font-bold">{lowRirCount}</p>
         <p className="font-sans text-xs text-muted-foreground">
-          latest exercises at RIR 0–1
+          latest exercises with a set at RIR 0–1
         </p>
         <p className="mt-2 font-sans text-xs text-muted-foreground">
-          Use hard sets selectively so technique and recovery stay reliable.
+          Uses recorded set RIR, falling back to legacy exercise RIR when no set
+          effort is available.
         </p>
       </div>
 
