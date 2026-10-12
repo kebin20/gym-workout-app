@@ -1967,6 +1967,7 @@ export function WorkoutApp() {
     dataActionRunning.current = true;
     setDataActionLoading(true);
     const context: DataActionContext = {
+      hasPendingOutbox: () => hasPendingOutbox(window.localStorage),
       programmeId,
       getCurrentProgrammeId: () => programmeIdRef.current,
       backupData,

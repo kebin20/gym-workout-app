@@ -1,7 +1,6 @@
 // Imported only when a Data action is requested. UI state stays in WorkoutApp.
 import type { ChangeEvent, Dispatch, SetStateAction } from 'react';
 import type { WorkoutEntry } from '@/lib/workout-types';
-import { hasPendingOutbox } from '@/lib/workout-outbox';
 type SheetSyncResult = {
   ok: boolean;
   configured: boolean;
@@ -38,6 +37,7 @@ export type SheetImportPreview = {
 };
 
 export type DataActionContext = {
+  hasPendingOutbox: () => boolean;
   programmeId: string;
   getCurrentProgrammeId: () => string;
   backupData: unknown;
@@ -65,6 +65,7 @@ export type DataActionContext = {
 
 export function createDataActions(context: DataActionContext) {
   const {
+    hasPendingOutbox,
     programmeId,
     backupData,
     selectedImportKeys,
@@ -206,7 +207,7 @@ export function createDataActions(context: DataActionContext) {
     setBackupBusy(true);
     setError('');
     try {
-      if (hasPendingOutbox(window.localStorage))
+      if (hasPendingOutbox())
         throw new Error(
           'Sync your pending main and Holiday workouts before downloading a complete backup. Drafts saved only on this device are not included.',
         );
@@ -274,12 +275,7 @@ export function createDataActions(context: DataActionContext) {
       setError('The programme changed. Reload before restoring.');
       return;
     }
-    if (
-      hasPendingOutbox(window.localStorage) ||
-      exerciseDraft.dirty ||
-      saving ||
-      programSaving
-    ) {
+    if (hasPendingOutbox() || exerciseDraft.dirty || saving || programSaving) {
       setError(
         'Sync queued saves and save or discard the current draft before restoring. Export device recovery first if a record needs review.',
       );

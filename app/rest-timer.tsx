@@ -252,6 +252,11 @@ function setPreference(key: TimerPreferenceKey, value: boolean) {
   listeners.forEach((listener) => listener());
 }
 const loadAlertSettings = () => import('./rest-timer-alerts-panel');
+const alertServices = {
+  prepareTimerSound,
+  playRestTimerSound,
+  showRestNotification,
+};
 const RestTimerAlerts = lazy(loadAlertSettings);
 const formatTimer = (seconds: number) =>
   Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0');
@@ -443,6 +448,7 @@ const RestTimer = forwardRef<
             }
           >
             <RestTimerAlerts
+              services={alertServices}
               notificationIconHref={notificationIconHref}
               readPreferences={readPreferences}
               setPreference={setPreference}

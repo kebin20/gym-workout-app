@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import {
+import type {
   prepareTimerSound,
   playRestTimerSound,
   showRestNotification,
@@ -13,6 +13,11 @@ export type TimerPreferences = {
 };
 export type TimerPreferenceKey = keyof TimerPreferences;
 export type TimerAlertsProps = {
+  services: {
+    prepareTimerSound: typeof prepareTimerSound;
+    playRestTimerSound: typeof playRestTimerSound;
+    showRestNotification: typeof showRestNotification;
+  };
   notificationIconHref: string;
   readPreferences: () => TimerPreferences;
   setPreference: (key: TimerPreferenceKey, value: boolean) => void;
@@ -20,12 +25,15 @@ export type TimerAlertsProps = {
   reportStatus: (message: string) => void;
 };
 export default function RestTimerAlerts({
+  services,
   notificationIconHref,
   readPreferences,
   setPreference,
   subscribe,
   reportStatus: status,
 }: TimerAlertsProps) {
+  const { prepareTimerSound, playRestTimerSound, showRestNotification } =
+    services;
   const [preferences, setPreferences] = useState(readPreferences);
   const { sound, awake, notifications: systemAlerts } = preferences;
   const [permission, setPermission] = useState<NotificationPermission | null>(

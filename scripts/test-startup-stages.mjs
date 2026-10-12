@@ -109,6 +109,7 @@ function actionFixture({
     requests = [];
   let refreshes = 0;
   const ctx = {
+    hasPendingOutbox: () => queue,
     programmeId: 'initial',
     getCurrentProgrammeId: () => ctx.programmeId,
     backupData: { entries: [] },
@@ -335,6 +336,14 @@ test('deferred alert settings preserve permission refresh and gesture-time sound
     },
   );
   const props = {
+    services: {
+      prepareTimerSound: () => prepared++,
+      playRestTimerSound: async () => {
+        played++;
+        return true;
+      },
+      showRestNotification: async (_getter, options) => sent.push(options),
+    },
     notificationIconHref: '/icon.png',
     readPreferences: () => ({ ...preferences }),
     setPreference: (key, value) => {
