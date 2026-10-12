@@ -85,6 +85,7 @@ import {
   type PlannedExercise,
 } from '@/lib/session-plan';
 import { correctedExerciseName } from '@/lib/routine';
+import type { DataActionContext, DataActionName } from './workout-data-actions';
 import { deviceRecoverySnapshot } from '@/lib/device-recovery';
 import {
   programmeOutboxKey,
@@ -100,6 +101,7 @@ import { latestDraftKey } from '@/lib/exercise-drafts';
 import { isBundledApp } from '@/lib/client-runtime';
 import { retainInstalledStorage } from '@/lib/startup-storage';
 import { observeWorkoutLoggerReady } from '@/lib/startup-readiness';
+import { markStartup } from '@/lib/startup-timing';
 import { sessionProgress } from '@/lib/session-progress';
 import { dayPresentation } from '@/lib/day-presentation';
 import ExerciseDraftBoundary, {
@@ -132,6 +134,7 @@ import type {
 import type { ProgramSchedule } from './training-tools-dialog';
 
 type View = 'today' | 'plan' | 'progress' | 'nutrition' | 'guide';
+markStartup('app-module');
 type TrainingTool = 'schedule' | 'readiness' | 'calculator' | 'metrics';
 
 type Draft = {
@@ -999,6 +1002,8 @@ export function WorkoutApp() {
   const [programDraft, setProgramDraft] = useState<SessionExercise[]>([]);
   const [backupOpen, setBackupOpen] = useState(false);
   const [backupBusy, setBackupBusy] = useState(false);
+  const [dataActionLoading, setDataActionLoading] = useState(false);
+  const dataActionRunning = useRef(false);
   const [backupData, setBackupData] = useState<unknown>(null);
   const [backupFileName, setBackupFileName] = useState('');
   const [backupSummary, setBackupSummary] = useState<BackupSummary | null>(
@@ -1140,6 +1145,7 @@ export function WorkoutApp() {
         cachedEntries && syncedAt
           ? `?cursor=${encodeURIComponent(syncedAt)}&programmeId=${encodeURIComponent(programmeIdRef.current)}`
           : '';
+      markStartup('refresh-start');
       const response = await fetch(`/api/workouts${query}`, {
         cache: 'no-store',
         signal: AbortSignal.timeout(15_000),
@@ -1155,6 +1161,7 @@ export function WorkoutApp() {
       };
       if (!response.ok)
         throw new Error(data.error ?? 'Unable to load workouts.');
+      markStartup('refresh-received');
       if (
         requestSequence !== refreshSequence.current ||
         mutation !== mutationSequence.current
@@ -1286,6 +1293,7 @@ export function WorkoutApp() {
 
   useLayoutEffect(() => {
     let cancelled = false;
+    markStartup('cache-start');
     const cachedSnapshot = readCachedWorkoutEntries();
     const cachedEntries = cachedSnapshot?.entries ?? null;
     programmeIdRef.current = cachedSnapshot?.programmeId ?? 'initial';
@@ -1293,6 +1301,7 @@ export function WorkoutApp() {
     const cachedSessionExercises = readCachedSessionExercises();
     const cachedSchedule = readCachedSchedule();
     const pending = refreshPendingWorkouts();
+    markStartup('cache-read');
     if (cachedSchedule) setSchedule(cachedSchedule);
     if (cachedEntries) {
       setEntries(
@@ -1328,6 +1337,7 @@ export function WorkoutApp() {
       // Cached workouts are usable immediately; refresh the authoritative data
       // without holding logging behind a slow connection or changing its cursor.
       startupWeekApplied.current = true;
+      markStartup('session-recovered');
       setLoading(false);
     } else if (pending.length) {
       setEntries(programmeOverlay([], pending, programmeIdRef.current));
@@ -1551,6 +1561,7 @@ export function WorkoutApp() {
         programmeId,
       ),
     );
+    markStartup('session-recovered');
   }, [entries, loading, phaseTwoUnlocked, schedule, sessionExercises]);
 
   const currentSummary = weeklySummaries[activeDisplayWeek - 1];
@@ -1948,130 +1959,98 @@ export function WorkoutApp() {
     }
   }
 
-  async function syncGoogleSheet() {
-    setSyncingSheet(true);
-    setError('');
-    setNotice('');
+  async function runDataAction(
+    action: DataActionName,
+    event?: ChangeEvent<HTMLInputElement>,
+  ) {
+    if (dataActionRunning.current) return;
+    dataActionRunning.current = true;
+    setDataActionLoading(true);
+    const context: DataActionContext = {
+      programmeId,
+      getCurrentProgrammeId: () => programmeIdRef.current,
+      backupData,
+      selectedImportKeys,
+      importPreview,
+      exerciseDraft,
+      saving,
+      programSaving,
+      refreshWorkoutData,
+      setError,
+      setNotice,
+      setSyncingSheet,
+      setImportOpen,
+      setLoadingImport,
+      setImportingSheet,
+      setImportPreview,
+      setSelectedImportKeys,
+      setSheetImportError,
+      setBackupBusy,
+      setBackupSummary,
+      setBackupFileName,
+      setBackupData,
+      setBackupOpen,
+    };
     try {
-      const response = await fetch('/api/workouts/sync-sheet', {
-        method: 'POST',
-      });
-      const result = (await response.json()) as SheetSyncResult;
-      if (!response.ok || !result.ok)
-        throw new Error(result.message ?? 'Unable to sync the Google Sheet.');
-      await refreshWorkoutData();
-      setNotice(
-        `${result.synced} workout ${result.synced === 1 ? 'entry' : 'entries'} sent to Google Sheet.`,
-      );
-    } catch (syncError) {
-      setError(
-        syncError instanceof Error
-          ? syncError.message
-          : 'Unable to sync the Google Sheet.',
-      );
-    } finally {
-      setSyncingSheet(false);
-    }
-  }
-
-  async function previewGoogleSheetImport() {
-    setImportOpen(true);
-    setLoadingImport(true);
-    setImportPreview(null);
-    setSelectedImportKeys([]);
-    setSheetImportError('');
-    setError('');
-    setNotice('');
-    try {
-      const response = await fetch('/api/workouts/import-sheet');
-      const result = (await response.json()) as SheetImportPreview;
-      if (!response.ok || !result.ok)
+      const { createDataActions } = await import('./workout-data-actions');
+      if (context.getCurrentProgrammeId() !== context.programmeId)
         throw new Error(
-          result.message ?? 'Unable to preview the Google Sheet.',
+          'The programme changed. Reload before using this Data action.',
         );
-      setImportPreview(result);
-      setSelectedImportKeys(
-        result.items
-          .filter((item) => item.status === 'new')
-          .map((item) => item.key),
-      );
-    } catch (previewError) {
-      setSheetImportError(
-        previewError instanceof Error
-          ? previewError.message
-          : 'Unable to preview the Google Sheet.',
+      const actions = createDataActions(context);
+      if (action === 'previewBackupFile') {
+        if (event) await actions.previewBackupFile(event);
+      } else await actions[action]();
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : 'Unable to load Data tools. Reconnect and try again.',
       );
     } finally {
-      setLoadingImport(false);
+      dataActionRunning.current = false;
+      setDataActionLoading(false);
     }
   }
-
+  const syncGoogleSheet = () => runDataAction('syncGoogleSheet');
+  const previewGoogleSheetImport = () =>
+    runDataAction('previewGoogleSheetImport');
+  const importSelectedSheetEntries = () =>
+    runDataAction('importSelectedSheetEntries');
+  const downloadBackup = () => runDataAction('downloadBackup');
+  function downloadDeviceRecovery() {
+    try {
+      const content = deviceRecoverySnapshot(window.localStorage);
+      const url = URL.createObjectURL(
+        new Blob([JSON.stringify(content, null, 2)], {
+          type: 'application/json',
+        }),
+      );
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `liftline-device-recovery-${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 120000);
+      setNotice(
+        'Device recovery exported. Keep it private: it contains drafts and unsynced records, not a complete backup.',
+      );
+    } catch (e) {
+      setError(
+        e instanceof Error
+          ? e.message
+          : 'Cannot export device recovery. Storage has not been changed.',
+      );
+    }
+  }
+  const previewBackupFile = (event: ChangeEvent<HTMLInputElement>) =>
+    runDataAction('previewBackupFile', event);
+  const restoreBackup = () => runDataAction('restoreBackup');
   function toggleImportItem(key: string, checked: boolean) {
     setSelectedImportKeys((current) =>
       checked
         ? [...new Set([...current, key])]
-        : current.filter((currentKey) => currentKey !== key),
+        : current.filter((item) => item !== key),
     );
-  }
-
-  async function importSelectedSheetEntries() {
-    if (selectedImportKeys.length === 0) return;
-    setImportingSheet(true);
-    setSheetImportError('');
-    try {
-      const protectedKeys = new Set(
-        importPreview?.items
-          .filter((item) => item.status === 'protected')
-          .map((item) => item.key) ?? [],
-      );
-      const response = await fetch('/api/workouts/import-sheet', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          keys: selectedImportKeys,
-          overwriteKeys: selectedImportKeys.filter((key) =>
-            protectedKeys.has(key),
-          ),
-        }),
-      });
-      const result = (await response.json()) as {
-        ok?: boolean;
-        imported?: number;
-        protected?: number;
-        message?: string;
-      };
-      if (!response.ok || !result.ok)
-        throw new Error(result.message ?? 'Unable to import the Google Sheet.');
-
-      const entriesResponse = await fetch('/api/workouts');
-      const entriesResult = (await entriesResponse.json()) as {
-        entries?: WorkoutEntry[];
-        error?: string;
-      };
-      if (!entriesResponse.ok)
-        throw new Error(
-          entriesResult.error ??
-            'The import finished, but Liftline could not refresh.',
-        );
-      const freshEntries = normaliseWorkoutEntries(entriesResult.entries ?? []);
-      setEntries(freshEntries);
-      cacheWorkoutEntries(freshEntries);
-      setImportOpen(false);
-      const imported = result.imported ?? 0;
-      setNotice(
-        imported > 0
-          ? `${imported} workout ${imported === 1 ? 'entry' : 'entries'} imported from Google Sheet`
-          : 'No Liftline records needed updating.',
-      );
-    } catch (importError) {
-      setSheetImportError(
-        importError instanceof Error
-          ? importError.message
-          : 'Unable to import the Google Sheet.',
-      );
-    } finally {
-      setImportingSheet(false);
-    }
   }
 
   function openProgramEditor(day: TrainingDay = activeDay) {
@@ -2177,146 +2156,6 @@ export function WorkoutApp() {
       );
     } finally {
       setProgramSaving(false);
-    }
-  }
-
-  async function downloadBackup() {
-    setBackupBusy(true);
-    setError('');
-    try {
-      if (hasPendingOutbox(window.localStorage))
-        throw new Error(
-          'Sync your pending main and Holiday workouts before downloading a complete backup. Drafts saved only on this device are not included.',
-        );
-      const response = await fetch('/api/workouts/backup');
-      if (!response.ok) throw new Error('Unable to create a Liftline backup.');
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = `liftline-backup-${new Date().toISOString().slice(0, 10)}.json`;
-      anchor.click();
-      URL.revokeObjectURL(url);
-      setNotice(
-        'Backup downloaded, including Holiday workouts. Unsaved device drafts are not included.',
-      );
-    } catch (backupError) {
-      setError(
-        backupError instanceof Error
-          ? backupError.message
-          : 'Unable to create a backup.',
-      );
-    } finally {
-      setBackupBusy(false);
-    }
-  }
-
-  function downloadDeviceRecovery() {
-    try {
-      const content = deviceRecoverySnapshot(window.localStorage);
-      const url = URL.createObjectURL(
-        new Blob([JSON.stringify(content, null, 2)], {
-          type: 'application/json',
-        }),
-      );
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `liftline-device-recovery-${new Date().toISOString().slice(0, 10)}.json`;
-      link.click();
-      window.setTimeout(() => URL.revokeObjectURL(url), 120000);
-      setNotice(
-        'Device recovery exported. Keep it private: it contains drafts and unsynced records, not a complete backup.',
-      );
-    } catch (e) {
-      setError(
-        e instanceof Error
-          ? e.message
-          : 'Cannot export device recovery. Storage has not been changed.',
-      );
-    }
-  }
-
-  async function previewBackupFile(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setBackupBusy(true);
-    setBackupSummary(null);
-    setBackupFileName(file.name);
-    setError('');
-    try {
-      const parsed = JSON.parse(await file.text()) as unknown;
-      const response = await fetch('/api/workouts/backup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'preview', backup: parsed, programmeId }),
-      });
-      const result = (await response.json()) as {
-        ok?: boolean;
-        summary?: BackupSummary;
-        error?: string;
-      };
-      if (!response.ok || !result.ok || !result.summary)
-        throw new Error(result.error ?? 'Unable to read this backup.');
-      setBackupData(parsed);
-      setBackupSummary(result.summary);
-    } catch (backupError) {
-      setBackupData(null);
-      setError(
-        backupError instanceof Error
-          ? backupError.message
-          : 'Unable to read this backup.',
-      );
-    } finally {
-      setBackupBusy(false);
-    }
-  }
-
-  async function restoreBackup() {
-    if (!backupData) return;
-    if (
-      hasPendingOutbox(window.localStorage) ||
-      exerciseDraft.dirty ||
-      saving ||
-      programSaving
-    ) {
-      setError(
-        'Sync queued saves and save or discard the current draft before restoring. Export device recovery first if a record needs review.',
-      );
-      return;
-    }
-    setBackupBusy(true);
-    setError('');
-    try {
-      const response = await fetch('/api/workouts/backup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mode: 'restore',
-          backup: backupData,
-          programmeId,
-        }),
-      });
-      const result = (await response.json()) as {
-        ok?: boolean;
-        error?: string;
-      };
-      if (!response.ok || !result.ok)
-        throw new Error(result.error ?? 'Unable to restore this backup.');
-      await refreshWorkoutData();
-      setBackupOpen(false);
-      setBackupData(null);
-      setBackupSummary(null);
-      setNotice(
-        'Backup restored. Existing records not included in the file were kept.',
-      );
-    } catch (backupError) {
-      setError(
-        backupError instanceof Error
-          ? backupError.message
-          : 'Unable to restore this backup.',
-      );
-    } finally {
-      setBackupBusy(false);
     }
   }
 
@@ -3531,7 +3370,7 @@ export function WorkoutApp() {
               importingSheet={importingSheet}
               loading={loading}
               syncingSheet={syncingSheet}
-              backupBusy={backupBusy}
+              backupBusy={backupBusy || dataActionLoading}
               previewGoogleSheetImport={previewGoogleSheetImport}
               syncGoogleSheet={syncGoogleSheet}
               downloadBackup={downloadBackup}
@@ -3748,7 +3587,8 @@ export function WorkoutApp() {
                 saving ||
                 programSaving ||
                 undoing ||
-                backupBusy
+                backupBusy ||
+                dataActionLoading
               )
                 throw new Error(
                   'Sync queued saves and finish the current draft before starting another programme. Export device recovery if a record needs review.',

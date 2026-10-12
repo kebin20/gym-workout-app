@@ -714,7 +714,10 @@ test('recovery and restart UI are explicit, restore guards queue/draft changes, 
       'utf8',
     );
   assert.match(
-    app,
+    readFileSync(
+      new URL('../app/workout-data-actions.ts', import.meta.url),
+      'utf8',
+    ),
     /async function restoreBackup[\s\S]*?hasPendingOutbox\(window.localStorage\)/,
   );
   assert.match(app, /Export device recovery|export device recovery/i);

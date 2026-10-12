@@ -74,6 +74,12 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
+        <script
+          id="liftline-startup-clock"
+          dangerouslySetInnerHTML={{
+            __html: "try{performance.mark('liftline:shell')}catch{}",
+          }}
+        />
         <meta name="liftline-build" content={appRelease.appVersion} />
         <link
           rel="preload"

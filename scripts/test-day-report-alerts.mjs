@@ -229,6 +229,8 @@ test('one actual timer engine survives view unmount, alerts in foreground once, 
       require: (name) => {
         if (name === 'react')
           return {
+            lazy: () => () => null,
+            Suspense: () => null,
             forwardRef: (component) => component,
             useCallback: (callback) => callback,
             useEffect: (effect) => effects.push(effect),
@@ -237,6 +239,10 @@ test('one actual timer engine survives view unmount, alerts in foreground once, 
             useSyncExternalStore: (_, get) => get(),
           };
         if (name === '@/components/ui/button') return { Button: () => null };
+        if (name === './optional-panel-boundary')
+          return { default: () => null };
+        if (name === '@/lib/after-startup')
+          return { afterStartup: () => () => {} };
         if (name === '@/lib/rest-timer-state') {
           const state = fixture.load('lib/rest-timer-state.ts');
           return {
@@ -420,8 +426,8 @@ test('one actual timer engine survives view unmount, alerts in foreground once, 
     permission.permission = 'denied';
     events.get('focus')();
     assert.ok(
-      stateChanges.includes('denied'),
-      'Permission UI refreshes after returning from device settings',
+      stateChanges.includes(timestamp),
+      'Core timer still reconciles after returning from device settings; permission UI is tested in the deferred panel',
     );
     off.cleanup.forEach((fn) => fn?.());
   } finally {
