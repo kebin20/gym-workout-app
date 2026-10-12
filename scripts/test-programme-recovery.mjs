@@ -429,6 +429,58 @@ test('archive JSON functions stay within D1 argument limits', () => {
   }
 });
 
+test('delayed Sheet acknowledgements cannot update a different programme', async () => {
+  const f = routeFixture({
+    beforeRun: (sql, sqlite) => {
+      if (sql.startsWith('UPDATE workout_entries SET sync_status'))
+        sqlite
+          .prepare(
+            "INSERT INTO app_settings(key,value,updated_at) VALUES ('programmeId','next','now') ON CONFLICT(key) DO UPDATE SET value='next'",
+          )
+          .run();
+    },
+  });
+  try {
+    await seed(f);
+    assert.equal(
+      f.sqlite.prepare('SELECT sync_status FROM workout_entries').get()
+        .sync_status,
+      'pending',
+    );
+  } finally {
+    f.close();
+  }
+  let changed = false;
+  const full = routeFixture({
+    beforeBatch: (_statements, sqlite) => {
+      if (changed)
+        sqlite
+          .prepare(
+            "INSERT INTO app_settings(key,value,updated_at) VALUES ('programmeId','next','now') ON CONFLICT(key) DO UPDATE SET value='next'",
+          )
+          .run();
+    },
+  });
+  try {
+    await seed(full);
+    full.sqlite
+      .prepare("UPDATE workout_entries SET sync_status='pending'")
+      .run();
+    changed = true;
+    const result = await full
+      .load('app/api/workouts/sync-sheet/route.ts')
+      .POST();
+    assert.equal(result.status, 200);
+    assert.equal(
+      full.sqlite.prepare('SELECT sync_status FROM workout_entries').get()
+        .sync_status,
+      'pending',
+    );
+  } finally {
+    full.close();
+  }
+});
+
 test('restoring a separate archive adds history without touching active records', async () => {
   const source = routeFixture(),
     target = routeFixture();

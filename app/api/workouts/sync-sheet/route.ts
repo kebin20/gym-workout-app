@@ -1,5 +1,5 @@
 import { env } from 'cloudflare:workers';
-import { activeProgrammeId } from '@/lib/programme-storage';
+import { activeProgrammeId, programmeGuardSql } from '@/lib/programme-storage';
 
 import {
   syncWorkoutEntries,
@@ -19,8 +19,10 @@ export async function POST() {
         { status: 409 },
       );
     const results = await env.DB.prepare(
-      `SELECT ${workoutSelectColumns} FROM workout_entries WHERE completed = 1 AND exercise_order < 100 AND week <= 12 ORDER BY week, day, exercise_order`,
-    ).all<WorkoutSheetEntry>();
+      `SELECT ${workoutSelectColumns} FROM workout_entries WHERE completed = 1 AND exercise_order < 100 AND week <= 12 AND ${programmeGuardSql} ORDER BY week, day, exercise_order`,
+    )
+      .bind('initial')
+      .all<WorkoutSheetEntry>();
     const sync = await syncWorkoutEntries(results.results);
 
     const now = new Date().toISOString();
@@ -29,7 +31,7 @@ export async function POST() {
         results.results.map((entry) =>
           env
             .DB!.prepare(`UPDATE workout_entries SET sync_status = ?, sheet_synced_at = ?, sync_error = ?
-      WHERE week = ? AND day = ? AND exercise_order = ? AND updated_at = ?`)
+      WHERE week = ? AND day = ? AND exercise_order = ? AND updated_at = ? AND ${programmeGuardSql}`)
             .bind(
               sync.ok ? 'synced' : 'failed',
               sync.ok ? now : null,
@@ -43,6 +45,7 @@ export async function POST() {
               entry.day,
               entry.exerciseOrder,
               entry.updatedAt,
+              'initial',
             ),
         ),
       );

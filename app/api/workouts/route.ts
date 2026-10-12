@@ -108,12 +108,13 @@ async function resolveExercise(
   return exercise ? { exercise, custom: false } : null;
 }
 
-async function finishSheetSync(saved: WorkoutEntry) {
+async function finishSheetSync(saved: WorkoutEntry, programmeId: string) {
   const db = workoutDatabase();
+  if (!programmeMatches(programmeId, await activeProgrammeId(db))) return;
   const result = await syncWorkoutEntries([saved]);
   await db
     .prepare(`UPDATE workout_entries SET sync_status = ?, sheet_synced_at = ?, sync_error = ?
-      WHERE week = ? AND day = ? AND exercise_order = ? AND updated_at = ?`)
+      WHERE week = ? AND day = ? AND exercise_order = ? AND updated_at = ? AND ${programmeGuardSql}`)
     .bind(
       result.ok ? 'synced' : 'failed',
       result.ok ? new Date().toISOString() : null,
@@ -124,6 +125,7 @@ async function finishSheetSync(saved: WorkoutEntry) {
       saved.day,
       saved.exerciseOrder,
       saved.updatedAt,
+      programmeId,
     )
     .run();
 }
@@ -377,7 +379,7 @@ export async function POST(request: Request) {
         { status: 409 },
       );
     if (saved && syncStatus === 'pending' && writeResult.meta.changes > 0) {
-      waitUntil(finishSheetSync(saved).then(() => undefined));
+      waitUntil(finishSheetSync(saved, programmeId).then(() => undefined));
     }
     return Response.json({
       entry: { ...saved, programmeId },

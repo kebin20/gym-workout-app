@@ -281,6 +281,16 @@ export async function POST(request: Request) {
     }
 
     if (statements.length > 0) await env.DB.batch(statements);
+    if ((await activeProgrammeId(env.DB)) !== 'initial')
+      return Response.json(
+        {
+          ok: false,
+          imported: 0,
+          message:
+            'The programme changed while importing. Reload; Sheet records have not been applied to the new programme.',
+        },
+        { status: 409 },
+      );
     return Response.json({
       ok: true,
       imported: statements.length,
