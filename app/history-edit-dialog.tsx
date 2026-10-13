@@ -111,7 +111,8 @@ export default function HistoryEditDialog({
       <DialogContent className="max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden p-0 sm:max-w-lg">
         <DialogHeader className="px-5 pt-5">
           <DialogTitle className="flex items-center gap-2 font-sans text-lg">
-            <Pencil className="size-4 text-primary" /> Edit saved exercise
+            <Pencil className="size-4 shrink-0 text-primary" /> Edit saved
+            exercise
           </DialogTitle>
           <DialogDescription className="font-sans">
             Phase {entry.week > 12 ? 2 : 1} · Week{' '}
@@ -147,7 +148,7 @@ export default function HistoryEditDialog({
                 <p className="mb-2 font-sans text-sm font-semibold">
                   Set {set}
                 </p>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,0.8fr)] items-end gap-2">
                   {(['weight', 'reps', 'rir'] as const).map((field) => (
                     <label
                       key={field}
@@ -242,7 +243,7 @@ export default function HistoryEditDialog({
             </p>
           )}
         </form>
-        <DialogFooter className="mx-0 mb-0 border-t px-5 py-4">
+        <DialogFooter className="mx-0 mb-0 border-t px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
           {discarding ? (
             <>
               <Button

@@ -230,7 +230,7 @@ export default function ProgrammeManager({
                         </p>
                       )}
                       {entry.notes && (
-                        <p className="mt-2 whitespace-pre-wrap text-sm">
+                        <p className="mt-2 whitespace-pre-wrap text-sm [overflow-wrap:anywhere]">
                           {entry.notes}
                         </p>
                       )}
@@ -299,6 +299,7 @@ export default function ProgrammeManager({
               </label>
               <Button
                 disabled={!confirmed || busy || !startDate}
+                className="h-auto min-h-11 w-full whitespace-normal px-3 py-2.5 text-center"
                 onClick={() => void start()}
               >
                 {busy ? 'Working…' : 'Archive & start new programme'}

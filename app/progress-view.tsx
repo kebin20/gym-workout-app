@@ -103,14 +103,14 @@ function HistoryWeekDisclosure({
         type="button"
         onClick={() => setExpanded((current) => !current)}
         aria-expanded={expanded}
-        className="flex w-full items-center gap-2 px-3 py-2.5 text-left font-sans"
+        className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-3 py-2.5 text-left font-sans"
       >
         <span
-          className={`rounded-lg px-2 py-1 text-xs font-semibold ${weekClass}`}
+          className={`whitespace-nowrap rounded-lg px-2 py-1 text-xs font-semibold ${weekClass}`}
         >
           Week {displayWeekNumber(entry.week)}
         </span>
-        <span className="ml-auto text-sm text-muted-foreground">
+        <span className="min-w-0 text-right text-sm text-muted-foreground">
           {formatWorkoutDate(entry.completedAt ?? entry.updatedAt)}
         </span>
         <ChevronRight
@@ -120,7 +120,7 @@ function HistoryWeekDisclosure({
       {expanded && (
         <div className="border-t border-current/5 px-3 pb-3 pt-2">
           {!exerciseNameMatches(entry, displayName) && (
-            <p className="mb-2 text-sm font-medium">
+            <p className="mb-2 text-sm font-medium [overflow-wrap:anywhere]">
               Logged as: {entry.exercise}
             </p>
           )}
@@ -147,7 +147,9 @@ function HistoryWeekDisclosure({
           {entry.notes && (
             <p className="mt-2 flex gap-1.5 font-sans text-sm leading-relaxed text-muted-foreground">
               <NotebookPen className="mt-0.5 size-3.5 shrink-0" />
-              {entry.notes}
+              <span className="min-w-0 flex-1 whitespace-pre-wrap [overflow-wrap:anywhere]">
+                {entry.notes}
+              </span>
             </p>
           )}
           {onEdit && (
@@ -630,14 +632,14 @@ export default function ProgressView({
                 return (
                   <CarouselItem key={day}>
                     <div className="rounded-2xl border border-border/80 bg-muted/20 p-3 sm:p-5">
-                      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 pb-4">
-                        <div className="flex items-center gap-3">
+                      <div className="grid min-w-0 gap-4 border-b border-border/70 pb-4">
+                        <div className="flex min-w-0 items-center gap-3">
                           <span
                             className={`grid size-16 shrink-0 place-items-center rounded-full p-2 font-sans text-sm font-bold ${dayColor}`}
                           >
                             Day {day}
                           </span>
-                          <div>
+                          <div className="min-w-0 flex-1">
                             <p className="font-sans font-semibold">
                               {dayExercises.length} exercises
                             </p>
@@ -645,28 +647,6 @@ export default function ProgressView({
                               Full workout history
                             </p>
                           </div>
-                        </div>
-                        <div className="flex flex-wrap items-center justify-end gap-2">
-                          <DayReportButton
-                            currentWeek={activeWeek}
-                            day={day}
-                            entries={allEntries}
-                            loading={loading}
-                          />
-                          <Badge
-                            variant="outline"
-                            className="bg-card font-sans"
-                          >
-                            {sessionCount}{' '}
-                            {sessionCount === 1 ? 'session' : 'sessions'}
-                          </Badge>
-                          <Badge
-                            variant="outline"
-                            className="bg-card font-sans"
-                          >
-                            {Math.round(dayVolume).toLocaleString()} kg volume
-                          </Badge>
-                          <span className="mx-1 hidden h-6 w-px bg-border md:block" />
                           <div className="hidden shrink-0 gap-2 md:flex">
                             <CarouselPrevious
                               aria-label="Previous training day"
@@ -680,6 +660,27 @@ export default function ProgressView({
                             />
                           </div>
                         </div>
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                          <Badge
+                            variant="outline"
+                            className="bg-card font-sans"
+                          >
+                            {sessionCount}{' '}
+                            {sessionCount === 1 ? 'session' : 'sessions'}
+                          </Badge>
+                          <Badge
+                            variant="outline"
+                            className="bg-card font-sans"
+                          >
+                            {Math.round(dayVolume).toLocaleString()} kg volume
+                          </Badge>
+                        </div>
+                        <DayReportButton
+                          currentWeek={activeWeek}
+                          day={day}
+                          entries={allEntries}
+                          loading={loading}
+                        />
                       </div>
 
                       <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
@@ -701,7 +702,7 @@ export default function ProgressView({
                                   {item.order}
                                 </span>
                                 <div className="min-w-0 flex-1">
-                                  <h3 className="font-sans text-sm font-semibold sm:text-base">
+                                  <h3 className="font-sans text-sm font-semibold [overflow-wrap:anywhere] sm:text-base">
                                     {displayName}
                                   </h3>
                                   <p className="mt-0.5 font-sans text-sm text-muted-foreground">

@@ -2362,7 +2362,7 @@ export function WorkoutApp() {
                 <div
                   id="programme-tools-menu"
                   role="menu"
-                  className="absolute right-0 top-full z-50 mt-2 w-72 rounded-xl bg-popover p-2 text-popover-foreground shadow-lg ring-1 ring-foreground/10"
+                  className="absolute right-0 top-full z-50 mt-2 max-h-[calc(100dvh-7rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-72 max-w-[calc(100vw-2rem)] overflow-y-auto overscroll-contain rounded-xl bg-popover p-2 text-popover-foreground shadow-lg ring-1 ring-foreground/10"
                 >
                   <div className="space-y-1 px-2 py-2">
                     <span className="block font-sans text-sm font-semibold text-foreground">
@@ -2734,13 +2734,13 @@ export function WorkoutApp() {
                   </Card>
                 </>
               )}
-              <div className="beta-exercise-heading flex items-start justify-between gap-3">
+              <div className="beta-exercise-heading flex flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-start">
                 <div className="min-w-0 flex-1">
                   <p className="font-sans text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                     Day {activeDay} · Exercise {activeIndex + 1} of{' '}
                     {dayExercises.length}
                   </p>
-                  <h2 className="mt-1 font-sans text-xl font-bold">
+                  <h2 className="mt-1 break-words font-sans text-xl font-bold [overflow-wrap:anywhere]">
                     {exercise.name}
                   </h2>
                 </div>

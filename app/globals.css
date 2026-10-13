@@ -165,11 +165,12 @@
   }
 
   @media (max-width: 900px) {
-    main :where(button, [role='button']) {
+    :where(main, [data-slot='dialog-content']) :where(button, [role='button']) {
       min-height: 2.75rem;
     }
 
-    main :where(button, [role='button'])[aria-label] {
+    :where(main, [data-slot='dialog-content'])
+      :where(button, [role='button'])[aria-label] {
       min-width: 2.75rem;
     }
   }
@@ -619,6 +620,17 @@
 
     .beta-week-card {
       border-radius: 1.7rem !important;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .beta-plan-intro {
+      min-height: auto;
+      padding: 1.25rem;
+    }
+
+    .beta-plan-art {
+      display: none;
     }
   }
 }

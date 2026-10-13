@@ -10,7 +10,7 @@ Made with ChatGPT Codex
 
 The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgpt.site](https://liftline-strength-plan.ktanzyl.chatgpt.site). Access is restricted to the site owner.
 
-Current production version: **v3.17.0**
+Current production version: **v3.17.1**
 
 The experimental [bundled iOS foundation](docs/native-ios.md) is included in the repository, but is not ready for personal logging: native devices display a setup guard until the storage/connection choice and real-device tests are complete. The private web app keeps its existing storage and functionality, with faster cached startup. See the [release rollback notes](docs/rollback.md) for the pre-release backup.
 
@@ -64,7 +64,9 @@ The experimental [bundled iOS foundation](docs/native-ios.md) is included in the
 
 ## Version history
 
-### v3.17.0
+### v3.17 — Editable history and layout polish
+
+- In v3.17.1, give long mobile exercise headings their own row, align numeric fields under wrapping labels, group history totals separately from bounded PDF controls, align desktop Plan actions, and reduce narrow-screen decorative artwork. Add consistent modal scrolling/close clearance and mobile touch targets, safer long-text wrapping, a viewport-bounded programme menu and Holiday safe-area padding. Behaviour, stored records and the established colour scheme remain unchanged. Structural layout tests are not a substitute for real iPhone keyboard/viewport QA.
 
 - Add **Edit saved exercise** inside each expanded history week, including earlier weeks. Correct load, reps/seconds, per-set RIR, older exercise RIR and notes in compact mobile-safe fields. Cancel protects unsaved edits; failed saves leave the editor values intact.
 - Correct only an existing record using its ID, timestamp, server revision and active programme. Preserve its exercise, target, set count, original date and completion status; do not advance Today, run timers, insert another workout or edit immutable programme archives.

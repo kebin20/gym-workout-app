@@ -378,8 +378,8 @@ const RestTimer = forwardRef<
   };
   return (
     <div className="mt-3 rounded-xl border border-primary/15 bg-background/90 p-3 shadow-sm shadow-slate-900/5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
+      <div className="grid grid-cols-1 items-center gap-3 sm:flex sm:flex-wrap sm:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
           <span
             className={
               'grid size-9 shrink-0 place-items-center rounded-lg ' +
@@ -390,7 +390,7 @@ const RestTimer = forwardRef<
           >
             <Clock3 className="size-4" />
           </span>
-          <div>
+          <div className="min-w-0 [overflow-wrap:anywhere]">
             <p className="font-sans text-sm font-medium text-muted-foreground">
               {seconds === 0
                 ? 'Rest complete'
@@ -410,7 +410,7 @@ const RestTimer = forwardRef<
             </span>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-end gap-2">
           <Button
             type="button"
             variant="ghost"

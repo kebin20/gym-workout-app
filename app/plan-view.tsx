@@ -89,48 +89,52 @@ export default function PlanView({
                   Week {activeDisplayWeek} · changes apply only to this session
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-2">
-                {sessionPlan.map((item, index) => (
-                  <div
-                    key={item.order}
-                    className={`flex gap-3 rounded-xl border border-border/75 p-3 ${item.skipped ? 'opacity-55' : ''}`}
-                  >
-                    <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-secondary font-sans text-xs font-bold">
-                      {index + 1}
-                    </span>
-                    <div>
-                      <p
-                        className={`font-sans text-sm font-semibold leading-snug ${item.skipped ? 'line-through' : ''}`}
-                      >
-                        {item.name}
-                      </p>
-                      <p className="mt-1 font-sans text-sm text-muted-foreground">
-                        {item.skipped
-                          ? 'Skipped this session'
-                          : `${targetLabel(item)} · ${item.rest}`}
-                      </p>
-                      <p className="mt-1 font-sans text-sm text-muted-foreground">
-                        {item.custom
-                          ? 'Custom exercise'
-                          : `Alt: ${item.alternative}`}
-                      </p>
+              <CardContent className="flex min-w-0 flex-1 flex-col gap-4">
+                <div className="flex-1 space-y-2">
+                  {sessionPlan.map((item, index) => (
+                    <div
+                      key={item.order}
+                      className={`flex gap-3 rounded-xl border border-border/75 p-3 ${item.skipped ? 'opacity-55' : ''}`}
+                    >
+                      <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-secondary font-sans text-xs font-bold">
+                        {index + 1}
+                      </span>
+                      <div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+                        <p
+                          className={`font-sans text-sm font-semibold leading-snug ${item.skipped ? 'line-through' : ''}`}
+                        >
+                          {item.name}
+                        </p>
+                        <p className="mt-1 font-sans text-sm text-muted-foreground">
+                          {item.skipped
+                            ? 'Skipped this session'
+                            : `${targetLabel(item)} · ${item.rest}`}
+                        </p>
+                        <p className="mt-1 font-sans text-sm text-muted-foreground">
+                          {item.custom
+                            ? 'Custom exercise'
+                            : `Alt: ${item.alternative}`}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                ))}
-                <Button
-                  className="mt-2 h-11 w-full font-sans"
-                  onClick={() => onChooseDay(day)}
-                >
-                  Start Day {day}
-                  <ChevronRight />
-                </Button>
-                <Button
-                  variant="outline"
-                  className="h-10 w-full font-sans"
-                  onClick={() => onEditDay(day)}
-                >
-                  <Settings2 /> Edit Week {activeDisplayWeek}
-                </Button>
+                  ))}
+                </div>
+                <div className="space-y-2">
+                  <Button
+                    className="h-11 w-full font-sans"
+                    onClick={() => onChooseDay(day)}
+                  >
+                    Start Day {day}
+                    <ChevronRight />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="h-10 w-full font-sans"
+                    onClick={() => onEditDay(day)}
+                  >
+                    <Settings2 /> Edit Week {activeDisplayWeek}
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           );
