@@ -118,7 +118,7 @@ export default function DataManagementDialogs({
               ) : (
                 <Upload className="size-6 text-primary" />
               )}
-              <span className="mt-2 font-sans text-sm font-semibold">
+              <span className="mt-2 min-w-0 max-w-full font-sans text-sm font-semibold [overflow-wrap:anywhere]">
                 {backup.fileName || 'Choose backup file'}
               </span>
               <span className="mt-1 font-sans text-xs text-muted-foreground">

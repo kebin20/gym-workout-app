@@ -10,6 +10,10 @@ import { correctedSessionExercise } from '@/lib/session-plan';
 import { parseSyncCursor } from '@/lib/sync-cursor';
 import { validateWorkoutNumbers } from '@/lib/workout-validation';
 import {
+  historySetNumbers,
+  validateHistoryFields,
+} from '@/lib/workout-history-edit';
+import {
   routineForWeek,
   targetLabel,
   type RoutineExercise,
@@ -110,24 +114,63 @@ async function resolveExercise(
 
 async function finishSheetSync(saved: WorkoutEntry, programmeId: string) {
   const db = workoutDatabase();
-  if (!programmeMatches(programmeId, await activeProgrammeId(db))) return;
-  const result = await syncWorkoutEntries([saved]);
-  await db
-    .prepare(`UPDATE workout_entries SET sync_status = ?, sheet_synced_at = ?, sync_error = ?
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (!programmeMatches(programmeId, await activeProgrammeId(db))) return;
+    const latest = await db
+      .prepare(
+        'SELECT updated_at AS updatedAt FROM workout_entries WHERE id = ?',
+      )
+      .bind(saved.id)
+      .first<{ updatedAt: string }>();
+    if (latest?.updatedAt !== saved.updatedAt) return;
+    const result = await syncWorkoutEntries([saved]);
+    if (!programmeMatches(programmeId, await activeProgrammeId(db))) return;
+    const current = await db
+      .prepare(
+        `SELECT ${workoutSelectColumns} FROM workout_entries WHERE id = ?`,
+      )
+      .bind(saved.id)
+      .first<WorkoutEntry>();
+    if (!current) return;
+    // An older in-flight webhook can finish after a correction's own webhook.
+    // Re-send the latest values, bounded to avoid an endless background task.
+    if (current.updatedAt !== saved.updatedAt) {
+      if (current.syncStatus === 'not_applicable' || !current.completedAt)
+        return;
+      if (attempt === 0) {
+        saved = current;
+        continue;
+      }
+      await db
+        .prepare(`UPDATE workout_entries SET sync_status = 'failed', sync_error = ?
+      WHERE id = ? AND updated_at = ? AND ${programmeGuardSql}`)
+        .bind(
+          'Another correction arrived during Sheet sync. Retry Sheet sync to confirm the latest values.',
+          current.id,
+          current.updatedAt,
+          programmeId,
+        )
+        .run();
+      return;
+    }
+    await db
+      .prepare(`UPDATE workout_entries SET sync_status = ?, sheet_synced_at = ?, sync_error = ?
       WHERE week = ? AND day = ? AND exercise_order = ? AND updated_at = ? AND ${programmeGuardSql}`)
-    .bind(
-      result.ok ? 'synced' : 'failed',
-      result.ok ? new Date().toISOString() : null,
-      result.ok
-        ? null
-        : String(result.message ?? 'Google Sheet sync failed.').slice(0, 500),
-      saved.week,
-      saved.day,
-      saved.exerciseOrder,
-      saved.updatedAt,
-      programmeId,
-    )
-    .run();
+      .bind(
+        result.ok ? 'synced' : 'failed',
+        result.ok ? new Date().toISOString() : null,
+        result.ok
+          ? null
+          : String(result.message ?? 'Google Sheet sync failed.').slice(0, 500),
+        saved.week,
+        saved.day,
+        saved.exerciseOrder,
+        saved.updatedAt,
+        programmeId,
+      )
+      .run();
+    return;
+  }
 }
 
 export async function GET(request: Request) {
@@ -390,6 +433,151 @@ export async function POST(request: Request) {
       {
         error:
           error instanceof Error ? error.message : 'Unable to save workout.',
+      },
+      { status: 500 },
+    );
+  }
+}
+
+// Corrections must update an existing version, never use the logger's upsert.
+// Preserve its identity, actual exercise, target, set count and completion date.
+export async function PATCH(request: Request) {
+  try {
+    const input = await request.json();
+    if (!input || typeof input !== 'object' || Array.isArray(input))
+      return Response.json(
+        { error: 'Invalid history correction.' },
+        { status: 400 },
+      );
+    const body = input as Record<string, unknown>;
+    const db = workoutDatabase();
+    const programmeId = await activeProgrammeId(db);
+    if (
+      typeof body.programmeId !== 'string' ||
+      !programmeMatches(body.programmeId, programmeId)
+    )
+      return Response.json(
+        {
+          error:
+            'The programme changed. Close the editor and refresh before editing history.',
+        },
+        { status: 409 },
+      );
+    if (
+      !Number.isSafeInteger(body.id) ||
+      Number(body.id) < 1 ||
+      !Number.isSafeInteger(body.expectedServerRevision) ||
+      Number(body.expectedServerRevision) < 0 ||
+      typeof body.expectedUpdatedAt !== 'string' ||
+      !Number.isFinite(Date.parse(body.expectedUpdatedAt))
+    )
+      return Response.json(
+        { error: 'Reload the saved record before editing history.' },
+        { status: 400 },
+      );
+    const existing = await db
+      .prepare(
+        `SELECT ${workoutSelectColumns} FROM workout_entries WHERE id = ?`,
+      )
+      .bind(body.id)
+      .first<WorkoutEntry>();
+    if (
+      !existing ||
+      existing.updatedAt !== body.expectedUpdatedAt ||
+      existing.serverRevision !== body.expectedServerRevision
+    )
+      return Response.json(
+        {
+          error:
+            'This record changed or was removed. Close the editor and refresh before editing again.',
+        },
+        { status: 409 },
+      );
+    const invalid = validateHistoryFields(body, existing);
+    if (invalid) return Response.json({ error: invalid }, { status: 400 });
+    const updatedAt = new Date(
+      Math.max(Date.now(), Date.parse(existing.updatedAt!) + 1),
+    ).toISOString();
+    const sheetEligible =
+      programmeId === 'initial' &&
+      existing.week <= 12 &&
+      existing.exerciseOrder < 100 &&
+      existing.syncStatus !== 'not_applicable';
+    const missingDate =
+      !existing.completedAt ||
+      !Number.isFinite(Date.parse(existing.completedAt));
+    const syncStatus = sheetEligible
+      ? missingDate
+        ? 'failed'
+        : 'pending'
+      : 'not_applicable';
+    const syncError =
+      sheetEligible && missingDate
+        ? 'Original workout date is missing. Saved in Liftline; Sheet sync was not sent to avoid changing the date.'
+        : null;
+    const columns = historySetNumbers.flatMap((set) => [
+      `set${set}_weight`,
+      `set${set}_reps`,
+      `set${set}_rir`,
+    ]);
+    const values = historySetNumbers.flatMap((set) => [
+      body[`set${set}Weight`],
+      body[`set${set}Reps`],
+      body[`set${set}Rir`],
+    ]);
+    const write = await db
+      .prepare(`UPDATE workout_entries SET ${columns.map((column) => `${column} = ?`).join(', ')},
+      rir = ?, notes = ?, updated_at = ?, sync_status = ?, sheet_synced_at = NULL, sync_error = ?
+      WHERE id = ? AND updated_at = ? AND server_revision = ? AND ${programmeGuardSql}`)
+      .bind(
+        ...values,
+        body.rir,
+        body.notes,
+        updatedAt,
+        syncStatus,
+        syncError,
+        existing.id,
+        body.expectedUpdatedAt,
+        body.expectedServerRevision,
+        programmeId,
+      )
+      .run();
+    if (
+      !write.meta.changes ||
+      !programmeMatches(programmeId, await activeProgrammeId(db))
+    )
+      return Response.json(
+        {
+          error:
+            'The record or programme changed while saving. Close the editor and refresh; no newer record was overwritten.',
+        },
+        { status: 409 },
+      );
+    const saved = await db
+      .prepare(
+        `SELECT ${workoutSelectColumns} FROM workout_entries WHERE id = ?`,
+      )
+      .bind(existing.id)
+      .first<WorkoutEntry>();
+    if (!saved || saved.updatedAt !== updatedAt)
+      return Response.json(
+        {
+          error:
+            'A newer edit arrived while saving. Close the editor and refresh to review it.',
+        },
+        { status: 409 },
+      );
+    if (syncStatus === 'pending')
+      waitUntil(finishSheetSync(saved, programmeId));
+    return Response.json({
+      entry: { ...saved, programmeId },
+      sheetSyncQueued: syncStatus === 'pending',
+    });
+  } catch (error) {
+    return Response.json(
+      {
+        error:
+          error instanceof Error ? error.message : 'Unable to correct history.',
       },
       { status: 500 },
     );

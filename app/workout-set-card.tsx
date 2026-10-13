@@ -90,7 +90,7 @@ export function WorkoutSetCard({
         </div>
       </div>
 
-      <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,0.8fr)] items-start gap-2 sm:gap-3">
+      <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,0.8fr)] items-end gap-2 sm:gap-3">
         <label
           htmlFor={`${id}-weight`}
           className="grid min-w-0 gap-1 font-sans text-sm font-medium text-muted-foreground"

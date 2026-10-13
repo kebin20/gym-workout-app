@@ -10,7 +10,7 @@ Made with ChatGPT Codex
 
 The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgpt.site](https://liftline-strength-plan.ktanzyl.chatgpt.site). Access is restricted to the site owner.
 
-Current production version: **v3.15.1**
+Current production version: **v3.17.1**
 
 The experimental [bundled iOS foundation](docs/native-ios.md) is included in the repository, but is not ready for personal logging: native devices display a setup guard until the storage/connection choice and real-device tests are complete. The private web app keeps its existing storage and functionality, with faster cached startup. See the [release rollback notes](docs/rollback.md) for the pre-release backup.
 
@@ -40,6 +40,7 @@ The experimental [bundled iOS foundation](docs/native-ios.md) is included in the
 - Weekly session progress plus selectable per-exercise progress charts
 - End-of-session summaries with volume, set count, duration, comparisons, and personal records
 - Responsive day-by-day exercise history carousel and grid with dates, sets, RIR, and notes
+- Correct a saved exercise directly from its week in Progress, preserving its original date, routine and completion status; revision guards reject conflicting changes and eligible corrections mirror the original Sheet row
 - Automatically rotating training tips covering form, progression, rest, and recovery
 - Routine guide with targets, rest periods, muscle groups, and alternatives
 - Persistent workout data backed by Cloudflare D1
@@ -62,6 +63,22 @@ The experimental [bundled iOS foundation](docs/native-ios.md) is included in the
 - Responsive Material-inspired interface using Geist typography
 
 ## Version history
+
+### v3.17 — Editable history and layout polish
+
+- In v3.17.1, give long mobile exercise headings their own row, align numeric fields under wrapping labels, group history totals separately from bounded PDF controls, align desktop Plan actions, and reduce narrow-screen decorative artwork. Add consistent modal scrolling/close clearance and mobile touch targets, safer long-text wrapping, a viewport-bounded programme menu and Holiday safe-area padding. Behaviour, stored records and the established colour scheme remain unchanged. Structural layout tests are not a substitute for real iPhone keyboard/viewport QA.
+
+- Add **Edit saved exercise** inside each expanded history week, including earlier weeks. Correct load, reps/seconds, per-set RIR, older exercise RIR and notes in compact mobile-safe fields. Cancel protects unsaved edits; failed saves leave the editor values intact.
+- Correct only an existing record using its ID, timestamp, server revision and active programme. Preserve its exercise, target, set count, original date and completion status; do not advance Today, run timers, insert another workout or edit immutable programme archives.
+- Mirror eligible original Phase 1 corrections to their existing Google Sheet row in the background. The unchanged Sheet layout supports the first three sets, exercise RIR and notes; extra sets and per-set RIR remain in Liftline. Phase 2, custom exercises and later programmes stay app-only. Records without original dates are not sent to the Sheet, rather than inventing today's date; sync errors remain visible/retryable.
+- Refresh local history, trends and PDF data after confirmation. Keep the new editor outside the cold-start asset graph. No existing workout values are changed by releasing this feature.
+- Reconcile an older in-flight Sheet write with a newer correction, with bounded retries and a visible retryable error if changes continue arriving.
+
+### v3.16.0
+
+- Choose all saved weeks or the selected current and immediately previous programme week for each Day A/B/C PDF. Empty included weeks are explicitly marked; Week 1 and the Phase 1/2 boundary remain unambiguous.
+- Present full phase/week headings and actual saved exercises, set-by-set load/reps/seconds/RIR tables, partial/pending labels and notes before exercise trends. Recorded decimal loads and zero RIR are preserved; range summaries and embedded raw records use only the chosen weeks.
+- Keep archived programme PDFs as full-history reports. No workout records or programme selection are changed by export.
 
 ### v3.15.1
 

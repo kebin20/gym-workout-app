@@ -121,7 +121,7 @@ export function ProgramEditorDialog({
                       }
                       className="h-9 font-sans font-semibold"
                     />
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-1 gap-2 min-[380px]:grid-cols-2 sm:grid-cols-3">
                       <label
                         htmlFor={`program-sets-${item.exerciseOrder}`}
                         className="font-sans text-[11px] text-muted-foreground"
@@ -179,7 +179,7 @@ export function ProgramEditorDialog({
                       </label>
                       <label
                         htmlFor={`program-rest-${item.exerciseOrder}`}
-                        className="font-sans text-[11px] text-muted-foreground"
+                        className="font-sans text-[11px] text-muted-foreground min-[380px]:col-span-2 sm:col-span-1"
                       >
                         Rest
                         <Input
@@ -350,7 +350,7 @@ export function SessionSummaryDialog({
       }}
     >
       <DialogContent className="max-h-[calc(100dvh-1.5rem)] overflow-y-auto sm:max-w-lg">
-        <DialogHeader>
+        <DialogHeader className={sessionCelebrationPending ? 'pl-14' : ''}>
           {sessionCelebrationPending && (
             <div className="mx-auto mb-2 grid size-16 place-items-center rounded-2xl bg-success-soft text-success ring-8 ring-success-soft/45">
               <CheckCircle2 className="size-8" />
@@ -480,7 +480,7 @@ export function PersonalRecordDialog({
       }}
     >
       <DialogContent className="sm:max-w-md">
-        <DialogHeader>
+        <DialogHeader className="pl-14">
           <div className="mx-auto mb-2 grid size-14 place-items-center rounded-2xl bg-warning-soft text-warning-foreground">
             <Medal className="size-7" />
           </div>

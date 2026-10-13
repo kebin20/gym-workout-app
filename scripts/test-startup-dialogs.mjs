@@ -23,6 +23,16 @@ test('the built dialogs exist on demand and are excluded from the startup manife
     ),
   );
   assert.ok(!manifest.assets.includes('/' + chunk));
+  const history = graph.dynamicPreloads['app/history-edit-dialog.tsx'];
+  assert.ok(history?.length);
+  const historyChunk = history.find((asset) =>
+    asset.includes('history-edit-dialog-'),
+  );
+  assert.ok(historyChunk);
+  assert.ok(
+    existsSync(new URL('../dist/client/' + historyChunk, import.meta.url)),
+  );
+  assert.ok(!manifest.assets.includes('/' + historyChunk));
 });
 
 function elements(tree) {

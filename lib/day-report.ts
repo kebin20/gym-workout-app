@@ -22,6 +22,11 @@ export function reportSets(entry: WorkoutEntry): ReportSet[] {
 export const reportPhase = (week: number) => (week > 12 ? 2 : 1);
 export const reportWeek = (week: number) =>
   `P${reportPhase(week)} W${displayWeekNumber(week)}`;
+export const reportWeekLabel = (week: number) =>
+  `Phase ${reportPhase(week)} - Week ${displayWeekNumber(week)}`;
+export type DayReportScope =
+  | { kind: 'all' }
+  | { kind: 'recent'; currentWeek: number };
 export const isTimedEntry = (entry: WorkoutEntry) =>
   /plank/i.test(entry.exercise) || /\bsec(?:onds?)?\b/i.test(entry.target);
 export function reportMetrics(entry: WorkoutEntry) {
@@ -49,7 +54,22 @@ export function reportMetrics(entry: WorkoutEntry) {
     workingSets: sets.length,
   };
 }
-export function buildDayReport(day: TrainingDay, entries: WorkoutEntry[]) {
+export function buildDayReport(
+  day: TrainingDay,
+  entries: WorkoutEntry[],
+  scope: DayReportScope = { kind: 'all' },
+) {
+  if (
+    scope.kind === 'recent' &&
+    (!Number.isInteger(scope.currentWeek) ||
+      scope.currentWeek < 1 ||
+      scope.currentWeek > 24)
+  )
+    throw new Error('Choose a valid programme week for this report.');
+  const selectedWeeks =
+    scope.kind === 'recent'
+      ? [scope.currentWeek - 1, scope.currentWeek].filter((week) => week >= 1)
+      : null;
   // Include partial saved logs and device-local queued saves, but not undo tombstones.
   const byKey = new Map<string, WorkoutEntry>();
   for (const stored of entries) {
@@ -62,6 +82,7 @@ export function buildDayReport(day: TrainingDay, entries: WorkoutEntry[]) {
     const entry =
       name === stored.exercise ? stored : { ...stored, exercise: name };
     if (entry.day !== day) continue;
+    if (selectedWeeks && !selectedWeeks.includes(entry.week)) continue;
     const key = `${entry.week}|${entry.exerciseOrder}`;
     const previous = byKey.get(key);
     if (!previous || (entry.updatedAt ?? '') >= (previous.updatedAt ?? ''))
@@ -83,23 +104,26 @@ export function buildDayReport(day: TrainingDay, entries: WorkoutEntry[]) {
     const key = `${reportPhase(entry.week)}|${entry.exerciseOrder}|${entry.exercise.trim().toLowerCase()}`;
     byExercise.set(key, [...(byExercise.get(key) ?? []), entry]);
   }
-  const sessions = [...byWeek].map(([week, records]) => ({
-    week,
-    records,
-    date:
-      records.find((entry) => entry.completedAt)?.completedAt ??
-      records.find((entry) => entry.updatedAt)?.updatedAt ??
-      null,
-    volume: records.reduce(
-      (sum, entry) => sum + reportMetrics(entry).volume,
-      0,
-    ),
-    seconds: records.reduce(
-      (sum, entry) => sum + reportMetrics(entry).seconds,
-      0,
-    ),
-    reps: records.reduce((sum, entry) => sum + reportMetrics(entry).reps, 0),
-  }));
+  const sessions = (selectedWeeks ?? [...byWeek.keys()]).map((week) => {
+    const records = byWeek.get(week) ?? [];
+    return {
+      week,
+      records,
+      date:
+        records.find((entry) => entry.completedAt)?.completedAt ??
+        records.find((entry) => entry.updatedAt)?.updatedAt ??
+        null,
+      volume: records.reduce(
+        (sum, entry) => sum + reportMetrics(entry).volume,
+        0,
+      ),
+      seconds: records.reduce(
+        (sum, entry) => sum + reportMetrics(entry).seconds,
+        0,
+      ),
+      reps: records.reduce((sum, entry) => sum + reportMetrics(entry).reps, 0),
+    };
+  });
   const exercises = [...byExercise].map(([key, records]) => ({
     key,
     name: records[0].exercise,
@@ -108,6 +132,12 @@ export function buildDayReport(day: TrainingDay, entries: WorkoutEntry[]) {
   }));
   return {
     day,
+    scope,
+    scopeLabel: selectedWeeks
+      ? selectedWeeks.map(reportWeekLabel).join(' and ')
+      : 'All recorded phases and weeks',
+    recordedSessions: sessions.filter((session) => session.records.length > 0)
+      .length,
     records,
     sessions,
     exercises,

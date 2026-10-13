@@ -109,6 +109,7 @@ import ExerciseDraftBoundary, {
 } from './exercise-draft-boundary';
 import { useOutboxRetry } from './use-outbox-retry';
 import { useOutboxSnapshot } from './use-outbox-snapshot';
+import type { SaveHistoryEdit } from './history-edit-dialog';
 import { recallSets, validateWorkoutNumbers } from '@/lib/workout-validation';
 import {
   removeLastDraftSet,
@@ -1891,6 +1892,85 @@ export function WorkoutApp() {
     }
   }
 
+  const saveHistoryEdit: SaveHistoryEdit = async (original, fields) => {
+    const editingProgramme = original.programmeId ?? 'initial';
+    if (editingProgramme !== programmeIdRef.current)
+      throw Error(
+        'The programme changed. Close the editor and refresh before editing history.',
+      );
+    if (
+      !navigator.onLine ||
+      hasPendingOutbox(window.localStorage) ||
+      saving ||
+      programSaving ||
+      undoing ||
+      backupBusy ||
+      dataActionLoading
+    )
+      throw Error(
+        'Reconnect and finish syncing or saving before correcting history. Your edits remain here.',
+      );
+    if (exerciseDraft.dirty)
+      throw Error(
+        'Finish or discard your current workout draft in Today before correcting history.',
+      );
+    mutationSequence.current++;
+    try {
+      const response = await fetch('/api/workouts', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...fields,
+          programmeId: editingProgramme,
+          id: original.id,
+          expectedUpdatedAt: original.updatedAt,
+          expectedServerRevision: original.serverRevision,
+        }),
+        signal: AbortSignal.timeout(15_000),
+      });
+      const data = (await response.json()) as {
+        entry?: WorkoutEntry;
+        sheetSyncQueued?: boolean;
+        error?: string;
+      };
+      mutationSequence.current++;
+      if (!response.ok || !data.entry) {
+        throw Error(
+          data.error ??
+            'Unable to confirm this correction. Close the editor and refresh before retrying; your edits remain here.',
+        );
+      }
+      if (
+        editingProgramme !== programmeIdRef.current ||
+        data.entry.programmeId !== editingProgramme ||
+        data.entry.id !== original.id
+      )
+        throw Error(
+          'The programme changed while saving. Close the editor and refresh to review history.',
+        );
+      const saved = normaliseWorkoutEntries([
+        { ...data.entry, offlinePending: false },
+      ])[0];
+      setEntries((current) => {
+        const next = replaceWorkoutEntry(current, saved);
+        cacheWorkoutEntries(next, undefined, editingProgramme);
+        return next;
+      });
+      setLastSave(null);
+      setNotice(
+        `History corrected · original date preserved${data.sheetSyncQueued ? ' · Sheet sync queued' : ' · Liftline only'}`,
+      );
+      window.setTimeout(() => {
+        void refreshWorkoutData().catch(() => undefined);
+      }, 3500);
+    } finally {
+      mutationSequence.current++;
+      // Reconcile an ambiguous network failure as well as a confirmed save.
+      // Start after invalidating refreshes launched during the correction.
+      void refreshWorkoutData().catch(() => undefined);
+    }
+  };
+
   async function undoLastSave() {
     if (
       !lastSave ||
@@ -2282,7 +2362,7 @@ export function WorkoutApp() {
                 <div
                   id="programme-tools-menu"
                   role="menu"
-                  className="absolute right-0 top-full z-50 mt-2 w-72 rounded-xl bg-popover p-2 text-popover-foreground shadow-lg ring-1 ring-foreground/10"
+                  className="absolute right-0 top-full z-50 mt-2 max-h-[calc(100dvh-7rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-72 max-w-[calc(100vw-2rem)] overflow-y-auto overscroll-contain rounded-xl bg-popover p-2 text-popover-foreground shadow-lg ring-1 ring-foreground/10"
                 >
                   <div className="space-y-1 px-2 py-2">
                     <span className="block font-sans text-sm font-semibold text-foreground">
@@ -2654,13 +2734,13 @@ export function WorkoutApp() {
                   </Card>
                 </>
               )}
-              <div className="beta-exercise-heading flex items-start justify-between gap-3">
+              <div className="beta-exercise-heading flex flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-start">
                 <div className="min-w-0 flex-1">
                   <p className="font-sans text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                     Day {activeDay} · Exercise {activeIndex + 1} of{' '}
                     {dayExercises.length}
                   </p>
-                  <h2 className="mt-1 font-sans text-xl font-bold">
+                  <h2 className="mt-1 break-words font-sans text-xl font-bold [overflow-wrap:anywhere]">
                     {exercise.name}
                   </h2>
                 </div>
@@ -3356,7 +3436,10 @@ export function WorkoutApp() {
             }
           >
             <ProgressView
-              key={activePhase}
+              programmeId={programmeId}
+              onSaveHistory={saveHistoryEdit}
+              activeWeek={activeWeek}
+              key={`${programmeId}|${activePhase}`}
               activePhase={activePhase}
               activeRoutine={activeRoutine}
               phaseEntries={phaseEntries}

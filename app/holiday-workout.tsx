@@ -846,9 +846,9 @@ export default function HolidayWorkout({
   }
 
   return (
-    <main className="min-h-screen bg-[linear-gradient(180deg,#ecfdf8_0%,#f8faf7_44%,#fff8eb_100%)] pb-16 font-sans text-[#153b39]">
-      <header className="sticky top-0 z-30 border-b border-teal-900/10 bg-white/92 backdrop-blur">
-        <div className="mx-auto flex min-h-18 max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
+    <main className="min-h-dvh bg-[linear-gradient(180deg,#ecfdf8_0%,#f8faf7_44%,#fff8eb_100%)] pb-[max(4rem,env(safe-area-inset-bottom))] font-sans text-[#153b39]">
+      <header className="sticky top-0 z-30 border-b border-teal-900/10 bg-white/92 pt-[env(safe-area-inset-top)] backdrop-blur">
+        <div className="mx-auto flex min-h-18 max-w-6xl items-center justify-between gap-3 py-3 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] sm:pl-[max(1.5rem,env(safe-area-inset-left))] sm:pr-[max(1.5rem,env(safe-area-inset-right))]">
           <button
             type="button"
             onClick={onExit}
@@ -889,7 +889,7 @@ export default function HolidayWorkout({
         </div>
       </header>
 
-      <div className="mx-auto max-w-6xl space-y-5 px-4 py-5 sm:px-6 md:py-8">
+      <div className="mx-auto max-w-6xl space-y-5 py-5 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] sm:pl-[max(1.5rem,env(safe-area-inset-left))] sm:pr-[max(1.5rem,env(safe-area-inset-right))] md:py-8">
         {pendingHoliday()
           .filter((item) => item.blocked)
           .map((item) => (
@@ -1135,7 +1135,7 @@ export default function HolidayWorkout({
                         )}
                       </div>
                       {previousEntry.notes && (
-                        <p className="mt-3 whitespace-pre-wrap text-sm text-[#52706e]">
+                        <p className="mt-3 whitespace-pre-wrap text-sm text-[#52706e] [overflow-wrap:anywhere]">
                           <strong>Previous note:</strong> {previousEntry.notes}
                         </p>
                       )}

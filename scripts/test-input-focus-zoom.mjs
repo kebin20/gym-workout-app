@@ -83,6 +83,7 @@ test('all Liftline form surfaces use the shared typography and keep pinch zoom a
     'app/programme-manager.tsx',
     'app/holiday-workout.tsx',
     'app/training-tools-dialog.tsx',
+    'app/history-edit-dialog.tsx',
   ]) {
     const source = readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
     assert.match(source, /from '@\/components\/liftline-form-controls'/);

@@ -13,6 +13,7 @@ export function routeFixture({
   beforeBatch,
   failBatchAt,
   beforeRun,
+  syncWorkoutEntries,
 } = {}) {
   const sqlite = new DatabaseSync(':memory:');
   for (const file of readdirSync(path.join(root, 'drizzle'))
@@ -95,11 +96,13 @@ export function routeFixture({
             configured: true,
             entries: sheetEntries,
           }),
-          syncWorkoutEntries: async () => ({
-            ok: true,
-            configured: true,
-            synced: 1,
-          }),
+          syncWorkoutEntries:
+            syncWorkoutEntries ??
+            (async () => ({
+              ok: true,
+              configured: true,
+              synced: 1,
+            })),
           syncHolidayWorkoutEntries: async () => ({
             ok: true,
             configured: true,
