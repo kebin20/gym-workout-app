@@ -56,6 +56,62 @@ function patch(f, body) {
   );
 }
 
+test('an older in-flight Sheet write re-sends the latest correction instead of leaving stale values mirrored', async () => {
+  const writes = [];
+  const f = routeFixture({
+    syncWorkoutEntries: async (entries) => {
+      writes.push(entries[0].set1Weight);
+      if (writes.length === 1)
+        f.sqlite.exec(
+          "UPDATE workout_entries SET set1_weight=99,updated_at='2099-01-01T00:00:00.000Z',sync_status='synced'",
+        );
+      return { ok: true, configured: true, synced: 1 };
+    },
+  });
+  try {
+    seed(f);
+    assert.equal(
+      (await patch(f, { ...payload(f), set1Weight: 91 })).status,
+      200,
+    );
+    await f.settled();
+    assert.deepEqual(writes, [91, 99]);
+    assert.equal(read(f).set1Weight, 99);
+    assert.equal(read(f).syncStatus, 'synced');
+  } finally {
+    f.close();
+  }
+});
+
+test('continuous corrections bound Sheet reconciliation and expose a retryable error instead of claiming success', async () => {
+  let writes = 0;
+  const f = routeFixture({
+    syncWorkoutEntries: async () => {
+      writes++;
+      f.sqlite
+        .prepare(
+          "UPDATE workout_entries SET set1_weight=?,updated_at=?,sync_status='synced'",
+        )
+        .run(100 + writes, `2099-01-01T00:00:0${writes}.000Z`);
+      return { ok: true, configured: true, synced: 1 };
+    },
+  });
+  try {
+    seed(f);
+    assert.equal(
+      (await patch(f, { ...payload(f), set1Weight: 91 })).status,
+      200,
+    );
+    await f.settled();
+    assert.equal(writes, 2);
+    assert.equal(read(f).set1Weight, 102);
+    assert.equal(read(f).syncStatus, 'failed');
+    assert.match(read(f).syncError, /Retry Sheet sync/);
+  } finally {
+    f.close();
+  }
+});
+
 test('historical correction updates the same five-set record and queues only its matching Sheet row, preserving metadata/date', async () => {
   const writes = [];
   const f = routeFixture({

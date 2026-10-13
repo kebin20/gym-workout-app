@@ -70,6 +70,7 @@ The experimental [bundled iOS foundation](docs/native-ios.md) is included in the
 - Correct only an existing record using its ID, timestamp, server revision and active programme. Preserve its exercise, target, set count, original date and completion status; do not advance Today, run timers, insert another workout or edit immutable programme archives.
 - Mirror eligible original Phase 1 corrections to their existing Google Sheet row in the background. The unchanged Sheet layout supports the first three sets, exercise RIR and notes; extra sets and per-set RIR remain in Liftline. Phase 2, custom exercises and later programmes stay app-only. Records without original dates are not sent to the Sheet, rather than inventing today's date; sync errors remain visible/retryable.
 - Refresh local history, trends and PDF data after confirmation. Keep the new editor outside the cold-start asset graph. No existing workout values are changed by releasing this feature.
+- Reconcile an older in-flight Sheet write with a newer correction, with bounded retries and a visible retryable error if changes continue arriving.
 
 ### v3.16.0
 

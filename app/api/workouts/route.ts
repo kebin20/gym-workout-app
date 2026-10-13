@@ -114,29 +114,63 @@ async function resolveExercise(
 
 async function finishSheetSync(saved: WorkoutEntry, programmeId: string) {
   const db = workoutDatabase();
-  if (!programmeMatches(programmeId, await activeProgrammeId(db))) return;
-  const latest = await db
-    .prepare('SELECT updated_at AS updatedAt FROM workout_entries WHERE id = ?')
-    .bind(saved.id)
-    .first<{ updatedAt: string }>();
-  if (latest?.updatedAt !== saved.updatedAt) return;
-  const result = await syncWorkoutEntries([saved]);
-  await db
-    .prepare(`UPDATE workout_entries SET sync_status = ?, sheet_synced_at = ?, sync_error = ?
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (!programmeMatches(programmeId, await activeProgrammeId(db))) return;
+    const latest = await db
+      .prepare(
+        'SELECT updated_at AS updatedAt FROM workout_entries WHERE id = ?',
+      )
+      .bind(saved.id)
+      .first<{ updatedAt: string }>();
+    if (latest?.updatedAt !== saved.updatedAt) return;
+    const result = await syncWorkoutEntries([saved]);
+    if (!programmeMatches(programmeId, await activeProgrammeId(db))) return;
+    const current = await db
+      .prepare(
+        `SELECT ${workoutSelectColumns} FROM workout_entries WHERE id = ?`,
+      )
+      .bind(saved.id)
+      .first<WorkoutEntry>();
+    if (!current) return;
+    // An older in-flight webhook can finish after a correction's own webhook.
+    // Re-send the latest values, bounded to avoid an endless background task.
+    if (current.updatedAt !== saved.updatedAt) {
+      if (current.syncStatus === 'not_applicable' || !current.completedAt)
+        return;
+      if (attempt === 0) {
+        saved = current;
+        continue;
+      }
+      await db
+        .prepare(`UPDATE workout_entries SET sync_status = 'failed', sync_error = ?
+      WHERE id = ? AND updated_at = ? AND ${programmeGuardSql}`)
+        .bind(
+          'Another correction arrived during Sheet sync. Retry Sheet sync to confirm the latest values.',
+          current.id,
+          current.updatedAt,
+          programmeId,
+        )
+        .run();
+      return;
+    }
+    await db
+      .prepare(`UPDATE workout_entries SET sync_status = ?, sheet_synced_at = ?, sync_error = ?
       WHERE week = ? AND day = ? AND exercise_order = ? AND updated_at = ? AND ${programmeGuardSql}`)
-    .bind(
-      result.ok ? 'synced' : 'failed',
-      result.ok ? new Date().toISOString() : null,
-      result.ok
-        ? null
-        : String(result.message ?? 'Google Sheet sync failed.').slice(0, 500),
-      saved.week,
-      saved.day,
-      saved.exerciseOrder,
-      saved.updatedAt,
-      programmeId,
-    )
-    .run();
+      .bind(
+        result.ok ? 'synced' : 'failed',
+        result.ok ? new Date().toISOString() : null,
+        result.ok
+          ? null
+          : String(result.message ?? 'Google Sheet sync failed.').slice(0, 500),
+        saved.week,
+        saved.day,
+        saved.exerciseOrder,
+        saved.updatedAt,
+        programmeId,
+      )
+      .run();
+    return;
+  }
 }
 
 export async function GET(request: Request) {
