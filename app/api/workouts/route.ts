@@ -1,4 +1,9 @@
 import { env, waitUntil } from 'cloudflare:workers';
+import {
+  activeProgrammeId,
+  programmeGuardSql,
+  programmeMatches,
+} from '@/lib/programme-storage';
 
 import { syncWorkoutEntries } from '@/lib/google-sheet-sync';
 import { correctedSessionExercise } from '@/lib/session-plan';
@@ -19,6 +24,7 @@ import {
 } from '@/lib/workout-types';
 
 type WorkoutPayload = SetRirValues & {
+  programmeId?: string;
   week: number;
   day: TrainingDay;
   exerciseOrder: number;
@@ -102,12 +108,13 @@ async function resolveExercise(
   return exercise ? { exercise, custom: false } : null;
 }
 
-async function finishSheetSync(saved: WorkoutEntry) {
+async function finishSheetSync(saved: WorkoutEntry, programmeId: string) {
   const db = workoutDatabase();
+  if (!programmeMatches(programmeId, await activeProgrammeId(db))) return;
   const result = await syncWorkoutEntries([saved]);
   await db
     .prepare(`UPDATE workout_entries SET sync_status = ?, sheet_synced_at = ?, sync_error = ?
-      WHERE week = ? AND day = ? AND exercise_order = ? AND updated_at = ?`)
+      WHERE week = ? AND day = ? AND exercise_order = ? AND updated_at = ? AND ${programmeGuardSql}`)
     .bind(
       result.ok ? 'synced' : 'failed',
       result.ok ? new Date().toISOString() : null,
@@ -118,6 +125,7 @@ async function finishSheetSync(saved: WorkoutEntry) {
       saved.day,
       saved.exerciseOrder,
       saved.updatedAt,
+      programmeId,
     )
     .run();
 }
@@ -127,6 +135,9 @@ export async function GET(request: Request) {
     const db = workoutDatabase();
     // A D1 batch is one snapshot: never advance the cursor past rows absent
     // from this response. Legacy timestamp clients receive a full snapshot.
+    const requestProgramme = new URL(request.url).searchParams.get(
+      'programmeId',
+    );
     const cursor = parseSyncCursor(
       new URL(request.url).searchParams.get('cursor'),
     );
@@ -135,9 +146,9 @@ export async function GET(request: Request) {
       cursor !== null
         ? db
             .prepare(
-              `SELECT ${workoutSelectColumns} FROM workout_entries WHERE server_revision > ? ORDER BY week, day, exercise_order`,
+              `SELECT ${workoutSelectColumns} FROM workout_entries WHERE server_revision > ? OR NOT (${programmeGuardSql}) ORDER BY week, day, exercise_order`,
             )
-            .bind(cursor)
+            .bind(cursor, requestProgramme ?? 'initial')
         : db.prepare(
             `SELECT ${workoutSelectColumns} FROM workout_entries ORDER BY week, day, exercise_order`,
           ),
@@ -145,7 +156,7 @@ export async function GET(request: Request) {
         `SELECT ${sessionExerciseSelectColumns} FROM session_exercises ORDER BY week, day, display_order`,
       ),
       db.prepare(
-        "SELECT key, value FROM app_settings WHERE key IN ('phase1StartDate', 'phase2StartDate')",
+        "SELECT key, value FROM app_settings WHERE key IN ('phase1StartDate', 'phase2StartDate','programmeId')",
       ),
     ]);
     const schedule = {
@@ -164,9 +175,20 @@ export async function GET(request: Request) {
     return Response.json(
       {
         entries: entries.results,
+        programmeId:
+          (settings.results as { key: string; value: string }[]).find(
+            (setting) => setting.key === 'programmeId',
+          )?.value ?? 'initial',
         sessionExercises: sessionExercises.results,
         schedule,
-        partial: cursor !== null,
+        partial:
+          cursor !== null &&
+          programmeMatches(
+            requestProgramme ?? undefined,
+            (settings.results as { key: string; value: string }[]).find(
+              (setting) => setting.key === 'programmeId',
+            )?.value ?? 'initial',
+          ),
         cursor: String(
           (clock.results[0] as { value?: number } | undefined)?.value ?? 0,
         ),
@@ -187,6 +209,15 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as Partial<WorkoutPayload>;
+    const programmeId = await activeProgrammeId(workoutDatabase());
+    if (!programmeMatches(body.programmeId, programmeId))
+      return Response.json(
+        {
+          error:
+            'This save belongs to an archived programme. Export device recovery and reload; it has not overwritten the new programme.',
+        },
+        { status: 409 },
+      );
     const week = Number(body.week);
     const exerciseOrder = Number(body.exerciseOrder);
     const day = body.day;
@@ -256,7 +287,7 @@ export async function POST(request: Request) {
       ? safeIsoDate(body.completedAt, serverNow)
       : null;
     const syncStatus =
-      custom || exerciseOrder >= 100 || week > 12
+      custom || exerciseOrder >= 100 || week > 12 || programmeId !== 'initial'
         ? 'not_applicable'
         : 'pending';
 
@@ -266,7 +297,7 @@ export async function POST(request: Request) {
       set2_reps, set3_weight, set3_reps, set4_weight, set4_reps, set5_weight, set5_reps,
       set_count, rir, notes, completed, completed_at, sync_status, sheet_synced_at, sync_error, updated_at,
       set1_rir, set2_rir, set3_rir, set4_rir, set5_rir
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?)
+    ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ? WHERE ${programmeGuardSql}
     ON CONFLICT(week, day, exercise_order) DO UPDATE SET
       exercise = excluded.exercise, target = excluded.target,
       set1_weight = excluded.set1_weight, set1_reps = excluded.set1_reps,
@@ -313,6 +344,7 @@ export async function POST(request: Request) {
         nullableNumber(body.set3Rir),
         nullableNumber(body.set4Rir),
         nullableNumber(body.set5Rir),
+        programmeId,
         Object.hasOwn(body, 'set1Rir') ? 1 : 0,
         Object.hasOwn(body, 'set2Rir') ? 1 : 0,
         Object.hasOwn(body, 'set3Rir') ? 1 : 0,
@@ -329,6 +361,14 @@ export async function POST(request: Request) {
       )
       .bind(week, day, exerciseOrder)
       .first<WorkoutEntry>();
+    if (!saved || !programmeMatches(programmeId, await activeProgrammeId(db)))
+      return Response.json(
+        {
+          error:
+            'The programme changed while saving. This record has not been applied to the new programme.',
+        },
+        { status: 409 },
+      );
     if (saved && saved.updatedAt !== updatedAt)
       return Response.json(
         {
@@ -339,10 +379,10 @@ export async function POST(request: Request) {
         { status: 409 },
       );
     if (saved && syncStatus === 'pending' && writeResult.meta.changes > 0) {
-      waitUntil(finishSheetSync(saved).then(() => undefined));
+      waitUntil(finishSheetSync(saved, programmeId).then(() => undefined));
     }
     return Response.json({
-      entry: saved,
+      entry: { ...saved, programmeId },
       sheetSyncQueued: syncStatus === 'pending',
     });
   } catch (error) {

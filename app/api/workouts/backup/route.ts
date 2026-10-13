@@ -1,4 +1,17 @@
 import { env } from 'cloudflare:workers';
+import {
+  activeProgrammeId,
+  programmeGuardSql,
+  programmeMatches,
+  validateArchive,
+  type ProgrammeArchive,
+} from '@/lib/programme-storage';
+import {
+  backupFileLimit,
+  backupRequestLimit,
+  jsonRestoreStatements,
+  jsonBackupChunks,
+} from '@/lib/backup-storage';
 
 import {
   sessionExerciseSelectColumns,
@@ -12,10 +25,7 @@ import {
   holidayWorkoutSelectColumns,
   type HolidayWorkoutEntry,
 } from '@/lib/holiday-workout-types';
-import {
-  holidayBackupStatement,
-  normalizeHolidayBackup,
-} from '@/lib/holiday-backup';
+import { normalizeHolidayBackup } from '@/lib/holiday-backup';
 
 type BackupEnvelope = {
   version?: unknown;
@@ -25,6 +35,7 @@ type BackupEnvelope = {
   readinessChecks?: unknown;
   settings?: unknown;
   holidayEntries?: unknown;
+  archives?: unknown;
 };
 
 type BodyMetricBackup = {
@@ -195,7 +206,10 @@ function normalizeWorkout(value: unknown): WorkoutEntry | null {
     notes: cleanText(entry.notes, 1000),
     completed,
     completedAt: completed ? isoDateOrNull(entry.completedAt) : null,
-    syncStatus: completed && exerciseOrder < 100 ? 'pending' : 'not_applicable',
+    syncStatus:
+      completed && exerciseOrder < 100 && week <= 12
+        ? 'pending'
+        : 'not_applicable',
     sheetSyncedAt: null,
     syncError: null,
   };
@@ -240,7 +254,15 @@ function normalizeSessionExercise(value: unknown): SessionExercise | null {
   };
 }
 
-function parseBackup(value: unknown) {
+function parseBackup(value: unknown): {
+  entries: WorkoutEntry[];
+  holidayEntries: HolidayWorkoutEntry[];
+  sessionExercises: SessionExercise[];
+  bodyMetrics: BodyMetricBackup[];
+  readinessChecks: ReadinessBackup[];
+  settings: Record<string, unknown>;
+  archives: ProgrammeArchive[];
+} {
   if (!value || typeof value !== 'object')
     throw new Error('This is not a valid Liftline backup.');
   const backup = value as BackupEnvelope;
@@ -249,11 +271,6 @@ function parseBackup(value: unknown) {
     !Array.isArray(backup.sessionExercises)
   ) {
     throw new Error('This backup is missing Liftline workout data.');
-  }
-  if (backup.entries.length > 1000 || backup.sessionExercises.length > 720) {
-    throw new Error(
-      'This backup contains more records than Liftline supports.',
-    );
   }
   const entries = backup.entries.map(normalizeWorkout);
   if (
@@ -264,9 +281,15 @@ function parseBackup(value: unknown) {
   const rawHolidayEntries = Array.isArray(backup.holidayEntries)
     ? backup.holidayEntries
     : [];
-  if (rawHolidayEntries.length > 5000)
-    throw new Error('This backup contains too many Holiday records.');
   const holidayEntries = rawHolidayEntries.map(normalizeHolidayBackup);
+  if (backup.archives !== undefined && !Array.isArray(backup.archives))
+    throw new Error('Invalid archive list.');
+  const archives = (Array.isArray(backup.archives) ? backup.archives : []).map(
+    validateArchive,
+  );
+  for (const archive of archives) parseBackup(JSON.parse(archive.snapshot));
+  if (new Set(archives.map((archive) => archive.id)).size !== archives.length)
+    throw new Error('Duplicate programme archives.');
   const sessionExercises = backup.sessionExercises.map(
     normalizeSessionExercise,
   );
@@ -276,11 +299,6 @@ function parseBackup(value: unknown) {
   const rawReadinessChecks = Array.isArray(backup.readinessChecks)
     ? backup.readinessChecks
     : [];
-  if (rawBodyMetrics.length > 1000 || rawReadinessChecks.length > 1000) {
-    throw new Error(
-      'This backup contains more health records than Liftline supports.',
-    );
-  }
   const bodyMetrics = rawBodyMetrics.map(normalizeBodyMetric);
   const readinessChecks = rawReadinessChecks.map(normalizeReadiness);
   if (
@@ -295,6 +313,7 @@ function parseBackup(value: unknown) {
   return {
     entries: entries as WorkoutEntry[],
     holidayEntries: holidayEntries as HolidayWorkoutEntry[],
+    archives,
     sessionExercises: sessionExercises as SessionExercise[],
     bodyMetrics: bodyMetrics as BodyMetricBackup[],
     readinessChecks: readinessChecks as ReadinessBackup[],
@@ -323,56 +342,80 @@ export async function GET() {
       readinessChecks,
       settings,
       holidayEntries,
-    ] = await Promise.all([
+      archives,
+    ] = await env.DB.batch([
       env.DB.prepare(
         `SELECT ${workoutSelectColumns} FROM workout_entries ORDER BY week, day, exercise_order`,
-      ).all<WorkoutEntry>(),
+      ),
       env.DB.prepare(
         `SELECT ${sessionExerciseSelectColumns} FROM session_exercises ORDER BY week, day, display_order`,
-      ).all<SessionExercise>(),
+      ),
       env.DB.prepare(
         'SELECT date, weight, waist, body_fat AS bodyFat, lean_mass AS leanMass, source, notes FROM body_metrics ORDER BY date',
-      ).all<BodyMetricBackup>(),
+      ),
       env.DB.prepare(
         'SELECT checked_at AS checkedAt, week, day, sleep, energy, soreness, joint_comfort AS jointComfort, recommendation FROM readiness_checks ORDER BY checked_at',
-      ).all<ReadinessBackup>(),
-      env.DB.prepare('SELECT key, value FROM app_settings').all<{
-        key: string;
-        value: string;
-      }>(),
+      ),
+      env.DB.prepare('SELECT key, value FROM app_settings'),
       env.DB.prepare(
         `SELECT ${holidayWorkoutSelectColumns} FROM holiday_workout_entries ORDER BY session_date, session_id, exercise_order`,
-      ).all<HolidayWorkoutEntry>(),
+      ),
+      env.DB.prepare(
+        'SELECT id,label,created_at AS createdAt,snapshot FROM programme_archives ORDER BY created_at',
+      ),
     ]);
     const createdAt = new Date().toISOString();
     const date = createdAt.slice(0, 10);
-    return new Response(
-      JSON.stringify(
-        {
-          source: 'Liftline',
-          version: 3,
-          createdAt,
-          timeZone: 'Asia/Tokyo',
-          entries: entries.results,
-          holidayEntries: holidayEntries.results,
-          sessionExercises: sessionExercises.results,
-          bodyMetrics: bodyMetrics.results,
-          readinessChecks: readinessChecks.results,
-          settings: Object.fromEntries(
-            settings.results.map((setting) => [setting.key, setting.value]),
-          ),
-        },
-        null,
-        2,
-      ),
+    const content = JSON.stringify(
       {
-        headers: {
-          'Content-Type': 'application/json; charset=utf-8',
-          'Content-Disposition': `attachment; filename="liftline-backup-${date}.json"`,
-          'Cache-Control': 'no-store',
-        },
+        source: 'Liftline',
+        version: 4,
+        createdAt,
+        timeZone: 'Asia/Tokyo',
+        entries: entries.results,
+        holidayEntries: holidayEntries.results,
+        archives: archives.results,
+        sessionExercises: sessionExercises.results,
+        bodyMetrics: bodyMetrics.results,
+        readinessChecks: readinessChecks.results,
+        settings: Object.fromEntries(
+          (settings.results as { key: string; value: string }[]).map(
+            (setting) => [setting.key, setting.value],
+          ),
+        ),
       },
+      null,
+      2,
     );
+    if (new TextEncoder().encode(content).length > backupFileLimit)
+      throw new Error(
+        'The complete backup exceeds 8 MB. Export archived programmes individually; no records have been removed.',
+      );
+    // Preflight the same per-record/chunk budgets used by restore, including
+    // escaped archive JSON strings, before representing a download as usable.
+    const chunks = [
+      entries,
+      sessionExercises,
+      bodyMetrics,
+      readinessChecks,
+      holidayEntries,
+      archives,
+    ].reduce(
+      (count, result) =>
+        count + jsonBackupChunks(result.results as object[]).length,
+      0,
+    );
+    if (chunks + 3 > 45)
+      throw new Error(
+        'This backup exceeds the atomic restore budget. Export programmes individually.',
+      );
+    return new Response(content, {
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Content-Disposition': `attachment; filename="liftline-backup-${date}.json"`,
+        'Cache-Control': 'no-store',
+      },
+    });
   } catch (error) {
     return Response.json(
       {
@@ -388,18 +431,28 @@ export async function POST(request: Request) {
   try {
     if (!env.DB) throw new Error('Workout database is unavailable.');
     const contentLength = Number(request.headers.get('content-length') ?? 0);
-    if (contentLength > 8_000_000)
+    if (contentLength > backupRequestLimit)
       return Response.json(
         { error: 'The backup file is too large.' },
         { status: 413 },
       );
     const content = await request.text();
-    if (new TextEncoder().encode(content).length > 8_000_000)
+    if (new TextEncoder().encode(content).length > backupRequestLimit)
       return Response.json(
         { error: 'The backup file is too large.' },
         { status: 413 },
       );
-    const body = JSON.parse(content) as { mode?: unknown; backup?: unknown };
+    const body = JSON.parse(content) as {
+      mode?: unknown;
+      backup?: unknown;
+      programmeId?: string;
+    };
+    const programmeId = await activeProgrammeId(env.DB);
+    if (!programmeMatches(body.programmeId, programmeId))
+      return Response.json(
+        { error: 'The programme changed. Reload before restoring a backup.' },
+        { status: 409 },
+      );
     const {
       entries,
       holidayEntries,
@@ -407,6 +460,7 @@ export async function POST(request: Request) {
       bodyMetrics,
       readinessChecks,
       settings,
+      archives,
     } = parseBackup(body.backup);
 
     const [existingEntries, existingSessionExercises] = await Promise.all([
@@ -418,12 +472,48 @@ export async function POST(request: Request) {
       ).all<SessionExercise>(),
     ]);
     const existingEntryKeys = new Set(existingEntries.results.map(keyOf));
+    let backupProgrammeId =
+      typeof settings.programmeId === 'string'
+        ? settings.programmeId
+        : 'initial';
+    if (!entries.length && !sessionExercises.length && archives.length)
+      backupProgrammeId = programmeId;
+    if (!/^[a-zA-Z0-9-]{1,80}$/.test(backupProgrammeId))
+      throw new Error('Invalid backup programme identity.');
+    if (
+      backupProgrammeId !== programmeId &&
+      (existingEntries.results.length ||
+        existingSessionExercises.results.length)
+    )
+      return Response.json(
+        {
+          error:
+            'This backup belongs to a different programme. Review archived history instead of merging different cycles.',
+        },
+        { status: 409 },
+      );
+    const existingArchives = await env.DB.prepare(
+      'SELECT id,snapshot FROM programme_archives',
+    ).all<{ id: string; snapshot: string }>();
+    if (
+      archives.some((archive) =>
+        existingArchives.results.some(
+          (existing) =>
+            existing.id === archive.id &&
+            existing.snapshot !== archive.snapshot,
+        ),
+      )
+    )
+      throw new Error(
+        'An archive with this identity already contains different data. Nothing has been replaced.',
+      );
     const existingSessionKeys = new Set(
       existingSessionExercises.results.map(keyOf),
     );
     const summary = {
       workoutRecords: entries.length,
       holidayRecords: holidayEntries.length,
+      archivedProgrammes: archives.length,
       newWorkoutRecords: entries.filter(
         (entry) => !existingEntryKeys.has(keyOf(entry)),
       ).length,
@@ -440,127 +530,175 @@ export async function POST(request: Request) {
     if (body.mode !== 'restore') return Response.json({ ok: true, summary });
 
     const now = new Date().toISOString();
+    // Adopting a different cycle is only safe on an empty active programme.
+    // Repeat that condition inside the transaction in case another device
+    // creates a record or session override after the preview/read above.
+    const adoptsProgramme = backupProgrammeId !== programmeId;
+    const restoreToken = crypto.randomUUID();
+    const restoreGuardSql = adoptsProgramme
+      ? `${programmeGuardSql} AND (SELECT value FROM app_settings WHERE key='programmeRestoreToken') = ?`
+      : programmeGuardSql;
+    const guard = {
+      sql: restoreGuardSql,
+      args: adoptsProgramme ? [programmeId, restoreToken] : [programmeId],
+    };
+    // A later programme deliberately does not write into the original Sheet.
+    if (backupProgrammeId !== 'initial')
+      entries.forEach((entry) => (entry.syncStatus = 'not_applicable'));
+    const workoutFields = {
+      week: 'week',
+      day: 'day',
+      exercise_order: 'exerciseOrder',
+      exercise: 'exercise',
+      target: 'target',
+      set1_weight: 'set1Weight',
+      set1_reps: 'set1Reps',
+      set2_weight: 'set2Weight',
+      set2_reps: 'set2Reps',
+      set3_weight: 'set3Weight',
+      set3_reps: 'set3Reps',
+      set4_weight: 'set4Weight',
+      set4_reps: 'set4Reps',
+      set5_weight: 'set5Weight',
+      set5_reps: 'set5Reps',
+      set_count: 'setCount',
+      rir: 'rir',
+      notes: 'notes',
+      completed: 'completed',
+      completed_at: 'completedAt',
+      sync_status: 'syncStatus',
+      sheet_synced_at: 'sheetSyncedAt',
+      sync_error: 'syncError',
+      updated_at: 'updatedAt',
+      set1_rir: 'set1Rir',
+      set2_rir: 'set2Rir',
+      set3_rir: 'set3Rir',
+      set4_rir: 'set4Rir',
+      set5_rir: 'set5Rir',
+    };
+    const holidayFields = {
+      session_id: 'sessionId',
+      session_date: 'sessionDate',
+      session_type: 'sessionType',
+      exercise_order: 'exerciseOrder',
+      exercise: 'exercise',
+      target: 'target',
+      metric: 'metric',
+      set1_weight: 'set1Weight',
+      set1_value: 'set1Value',
+      set2_weight: 'set2Weight',
+      set2_value: 'set2Value',
+      set3_weight: 'set3Weight',
+      set3_value: 'set3Value',
+      set4_weight: 'set4Weight',
+      set4_value: 'set4Value',
+      set5_weight: 'set5Weight',
+      set5_value: 'set5Value',
+      set_count: 'setCount',
+      rir: 'rir',
+      notes: 'notes',
+      completed: 'completed',
+      completed_at: 'completedAt',
+      sync_status: 'syncStatus',
+      sheet_synced_at: 'sheetSyncedAt',
+      sync_error: 'syncError',
+      updated_at: 'updatedAt',
+    };
     const statements = [
-      ...holidayEntries.map((entry) =>
-        holidayBackupStatement(env.DB!, entry, now),
+      ...(adoptsProgramme
+        ? [
+            env.DB.prepare(
+              `INSERT INTO app_settings(key,value,updated_at) SELECT 'programmeRestoreToken',?,? WHERE ${programmeGuardSql} AND NOT EXISTS(SELECT 1 FROM workout_entries) AND NOT EXISTS(SELECT 1 FROM session_exercises) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at`,
+            ).bind(restoreToken, now, programmeId),
+          ]
+        : []),
+      ...jsonRestoreStatements(
+        env.DB,
+        'holiday_workout_entries',
+        holidayFields,
+        holidayEntries.map((entry) => ({
+          ...entry,
+          syncStatus: 'pending',
+          updatedAt: now,
+          sheetSyncedAt: null,
+          syncError: null,
+        })),
+        ['session_id', 'exercise_order'],
+        false,
+        guard,
       ),
-      ...sessionExercises.map((exercise) =>
-        env
-          .DB!.prepare(`INSERT INTO session_exercises (
-        week, day, exercise_order, display_order, name, target_sets, rep_range, rest,
-        muscles, alternative, skipped, custom, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(week, day, exercise_order) DO UPDATE SET
-        display_order = excluded.display_order, name = excluded.name, target_sets = excluded.target_sets,
-        rep_range = excluded.rep_range, rest = excluded.rest, muscles = excluded.muscles,
-        alternative = excluded.alternative, skipped = excluded.skipped, custom = excluded.custom,
-        updated_at = excluded.updated_at`)
-          .bind(
-            exercise.week,
-            exercise.day,
-            exercise.exerciseOrder,
-            exercise.displayOrder,
-            exercise.name,
-            exercise.targetSets,
-            exercise.repRange,
-            exercise.rest,
-            exercise.muscles,
-            exercise.alternative,
-            exercise.skipped ? 1 : 0,
-            exercise.custom ? 1 : 0,
-            now,
-          ),
+      ...jsonRestoreStatements(
+        env.DB,
+        'session_exercises',
+        {
+          week: 'week',
+          day: 'day',
+          exercise_order: 'exerciseOrder',
+          display_order: 'displayOrder',
+          name: 'name',
+          target_sets: 'targetSets',
+          rep_range: 'repRange',
+          rest: 'rest',
+          muscles: 'muscles',
+          alternative: 'alternative',
+          skipped: 'skipped',
+          custom: 'custom',
+          updated_at: 'updatedAt',
+        },
+        sessionExercises.map((exercise) => ({ ...exercise, updatedAt: now })),
+        ['week', 'day', 'exercise_order'],
+        false,
+        guard,
       ),
-      ...entries.map((entry) =>
-        env
-          .DB!.prepare(`INSERT INTO workout_entries (
-        week, day, exercise_order, exercise, target, set1_weight, set1_reps, set2_weight,
-        set2_reps, set3_weight, set3_reps, set4_weight, set4_reps, set5_weight, set5_reps,
-        set_count, rir, notes, completed, completed_at, sync_status, sheet_synced_at, sync_error, updated_at,
-        set1_rir, set2_rir, set3_rir, set4_rir, set5_rir
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(week, day, exercise_order) DO UPDATE SET
-        exercise = excluded.exercise, target = excluded.target,
-        set1_weight = excluded.set1_weight, set1_reps = excluded.set1_reps,
-        set2_weight = excluded.set2_weight, set2_reps = excluded.set2_reps,
-        set3_weight = excluded.set3_weight, set3_reps = excluded.set3_reps,
-        set4_weight = excluded.set4_weight, set4_reps = excluded.set4_reps,
-        set5_weight = excluded.set5_weight, set5_reps = excluded.set5_reps,
-        set_count = excluded.set_count, rir = excluded.rir, notes = excluded.notes,
-        completed = excluded.completed, completed_at = excluded.completed_at,
-        sync_status = excluded.sync_status, sheet_synced_at = NULL, sync_error = NULL,
-        updated_at = excluded.updated_at,
-        set1_rir = excluded.set1_rir, set2_rir = excluded.set2_rir,
-        set3_rir = excluded.set3_rir, set4_rir = excluded.set4_rir, set5_rir = excluded.set5_rir`)
-          .bind(
-            entry.week,
-            entry.day,
-            entry.exerciseOrder,
-            entry.exercise,
-            entry.target,
-            entry.set1Weight,
-            entry.set1Reps,
-            entry.set2Weight,
-            entry.set2Reps,
-            entry.set3Weight,
-            entry.set3Reps,
-            entry.set4Weight ?? null,
-            entry.set4Reps ?? null,
-            entry.set5Weight ?? null,
-            entry.set5Reps ?? null,
-            entry.setCount ?? 1,
-            entry.rir,
-            entry.notes,
-            entry.completed ? 1 : 0,
-            entry.completedAt ?? null,
-            entry.syncStatus,
-            now,
-            entry.set1Rir ?? null,
-            entry.set2Rir ?? null,
-            entry.set3Rir ?? null,
-            entry.set4Rir ?? null,
-            entry.set5Rir ?? null,
-          ),
+      ...jsonRestoreStatements(
+        env.DB,
+        'workout_entries',
+        workoutFields,
+        entries.map((entry) => ({
+          ...entry,
+          updatedAt: now,
+          sheetSyncedAt: null,
+          syncError: null,
+        })),
+        ['week', 'day', 'exercise_order'],
+        false,
+        guard,
       ),
-      ...bodyMetrics.map((metric) =>
-        env
-          .DB!.prepare(
-            `INSERT INTO body_metrics (date, weight, waist, body_fat, lean_mass, source, notes, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(date, source) DO UPDATE SET weight = excluded.weight, waist = excluded.waist,
-          body_fat = excluded.body_fat, lean_mass = excluded.lean_mass, notes = excluded.notes,
-          updated_at = excluded.updated_at`,
-          )
-          .bind(
-            metric.date,
-            metric.weight,
-            metric.waist,
-            metric.bodyFat,
-            metric.leanMass,
-            metric.source,
-            metric.notes,
-            now,
-          ),
+      ...jsonRestoreStatements(
+        env.DB,
+        'body_metrics',
+        {
+          date: 'date',
+          weight: 'weight',
+          waist: 'waist',
+          body_fat: 'bodyFat',
+          lean_mass: 'leanMass',
+          source: 'source',
+          notes: 'notes',
+          updated_at: 'updatedAt',
+        },
+        bodyMetrics.map((metric) => ({ ...metric, updatedAt: now })),
+        ['date', 'source'],
+        false,
+        guard,
       ),
-      ...readinessChecks.map((check) =>
-        env
-          .DB!.prepare(
-            `INSERT INTO readiness_checks (checked_at, week, day, sleep, energy, soreness, joint_comfort, recommendation)
-          SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (
-            SELECT 1 FROM readiness_checks WHERE checked_at = ?
-          )`,
-          )
-          .bind(
-            check.checkedAt,
-            check.week,
-            check.day,
-            check.sleep,
-            check.energy,
-            check.soreness,
-            check.jointComfort,
-            check.recommendation,
-            check.checkedAt,
-          ),
+      ...jsonRestoreStatements(
+        env.DB,
+        'readiness_checks',
+        {
+          checked_at: 'checkedAt',
+          week: 'week',
+          day: 'day',
+          sleep: 'sleep',
+          energy: 'energy',
+          soreness: 'soreness',
+          joint_comfort: 'jointComfort',
+          recommendation: 'recommendation',
+        },
+        readinessChecks,
+        ['checked_at'],
+        true,
+        guard,
       ),
       ...(['phase1StartDate', 'phase2StartDate'] as const).flatMap((key) => {
         const value = calendarDate(settings[key]);
@@ -568,14 +706,47 @@ export async function POST(request: Request) {
           ? [
               env
                 .DB!.prepare(
-                  'INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at',
+                  `INSERT INTO app_settings (key,value,updated_at) SELECT ?,?,? WHERE ${restoreGuardSql} ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at`,
                 )
-                .bind(key, value, now),
+                .bind(key, value, now, ...guard.args),
             ]
           : [];
       }),
+      ...jsonRestoreStatements(
+        env.DB,
+        'programme_archives',
+        {
+          id: 'id',
+          label: 'label',
+          created_at: 'createdAt',
+          snapshot: 'snapshot',
+        },
+        archives,
+        ['id'],
+        true,
+        guard,
+      ),
+      ...(backupProgrammeId !== programmeId
+        ? [
+            env.DB.prepare(
+              `INSERT INTO app_settings(key,value,updated_at) SELECT 'programmeId',?,? WHERE ${restoreGuardSql} ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at`,
+            ).bind(backupProgrammeId, now, ...guard.args),
+          ]
+        : []),
     ];
+    if (statements.length > 45)
+      throw new Error(
+        'This backup exceeds the safe atomic restore budget. Export programmes individually.',
+      );
     if (statements.length > 0) await env.DB.batch(statements);
+    if ((await activeProgrammeId(env.DB)) !== backupProgrammeId)
+      return Response.json(
+        {
+          error:
+            'The programme changed during restore. Reload and review before retrying.',
+        },
+        { status: 409 },
+      );
     return Response.json({ ok: true, restored: true, summary });
   } catch (error) {
     return Response.json(

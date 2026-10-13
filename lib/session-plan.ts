@@ -16,6 +16,7 @@ export function workoutDraftKey(
   week: number,
   day: TrainingDay,
   exercise: Pick<PlannedExercise, 'order' | 'name' | 'custom'>,
+  programmeId = 'initial',
 ) {
   // Keep the existing storage identity for this label correction. No draft
   // migration, pruning, or cross-exercise copying is needed.
@@ -28,7 +29,7 @@ export function workoutDraftKey(
     exercise.name === 'Leg Extension'
       ? 'Seated Leg Curl'
       : exercise.name;
-  return `workout:${week}:${day}:${exercise.order}:${name}`;
+  return `workout:${programmeId === 'initial' ? '' : programmeId + ':'}${week}:${day}:${exercise.order}:${name}`;
 }
 
 export function correctedSessionExercise<T extends SessionExercise>(

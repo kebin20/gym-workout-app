@@ -33,6 +33,7 @@ type BackupSummary = {
   bodyMeasurements?: number;
   readinessChecks?: number;
   holidayRecords?: number;
+  archivedProgrammes?: number;
 };
 
 type SheetImportPreview = {
@@ -152,6 +153,8 @@ export default function DataManagementDialogs({
                 <div className="col-span-2 rounded-xl bg-secondary p-3">
                   <p className="font-sans text-sm font-semibold">
                     {backup.summary.sessionChanges} session customizations
+                    {(backup.summary.archivedProgrammes ?? 0) > 0 &&
+                      ` · ${backup.summary.archivedProgrammes} archived programmes`}
                     {(backup.summary.bodyMeasurements ?? 0) > 0 &&
                       ` · ${backup.summary.bodyMeasurements} body measurements`}
                     {(backup.summary.holidayRecords ?? 0) > 0 &&

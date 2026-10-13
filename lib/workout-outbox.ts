@@ -20,6 +20,9 @@ export async function confirmOutboxResponse(
   if (
     !entry ||
     typeof entry.updatedAt !== 'string' ||
+    (kind === 'workout' &&
+      (entry.programmeId ?? 'initial') !==
+        (item.payload.programmeId ?? 'initial')) ||
     entry.exerciseOrder !== item.payload.exerciseOrder ||
     (kind === 'holiday'
       ? entry.sessionId !== item.payload.sessionId
@@ -163,7 +166,7 @@ export function migrateWorkoutOutbox<T>(
   const legacy = JSON.parse(raw);
   if (!Array.isArray(legacy))
     throw new Error(
-      'The older offline queue cannot be read. Export a backup before retrying.',
+      'The older offline queue cannot be read. Export device recovery before retrying.',
     );
   for (const item of legacy) {
     if (!item || typeof item.key !== 'string' || !item.payload)

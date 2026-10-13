@@ -10,13 +10,15 @@ Made with ChatGPT Codex
 
 The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgpt.site](https://liftline-strength-plan.ktanzyl.chatgpt.site). Access is restricted to the site owner.
 
-Current production version: **v3.14.6**
+Current production version: **v3.15.1**
 
 The experimental [bundled iOS foundation](docs/native-ios.md) is included in the repository, but is not ready for personal logging: native devices display a setup guard until the storage/connection choice and real-device tests are complete. The private web app keeps its existing storage and functionality, with faster cached startup. See the [release rollback notes](docs/rollback.md) for the pre-release backup.
 
 ## Features
 
 - Two complete 12-week plans with Day A, B, and C workouts
+- Repeat the programme with explicit, immutable archives; review old records and export their Day A/B/C PDFs without overwriting active history
+- Growth-safe transactional JSON restore, including programme archives; separate private device-recovery export for raw drafts and unsynced queues
 - Locked Phase 2 transition after all 36 Phase 1 sessions are complete
 - Specialized Phase 2 programming with chest/quad, back/posterior-chain, and shoulders/arms emphasis
 - Phase-specific progress, workout history, guidance, and rotating training tips
@@ -60,6 +62,13 @@ The experimental [bundled iOS foundation](docs/native-ios.md) is included in the
 - Responsive Material-inspired interface using Geist typography
 
 ## Version history
+
+### v3.15.1
+
+- Add an on-device startup breakdown under Progress → Data → Startup details, without collecting telemetry or workout values.
+- Load backup/Sheet handlers and timer-alert settings on demand; retain immediate offline device recovery, timer recovery and gesture-dependent audio preparation.
+- Warm optional alert settings only after the usable-logger milestone and idle time. A reconnect fallback leaves core timer controls usable if the optional chunk cannot load.
+- Keep existing cached Home Screen startup and explicit version-refresh semantics; no unmeasured iPhone speedup claim.
 
 Minor fixes, visual refinements, and deployment maintenance are grouped into the nearest feature release so this history focuses on meaningful product changes.
 

@@ -36,6 +36,7 @@ import {
   type RoutineExercise,
 } from '@/lib/routine';
 import { workoutMetrics } from '@/lib/workout-metrics';
+import { exerciseNameMatches } from '@/lib/exercise-identity';
 import { dayPresentation } from '@/lib/day-presentation';
 import type { WorkoutEntry } from '@/lib/workout-types';
 import DayReportButton from './day-report-button';
@@ -113,6 +114,11 @@ function HistoryWeekDisclosure({
       </button>
       {expanded && (
         <div className="border-t border-current/5 px-3 pb-3 pt-2">
+          {!exerciseNameMatches(entry, displayName) && (
+            <p className="mb-2 text-sm font-medium">
+              Logged as: {entry.exercise}
+            </p>
+          )}
           <div className="flex flex-wrap gap-1.5">
             {loggedSets(entry).map((set) => (
               <span
@@ -211,6 +217,9 @@ type Props = {
   syncGoogleSheet: () => void;
   downloadBackup: () => void;
   onRestoreBackup: () => void;
+  onDeviceRecovery?: () => void;
+  onProgrammes?: () => void;
+  sheetAvailable?: boolean;
   selectWeek: (week: number) => void;
   setView: (view: 'today') => void;
 };
@@ -234,17 +243,31 @@ export default function ProgressView({
   syncGoogleSheet,
   downloadBackup,
   onRestoreBackup,
+  onDeviceRecovery,
+  onProgrammes,
+  sheetAvailable,
   selectWeek,
   setView,
 }: Props) {
   const [startupOpen, setStartupOpen] = useState(false);
-  const [progressExerciseKey, setProgressExerciseKey] = useState('A|1');
+  const [insightsOpen, setInsightsOpen] = useState(false);
+  const [progressExerciseKey, setProgressExerciseKey] = useState('');
+  const optionKey = (item: RoutineExercise) =>
+    `${item.day}|${item.order}|${item.name}`;
   const progressExerciseOptions = useMemo(() => {
     const customByKey = new Map<string, RoutineExercise>();
     phaseEntries
-      .filter((entry) => entry.exerciseOrder >= 100)
+      .filter(
+        (entry) =>
+          !activeRoutine.some(
+            (item) =>
+              item.day === entry.day &&
+              item.order === entry.exerciseOrder &&
+              exerciseNameMatches(entry, item.name),
+          ),
+      )
       .forEach((entry) => {
-        const key = `${entry.day}|${entry.exerciseOrder}`;
+        const key = `${entry.day}|${entry.exerciseOrder}|${entry.exercise}`;
         if (!customByKey.has(key))
           customByKey.set(key, {
             day: entry.day,
@@ -261,13 +284,16 @@ export default function ProgressView({
   }, [activeRoutine, phaseEntries]);
   const selectedProgressExercise =
     progressExerciseOptions.find(
-      (item) => `${item.day}|${item.order}` === progressExerciseKey,
+      (item) => optionKey(item) === progressExerciseKey,
     ) ?? progressExerciseOptions[0]!;
   const selectedProgressData = [
     ...(entryIndex.completedByExercise.get(
       `${activePhase}|${selectedProgressExercise.day}|${selectedProgressExercise.order}`,
     ) ?? []),
   ]
+    .filter((entry) =>
+      exerciseNameMatches(entry, selectedProgressExercise.name),
+    )
     .reverse()
     .map((entry) => ({
       week: displayWeekNumber(entry.week),
@@ -285,8 +311,8 @@ export default function ProgressView({
             Phase {activePhase} progress across 12 weeks.
           </h1>
           <p className="mt-1 font-sans text-muted-foreground">
-            The same core KPIs and weekly totals as your spreadsheet, updated
-            automatically.
+            Your active programme’s weekly totals and exercise history. The
+            Google Sheet is a secondary record, not a complete backup.
           </p>
         </div>
         <ProgressDataMenu
@@ -300,6 +326,9 @@ export default function ProgressView({
           syncGoogleSheet={syncGoogleSheet}
           downloadBackup={downloadBackup}
           onRestoreBackup={onRestoreBackup}
+          onDeviceRecovery={onDeviceRecovery}
+          onProgrammes={onProgrammes}
+          sheetAvailable={sheetAvailable}
           onStartupDetails={() => setStartupOpen(true)}
         />
       </div>
@@ -333,7 +362,10 @@ export default function ProgressView({
           );
         })}
       </div>
-      <details className="group mt-5 overflow-hidden rounded-2xl border bg-card">
+      <details
+        className="group mt-5 overflow-hidden rounded-2xl border bg-card"
+        onToggle={(event) => setInsightsOpen(event.currentTarget.open)}
+      >
         <summary className="flex cursor-pointer list-none items-center gap-3 px-5 py-4 font-sans [&::-webkit-details-marker]:hidden">
           <span className="grid size-9 place-items-center rounded-xl bg-accent text-primary">
             <Sparkles className="size-4" />
@@ -354,7 +386,12 @@ export default function ProgressView({
               <div className="h-28 animate-pulse rounded-xl bg-muted/45" />
             }
           >
-            <AdvancedInsights entries={phaseEntries} routine={activeRoutine} />
+            {insightsOpen && (
+              <AdvancedInsights
+                entries={phaseEntries}
+                routine={activeRoutine}
+              />
+            )}
           </Suspense>
         </div>
       </details>
@@ -431,7 +468,7 @@ export default function ProgressView({
           </div>
           <CardAction>
             <select
-              value={progressExerciseKey}
+              value={optionKey(selectedProgressExercise)}
               onChange={(event) => setProgressExerciseKey(event.target.value)}
               aria-label="Exercise progress selection"
               className="h-11 max-w-[260px] rounded-lg border bg-card px-3 font-sans text-base font-medium outline-none focus:ring-3 focus:ring-ring/30"
@@ -441,10 +478,7 @@ export default function ProgressView({
                   {progressExerciseOptions
                     .filter((item) => item.day === day)
                     .map((item) => (
-                      <option
-                        key={`${day}|${item.order}`}
-                        value={`${day}|${item.order}`}
-                      >
+                      <option key={optionKey(item)} value={optionKey(item)}>
                         {item.name}
                       </option>
                     ))}

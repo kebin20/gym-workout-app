@@ -1,4 +1,9 @@
 import { env } from 'cloudflare:workers';
+import {
+  activeProgrammeId,
+  programmeGuardSql,
+  programmeMatches,
+} from '@/lib/programme-storage';
 
 const defaultSchedule = {
   phase1StartDate: '2026-08-26',
@@ -44,7 +49,15 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as Partial<typeof defaultSchedule>;
+    const body = (await request.json()) as Partial<typeof defaultSchedule> & {
+      programmeId?: string;
+    };
+    const programmeId = await activeProgrammeId(database());
+    if (!programmeMatches(body.programmeId, programmeId))
+      return Response.json(
+        { error: 'The programme changed. Reload before editing its dates.' },
+        { status: 409 },
+      );
     if (!validDate(body.phase1StartDate) || !validDate(body.phase2StartDate)) {
       return Response.json(
         { error: 'Choose valid programme start dates.' },
@@ -64,16 +77,27 @@ export async function POST(request: Request) {
     await db.batch([
       db
         .prepare(
-          'INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at',
+          `INSERT INTO app_settings (key, value, updated_at) SELECT ?, ?, ? WHERE ${programmeGuardSql} ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
         )
-        .bind('phase1StartDate', body.phase1StartDate, now),
+        .bind('phase1StartDate', body.phase1StartDate, now, programmeId),
       db
         .prepare(
-          'INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at',
+          `INSERT INTO app_settings (key, value, updated_at) SELECT ?, ?, ? WHERE ${programmeGuardSql} ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
         )
-        .bind('phase2StartDate', body.phase2StartDate, now),
+        .bind('phase2StartDate', body.phase2StartDate, now, programmeId),
     ]);
-    return Response.json({ ok: true, schedule: body });
+    if ((await activeProgrammeId(db)) !== programmeId)
+      return Response.json(
+        { error: 'The programme changed while editing dates. Reload.' },
+        { status: 409 },
+      );
+    return Response.json({
+      ok: true,
+      schedule: {
+        phase1StartDate: body.phase1StartDate,
+        phase2StartDate: body.phase2StartDate,
+      },
+    });
   } catch (error) {
     return Response.json(
       {

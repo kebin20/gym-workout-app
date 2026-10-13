@@ -754,7 +754,7 @@ test('Holiday API, complete backup and old-format restore preserve separate reco
     assert.equal(saved.status, 200, JSON.stringify(await saved.json()));
     await fixture.settled();
     const exported = await (await backup.GET()).json();
-    assert.equal(exported.version, 3);
+    assert.equal(exported.version, 4);
     assert.equal(exported.holidayEntries.length, 1);
     assert.equal(exported.holidayEntries[0].notes, 'Trip note');
     const preview = await backup.POST(

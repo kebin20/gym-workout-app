@@ -132,6 +132,15 @@ export const appSettings = sqliteTable('app_settings', {
   updatedAt: text('updated_at').notNull(),
 });
 
+// Immutable main-programme archives. Existing active records are untouched by
+// this schema migration; archiving occurs only on an explicit user action.
+export const programmeArchives = sqliteTable('programme_archives', {
+  id: text('id').primaryKey(),
+  label: text('label').notNull(),
+  createdAt: text('created_at').notNull(),
+  snapshot: text('snapshot').notNull(),
+});
+
 export const syncClock = sqliteTable('sync_clock', {
   key: text('key').primaryKey(),
   value: integer('value').notNull().default(0),

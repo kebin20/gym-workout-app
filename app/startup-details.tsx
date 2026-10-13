@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { appVersion } from './app-release';
+import { startupTimingRows } from '@/lib/startup-timing';
 import {
   Dialog,
   DialogContent,
@@ -98,6 +99,24 @@ export default function StartupDetails({ onClose }: { onClose: () => void }) {
             </div>
           ))}
         </dl>
+        <details className="rounded-xl border p-3 text-sm">
+          <summary className="cursor-pointer font-medium">
+            Startup breakdown
+          </summary>
+          <dl className="mt-3 space-y-3">
+            {startupTimingRows(performance).map(([label, value]) => (
+              <div key={label}>
+                <dt className="text-muted-foreground">{label}</dt>
+                <dd className="mt-1 font-medium">{value}</dd>
+              </div>
+            ))}
+          </dl>
+          <p className="mt-3 text-muted-foreground">
+            These stages can overlap; they are not additive. Shell-to-module
+            includes dependency loading and evaluation, not just JavaScript
+            execution. The server refresh runs separately from cached startup.
+          </p>
+        </details>
         <p className="text-sm text-muted-foreground">
           This measures page navigation to the ready logger, not the iOS launch
           animation or time before the web process starts. First installs,

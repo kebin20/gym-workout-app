@@ -85,6 +85,13 @@ import {
   type PlannedExercise,
 } from '@/lib/session-plan';
 import { correctedExerciseName } from '@/lib/routine';
+import type { DataActionContext, DataActionName } from './workout-data-actions';
+import { deviceRecoverySnapshot } from '@/lib/device-recovery';
+import {
+  programmeOutboxKey,
+  overlayProgrammeRecords,
+} from '@/lib/programme-client';
+import { exerciseNameMatches } from '@/lib/exercise-identity';
 import {
   personalRecordsFor,
   totalPersonalRecords,
@@ -94,6 +101,7 @@ import { latestDraftKey } from '@/lib/exercise-drafts';
 import { isBundledApp } from '@/lib/client-runtime';
 import { retainInstalledStorage } from '@/lib/startup-storage';
 import { observeWorkoutLoggerReady } from '@/lib/startup-readiness';
+import { markStartup } from '@/lib/startup-timing';
 import { sessionProgress } from '@/lib/session-progress';
 import { dayPresentation } from '@/lib/day-presentation';
 import ExerciseDraftBoundary, {
@@ -113,7 +121,6 @@ import {
   blockOutbox,
   enqueueOutbox,
   migrateWorkoutOutbox,
-  overlayOutbox,
   readOutbox,
   retryableStatus,
   singleFlight,
@@ -127,6 +134,7 @@ import type {
 import type { ProgramSchedule } from './training-tools-dialog';
 
 type View = 'today' | 'plan' | 'progress' | 'nutrition' | 'guide';
+markStartup('app-module');
 type TrainingTool = 'schedule' | 'readiness' | 'calculator' | 'metrics';
 
 type Draft = {
@@ -144,6 +152,7 @@ type SheetSyncResult = {
 };
 
 type WorkoutPayload = SetRirValues & {
+  programmeId?: string;
   week: number;
   day: TrainingDay;
   exerciseOrder: number;
@@ -176,6 +185,7 @@ type BackupSummary = {
   bodyMeasurements?: number;
   readinessChecks?: number;
   holidayRecords?: number;
+  archivedProgrammes?: number;
 };
 
 type SheetImportItem = {
@@ -232,6 +242,7 @@ function normaliseSessionExercises(exercises: SessionExercise[]) {
 function readCachedWorkoutEntries(): {
   entries: WorkoutEntry[];
   syncedAt: string | null;
+  programmeId: string;
 } | null {
   try {
     const cached = window.localStorage.getItem(workoutCacheKey);
@@ -239,10 +250,12 @@ function readCachedWorkoutEntries(): {
     const parsed = JSON.parse(cached) as {
       entries?: WorkoutEntry[];
       syncedAt?: string;
+      programmeId?: string;
     };
     return Array.isArray(parsed.entries)
       ? {
           entries: normaliseWorkoutEntries(parsed.entries),
+          programmeId: parsed.programmeId ?? 'initial',
           syncedAt:
             typeof parsed.syncedAt === 'string' ? parsed.syncedAt : null,
         }
@@ -252,7 +265,11 @@ function readCachedWorkoutEntries(): {
   }
 }
 
-function cacheWorkoutEntries(entries: WorkoutEntry[], syncedAt?: string) {
+function cacheWorkoutEntries(
+  entries: WorkoutEntry[],
+  syncedAt?: string,
+  programmeId?: string,
+) {
   try {
     const current = window.localStorage.getItem(workoutCacheKey);
     const currentSyncedAt = current
@@ -262,6 +279,12 @@ function cacheWorkoutEntries(entries: WorkoutEntry[], syncedAt?: string) {
       workoutCacheKey,
       JSON.stringify({
         entries,
+        programmeId:
+          programmeId ??
+          (current
+            ? (JSON.parse(current) as { programmeId?: string }).programmeId
+            : undefined) ??
+          'initial',
         cachedAt: Date.now(),
         syncedAt: syncedAt ?? currentSyncedAt ?? null,
       }),
@@ -324,13 +347,19 @@ function resumeDraftIndex(
   plan: PlannedExercise[],
   week: number,
   day: TrainingDay,
+  programmeId = 'initial',
 ) {
   try {
-    const key = latestDraftKey(`workout:${week}:${day}:`, window.localStorage);
+    const key = latestDraftKey(
+      `workout:${programmeId === 'initial' ? '' : programmeId + ':'}${week}:${day}:`,
+      window.localStorage,
+    );
     return Math.max(
       0,
       plan.findIndex(
-        (item) => !item.skipped && key === workoutDraftKey(week, day, item),
+        (item) =>
+          !item.skipped &&
+          key === workoutDraftKey(week, day, item, programmeId),
       ),
     );
   } catch {
@@ -380,6 +409,14 @@ function workoutKey(value: {
   exerciseOrder: number;
 }) {
   return `${value.week}|${value.day}|${value.exerciseOrder}`;
+}
+
+function programmeOverlay(
+  entries: WorkoutEntry[],
+  pending: PendingWorkout[],
+  programmeId: string,
+) {
+  return overlayProgrammeRecords(entries, pending, programmeId);
 }
 
 function optimisticEntry(
@@ -450,6 +487,7 @@ const HolidayWorkout = lazy(() => import('./holiday-workout'));
 const NutritionView = lazy(() => import('./nutrition-view'));
 const TrainingGuideView = lazy(() => import('./training-guide-view'));
 const PlanView = lazy(() => import('./plan-view'));
+const ProgrammeManager = lazy(() => import('./programme-manager'));
 const ProgramEditorDialog = lazy(() =>
   import('./workout-session-dialogs').then((module) => ({
     default: module.ProgramEditorDialog,
@@ -908,6 +946,9 @@ function DashboardMetric({
 export function WorkoutApp() {
   const initialWeek = scheduledWeekForToday(defaultSchedule, false);
   const [view, setView] = useState<View>('today');
+  const [programmeId, setProgrammeId] = useState('initial');
+  const programmeIdRef = useRef('initial');
+  const [programmesOpen, setProgrammesOpen] = useState(false);
   const [holidayMode, setHolidayMode] = useState(false);
   const [activeWeek, setActiveWeek] = useState(initialWeek);
   const [activeDay, setActiveDay] = useState<TrainingDay>('A');
@@ -961,6 +1002,8 @@ export function WorkoutApp() {
   const [programDraft, setProgramDraft] = useState<SessionExercise[]>([]);
   const [backupOpen, setBackupOpen] = useState(false);
   const [backupBusy, setBackupBusy] = useState(false);
+  const [dataActionLoading, setDataActionLoading] = useState(false);
+  const dataActionRunning = useRef(false);
   const [backupData, setBackupData] = useState<unknown>(null);
   const [backupFileName, setBackupFileName] = useState('');
   const [backupSummary, setBackupSummary] = useState<BackupSummary | null>(
@@ -977,7 +1020,7 @@ export function WorkoutApp() {
   const refreshSequence = useRef(0);
   const mutationSequence = useRef(0);
   const currentSelection = useRef('');
-  currentSelection.current = `${activeWeek}|${activeDay}|${activeIndex}`;
+  currentSelection.current = `${programmeId}|${activeWeek}|${activeDay}|${activeIndex}`;
 
   const activePhase = activeWeek > 12 ? 2 : 1;
   const phaseStartWeek = activePhase === 1 ? 1 : 13;
@@ -1061,7 +1104,12 @@ export function WorkoutApp() {
         }),
       )
     : undefined;
-  const draftKey = workoutDraftKey(activeWeek, activeDay, exercise);
+  const draftKey = workoutDraftKey(
+    activeWeek,
+    activeDay,
+    exercise,
+    programmeId,
+  );
   const dayProgress = useMemo(
     () =>
       Object.fromEntries(
@@ -1078,7 +1126,11 @@ export function WorkoutApp() {
   const previousEntry = exercise
     ? entryIndex.completedByExercise
         .get(`${activePhase}|${activeDay}|${exercise.order}`)
-        ?.find((entry) => entry.week < activeWeek)
+        ?.find(
+          (entry) =>
+            entry.week < activeWeek &&
+            exerciseNameMatches(entry, exercise.name),
+        )
     : undefined;
   const activeSets = exercise ? workingSetsForWeek(exercise, activeWeek) : 1;
   const suggestedRestSeconds = exercise
@@ -1091,8 +1143,9 @@ export function WorkoutApp() {
       const mutation = mutationSequence.current;
       const query =
         cachedEntries && syncedAt
-          ? `?cursor=${encodeURIComponent(syncedAt)}`
+          ? `?cursor=${encodeURIComponent(syncedAt)}&programmeId=${encodeURIComponent(programmeIdRef.current)}`
           : '';
+      markStartup('refresh-start');
       const response = await fetch(`/api/workouts${query}`, {
         cache: 'no-store',
         signal: AbortSignal.timeout(15_000),
@@ -1104,34 +1157,71 @@ export function WorkoutApp() {
         cursor?: string;
         schedule?: ProgramSchedule;
         error?: string;
+        programmeId?: string;
       };
       if (!response.ok)
         throw new Error(data.error ?? 'Unable to load workouts.');
+      markStartup('refresh-received');
       if (
         requestSequence !== refreshSequence.current ||
         mutation !== mutationSequence.current
       )
         return readCachedWorkoutEntries()?.entries ?? [];
       const incomingEntries = normaliseWorkoutEntries(data.entries ?? []);
+      const nextProgrammeId = data.programmeId ?? 'initial';
+      const programmeChanged = nextProgrammeId !== programmeIdRef.current;
+      programmeIdRef.current = nextProgrammeId;
+      setProgrammeId(nextProgrammeId);
+      if (programmeChanged) {
+        setLastSave(null);
+        setSessionSummaryOpen(false);
+        setPersonalRecordOpen(false);
+      }
       const serverEntries =
-        data.partial && cachedEntries
+        data.partial && cachedEntries && !programmeChanged
           ? mergeWorkoutEntries(cachedEntries, incomingEntries)
           : incomingEntries;
-      const freshEntries = overlayOutbox(
+      const freshEntries = programmeOverlay(
         serverEntries,
         refreshPendingWorkouts(),
-        workoutKey,
+        nextProgrammeId,
       );
       const freshSessionExercises = normaliseSessionExercises(
         data.sessionExercises ?? [],
       );
+      if (programmeChanged) {
+        const unlocked = weeklySummariesForPhase(
+          freshEntries,
+          freshSessionExercises,
+          1,
+        ).every((week) => week.sessions === 3);
+        const selection = startupSessionForWeek(
+          freshEntries,
+          freshSessionExercises,
+          scheduledWeekForToday(data.schedule ?? defaultSchedule, unlocked),
+        );
+        setActiveWeek(selection.week);
+        setActiveDay(selection.day);
+        setActiveIndex(
+          resumeDraftIndex(
+            planForSession(
+              freshSessionExercises,
+              selection.week,
+              selection.day,
+            ),
+            selection.week,
+            selection.day,
+            nextProgrammeId,
+          ),
+        );
+      }
       setEntries(freshEntries);
       setSessionExercises(freshSessionExercises);
       if (data.schedule) {
         setSchedule(data.schedule);
         cacheSchedule(data.schedule);
       }
-      cacheWorkoutEntries(freshEntries, data.cursor);
+      cacheWorkoutEntries(freshEntries, data.cursor, nextProgrammeId);
       cacheSessionExercises(freshSessionExercises);
       return freshEntries;
     },
@@ -1203,14 +1293,20 @@ export function WorkoutApp() {
 
   useLayoutEffect(() => {
     let cancelled = false;
+    markStartup('cache-start');
     const cachedSnapshot = readCachedWorkoutEntries();
     const cachedEntries = cachedSnapshot?.entries ?? null;
+    programmeIdRef.current = cachedSnapshot?.programmeId ?? 'initial';
+    setProgrammeId(programmeIdRef.current);
     const cachedSessionExercises = readCachedSessionExercises();
     const cachedSchedule = readCachedSchedule();
     const pending = refreshPendingWorkouts();
+    markStartup('cache-read');
     if (cachedSchedule) setSchedule(cachedSchedule);
     if (cachedEntries) {
-      setEntries(overlayOutbox(cachedEntries, pending, workoutKey));
+      setEntries(
+        programmeOverlay(cachedEntries, pending, programmeIdRef.current),
+      );
       const cachedPhaseTwoUnlocked = weeklySummariesForPhase(
         cachedEntries,
         cachedSessionExercises,
@@ -1235,14 +1331,16 @@ export function WorkoutApp() {
           ),
           startupSession.week,
           startupSession.day,
+          programmeIdRef.current,
         ),
       );
       // Cached workouts are usable immediately; refresh the authoritative data
       // without holding logging behind a slow connection or changing its cursor.
       startupWeekApplied.current = true;
+      markStartup('session-recovered');
       setLoading(false);
     } else if (pending.length) {
-      setEntries(overlayOutbox([], pending, workoutKey));
+      setEntries(programmeOverlay([], pending, programmeIdRef.current));
       setLoading(false);
     }
     if (cachedSessionExercises.length > 0)
@@ -1269,7 +1367,9 @@ export function WorkoutApp() {
     const handleStorage = () => {
       const pending = refreshPendingWorkouts();
       setQueueIssue(outboxStorageIssue(window.localStorage));
-      setEntries((current) => overlayOutbox(current, pending, workoutKey));
+      setEntries((current) =>
+        programmeOverlay(current, pending, programmeIdRef.current),
+      );
     };
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
@@ -1454,8 +1554,14 @@ export function WorkoutApp() {
       startupSession.day,
     );
     setActiveIndex(
-      resumeDraftIndex(startupPlan, startupSession.week, startupSession.day),
+      resumeDraftIndex(
+        startupPlan,
+        startupSession.week,
+        startupSession.day,
+        programmeId,
+      ),
     );
+    markStartup('session-recovered');
   }, [entries, loading, phaseTwoUnlocked, schedule, sessionExercises]);
 
   const currentSummary = weeklySummaries[activeDisplayWeek - 1];
@@ -1614,6 +1720,7 @@ export function WorkoutApp() {
     setNotice('');
     const now = new Date().toISOString();
     const payload: WorkoutPayload = {
+      programmeId,
       week: activeWeek,
       day: activeDay,
       exerciseOrder: exercise.order,
@@ -1641,7 +1748,7 @@ export function WorkoutApp() {
     };
     const localEntry = optimisticEntry(payload, exercise);
     const previousPending = readPendingWorkouts().filter(
-      (item) => item.key === workoutKey(payload),
+      (item) => item.key === programmeOutboxKey(payload, programmeId),
     );
     const records = personalRecordsFor(localEntry, phaseEntries);
     const nextEntries = replaceWorkoutEntry(entries, localEntry);
@@ -1666,7 +1773,7 @@ export function WorkoutApp() {
     }
 
     const queueForLater = () => {
-      const key = workoutKey(payload);
+      const key = programmeOutboxKey(payload, programmeId);
       if (
         !enqueueOutbox(
           'workout',
@@ -1674,8 +1781,10 @@ export function WorkoutApp() {
           window.localStorage,
         )
       ) {
-        setEntries(entries);
-        cacheWorkoutEntries(entries);
+        if ((payload.programmeId ?? 'initial') === programmeIdRef.current) {
+          setEntries(entries);
+          cacheWorkoutEntries(entries);
+        }
         setSessionCelebrationPending(false);
         setPersonalRecordOpen(false);
         return false;
@@ -1720,6 +1829,13 @@ export function WorkoutApp() {
         sheetSyncQueued?: boolean;
         error?: string;
       };
+      if ((payload.programmeId ?? 'initial') !== programmeIdRef.current) {
+        setError(
+          'The programme changed while saving. Old drafts remain available in device recovery.',
+        );
+        void refreshWorkoutData().catch(() => undefined);
+        return;
+      }
       if (!response.ok && !retryableStatus(response.status)) {
         setEntries(entries);
         cacheWorkoutEntries(entries);
@@ -1780,7 +1896,7 @@ export function WorkoutApp() {
       !lastSave ||
       !navigator.onLine ||
       readPendingWorkouts().some(
-        (item) => item.key === workoutKey(lastSave.saved),
+        (item) => item.key === programmeOutboxKey(lastSave.saved, programmeId),
       )
     ) {
       setError('Reconnect and sync pending changes before undoing this save.');
@@ -1792,9 +1908,10 @@ export function WorkoutApp() {
       const response = await fetch('/api/workouts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(
-          undoWorkoutPayload(lastSave.saved, lastSave.before),
-        ),
+        body: JSON.stringify({
+          ...undoWorkoutPayload(lastSave.saved, lastSave.before),
+          programmeId,
+        }),
         signal: AbortSignal.timeout(15_000),
       });
       const result = (await response.json()) as {
@@ -1842,130 +1959,99 @@ export function WorkoutApp() {
     }
   }
 
-  async function syncGoogleSheet() {
-    setSyncingSheet(true);
-    setError('');
-    setNotice('');
+  async function runDataAction(
+    action: DataActionName,
+    event?: ChangeEvent<HTMLInputElement>,
+  ) {
+    if (dataActionRunning.current) return;
+    dataActionRunning.current = true;
+    setDataActionLoading(true);
+    const context: DataActionContext = {
+      hasPendingOutbox: () => hasPendingOutbox(window.localStorage),
+      programmeId,
+      getCurrentProgrammeId: () => programmeIdRef.current,
+      backupData,
+      selectedImportKeys,
+      importPreview,
+      exerciseDraft,
+      saving,
+      programSaving,
+      refreshWorkoutData,
+      setError,
+      setNotice,
+      setSyncingSheet,
+      setImportOpen,
+      setLoadingImport,
+      setImportingSheet,
+      setImportPreview,
+      setSelectedImportKeys,
+      setSheetImportError,
+      setBackupBusy,
+      setBackupSummary,
+      setBackupFileName,
+      setBackupData,
+      setBackupOpen,
+    };
     try {
-      const response = await fetch('/api/workouts/sync-sheet', {
-        method: 'POST',
-      });
-      const result = (await response.json()) as SheetSyncResult;
-      if (!response.ok || !result.ok)
-        throw new Error(result.message ?? 'Unable to sync the Google Sheet.');
-      await refreshWorkoutData();
-      setNotice(
-        `${result.synced} workout ${result.synced === 1 ? 'entry' : 'entries'} sent to Google Sheet.`,
-      );
-    } catch (syncError) {
-      setError(
-        syncError instanceof Error
-          ? syncError.message
-          : 'Unable to sync the Google Sheet.',
-      );
-    } finally {
-      setSyncingSheet(false);
-    }
-  }
-
-  async function previewGoogleSheetImport() {
-    setImportOpen(true);
-    setLoadingImport(true);
-    setImportPreview(null);
-    setSelectedImportKeys([]);
-    setSheetImportError('');
-    setError('');
-    setNotice('');
-    try {
-      const response = await fetch('/api/workouts/import-sheet');
-      const result = (await response.json()) as SheetImportPreview;
-      if (!response.ok || !result.ok)
+      const { createDataActions } = await import('./workout-data-actions');
+      if (context.getCurrentProgrammeId() !== context.programmeId)
         throw new Error(
-          result.message ?? 'Unable to preview the Google Sheet.',
+          'The programme changed. Reload before using this Data action.',
         );
-      setImportPreview(result);
-      setSelectedImportKeys(
-        result.items
-          .filter((item) => item.status === 'new')
-          .map((item) => item.key),
-      );
-    } catch (previewError) {
-      setSheetImportError(
-        previewError instanceof Error
-          ? previewError.message
-          : 'Unable to preview the Google Sheet.',
+      const actions = createDataActions(context);
+      if (action === 'previewBackupFile') {
+        if (event) await actions.previewBackupFile(event);
+      } else await actions[action]();
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : 'Unable to load Data tools. Reconnect and try again.',
       );
     } finally {
-      setLoadingImport(false);
+      dataActionRunning.current = false;
+      setDataActionLoading(false);
     }
   }
-
+  const syncGoogleSheet = () => runDataAction('syncGoogleSheet');
+  const previewGoogleSheetImport = () =>
+    runDataAction('previewGoogleSheetImport');
+  const importSelectedSheetEntries = () =>
+    runDataAction('importSelectedSheetEntries');
+  const downloadBackup = () => runDataAction('downloadBackup');
+  function downloadDeviceRecovery() {
+    try {
+      const content = deviceRecoverySnapshot(window.localStorage);
+      const url = URL.createObjectURL(
+        new Blob([JSON.stringify(content, null, 2)], {
+          type: 'application/json',
+        }),
+      );
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `liftline-device-recovery-${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 120000);
+      setNotice(
+        'Device recovery exported. Keep it private: it contains drafts and unsynced records, not a complete backup.',
+      );
+    } catch (e) {
+      setError(
+        e instanceof Error
+          ? e.message
+          : 'Cannot export device recovery. Storage has not been changed.',
+      );
+    }
+  }
+  const previewBackupFile = (event: ChangeEvent<HTMLInputElement>) =>
+    runDataAction('previewBackupFile', event);
+  const restoreBackup = () => runDataAction('restoreBackup');
   function toggleImportItem(key: string, checked: boolean) {
     setSelectedImportKeys((current) =>
       checked
         ? [...new Set([...current, key])]
-        : current.filter((currentKey) => currentKey !== key),
+        : current.filter((item) => item !== key),
     );
-  }
-
-  async function importSelectedSheetEntries() {
-    if (selectedImportKeys.length === 0) return;
-    setImportingSheet(true);
-    setSheetImportError('');
-    try {
-      const protectedKeys = new Set(
-        importPreview?.items
-          .filter((item) => item.status === 'protected')
-          .map((item) => item.key) ?? [],
-      );
-      const response = await fetch('/api/workouts/import-sheet', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          keys: selectedImportKeys,
-          overwriteKeys: selectedImportKeys.filter((key) =>
-            protectedKeys.has(key),
-          ),
-        }),
-      });
-      const result = (await response.json()) as {
-        ok?: boolean;
-        imported?: number;
-        protected?: number;
-        message?: string;
-      };
-      if (!response.ok || !result.ok)
-        throw new Error(result.message ?? 'Unable to import the Google Sheet.');
-
-      const entriesResponse = await fetch('/api/workouts');
-      const entriesResult = (await entriesResponse.json()) as {
-        entries?: WorkoutEntry[];
-        error?: string;
-      };
-      if (!entriesResponse.ok)
-        throw new Error(
-          entriesResult.error ??
-            'The import finished, but Liftline could not refresh.',
-        );
-      const freshEntries = normaliseWorkoutEntries(entriesResult.entries ?? []);
-      setEntries(freshEntries);
-      cacheWorkoutEntries(freshEntries);
-      setImportOpen(false);
-      const imported = result.imported ?? 0;
-      setNotice(
-        imported > 0
-          ? `${imported} workout ${imported === 1 ? 'entry' : 'entries'} imported from Google Sheet`
-          : 'No Liftline records needed updating.',
-      );
-    } catch (importError) {
-      setSheetImportError(
-        importError instanceof Error
-          ? importError.message
-          : 'Unable to import the Google Sheet.',
-      );
-    } finally {
-      setImportingSheet(false);
-    }
   }
 
   function openProgramEditor(day: TrainingDay = activeDay) {
@@ -2037,6 +2123,7 @@ export function WorkoutApp() {
           week: activeWeek,
           day: activeDay,
           exercises: programDraft,
+          programmeId,
         }),
       });
       const result = (await response.json()) as {
@@ -2070,106 +2157,6 @@ export function WorkoutApp() {
       );
     } finally {
       setProgramSaving(false);
-    }
-  }
-
-  async function downloadBackup() {
-    setBackupBusy(true);
-    setError('');
-    try {
-      if (hasPendingOutbox(window.localStorage))
-        throw new Error(
-          'Sync your pending main and Holiday workouts before downloading a complete backup. Drafts saved only on this device are not included.',
-        );
-      const response = await fetch('/api/workouts/backup');
-      if (!response.ok) throw new Error('Unable to create a Liftline backup.');
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = `liftline-backup-${new Date().toISOString().slice(0, 10)}.json`;
-      anchor.click();
-      URL.revokeObjectURL(url);
-      setNotice(
-        'Backup downloaded, including Holiday workouts. Unsaved device drafts are not included.',
-      );
-    } catch (backupError) {
-      setError(
-        backupError instanceof Error
-          ? backupError.message
-          : 'Unable to create a backup.',
-      );
-    } finally {
-      setBackupBusy(false);
-    }
-  }
-
-  async function previewBackupFile(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setBackupBusy(true);
-    setBackupSummary(null);
-    setBackupFileName(file.name);
-    setError('');
-    try {
-      const parsed = JSON.parse(await file.text()) as unknown;
-      const response = await fetch('/api/workouts/backup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'preview', backup: parsed }),
-      });
-      const result = (await response.json()) as {
-        ok?: boolean;
-        summary?: BackupSummary;
-        error?: string;
-      };
-      if (!response.ok || !result.ok || !result.summary)
-        throw new Error(result.error ?? 'Unable to read this backup.');
-      setBackupData(parsed);
-      setBackupSummary(result.summary);
-    } catch (backupError) {
-      setBackupData(null);
-      setError(
-        backupError instanceof Error
-          ? backupError.message
-          : 'Unable to read this backup.',
-      );
-    } finally {
-      setBackupBusy(false);
-    }
-  }
-
-  async function restoreBackup() {
-    if (!backupData) return;
-    setBackupBusy(true);
-    setError('');
-    try {
-      const response = await fetch('/api/workouts/backup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'restore', backup: backupData }),
-      });
-      const result = (await response.json()) as {
-        ok?: boolean;
-        error?: string;
-      };
-      if (!response.ok || !result.ok)
-        throw new Error(result.error ?? 'Unable to restore this backup.');
-      await refreshWorkoutData();
-      setBackupOpen(false);
-      setBackupData(null);
-      setBackupSummary(null);
-      setNotice(
-        'Backup restored. Existing records not included in the file were kept.',
-      );
-    } catch (backupError) {
-      setError(
-        backupError instanceof Error
-          ? backupError.message
-          : 'Unable to restore this backup.',
-      );
-    } finally {
-      setBackupBusy(false);
     }
   }
 
@@ -3384,10 +3371,13 @@ export function WorkoutApp() {
               importingSheet={importingSheet}
               loading={loading}
               syncingSheet={syncingSheet}
-              backupBusy={backupBusy}
+              backupBusy={backupBusy || dataActionLoading}
               previewGoogleSheetImport={previewGoogleSheetImport}
               syncGoogleSheet={syncGoogleSheet}
               downloadBackup={downloadBackup}
+              sheetAvailable={programmeId === 'initial'}
+              onDeviceRecovery={downloadDeviceRecovery}
+              onProgrammes={() => setProgrammesOpen(true)}
               onRestoreBackup={() => {
                 setBackupOpen(true);
                 setBackupSummary(null);
@@ -3516,6 +3506,7 @@ export function WorkoutApp() {
       {activeTrainingTool && (
         <Suspense fallback={null}>
           <TrainingToolsDialog
+            programmeId={programmeId}
             tool={activeTrainingTool}
             schedule={schedule}
             activeWeek={activeWeek}
@@ -3585,6 +3576,36 @@ export function WorkoutApp() {
         </Suspense>
       )}
 
+      {programmesOpen && (
+        <Suspense fallback={null}>
+          <ProgrammeManager
+            programmeId={programmeId}
+            onClose={() => setProgrammesOpen(false)}
+            onBeforeStart={() => {
+              if (
+                hasPendingOutbox(window.localStorage) ||
+                exerciseDraft.dirty ||
+                saving ||
+                programSaving ||
+                undoing ||
+                backupBusy ||
+                dataActionLoading
+              )
+                throw new Error(
+                  'Sync queued saves and finish the current draft before starting another programme. Export device recovery if a record needs review.',
+                );
+            }}
+            onStarted={async () => {
+              mutationSequence.current++;
+              await refreshWorkoutData();
+              setView('today');
+              setNotice(
+                'Previous programme archived safely. New programme starts at Phase 1, Week 1.',
+              );
+            }}
+          />
+        </Suspense>
+      )}
       {(backupOpen || importOpen) && (
         <Suspense fallback={null}>
           <DataManagementDialogs
