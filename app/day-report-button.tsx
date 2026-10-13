@@ -2,7 +2,11 @@
 import { useState } from 'react';
 import { Download, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { buildDayReport } from '@/lib/day-report';
+import {
+  buildDayReport,
+  reportWeekLabel,
+  type DayReportScope,
+} from '@/lib/day-report';
 import type { TrainingDay } from '@/lib/routine';
 import type { WorkoutEntry } from '@/lib/workout-types';
 
@@ -10,19 +14,26 @@ export default function DayReportButton({
   day,
   entries,
   loading,
+  currentWeek,
 }: {
   day: TrainingDay;
   entries: WorkoutEntry[];
   loading: boolean;
+  currentWeek?: number;
 }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [scope, setScope] = useState<'all' | 'recent'>('all');
+  const selectedScope: DayReportScope =
+    scope === 'recent' && currentWeek !== undefined
+      ? { kind: 'recent', currentWeek }
+      : { kind: 'all' };
   async function download() {
     if (busy) return;
     setBusy(true);
     setMessage('');
     try {
-      const report = buildDayReport(day, entries);
+      const report = buildDayReport(day, entries, selectedScope);
       const { createDayReportPdf, reportFontPath } =
         await import('@/lib/day-report-pdf');
       async function loadFont(path: string) {
@@ -50,7 +61,10 @@ export default function DayReportButton({
       );
       const link = document.createElement('a');
       link.href = url;
-      link.download = `liftline-day-${day.toLowerCase()}-history.pdf`;
+      link.download =
+        selectedScope.kind === 'recent'
+          ? `liftline-day-${day.toLowerCase()}-weeks-${Math.max(1, selectedScope.currentWeek - 1)}-${selectedScope.currentWeek}.pdf`
+          : `liftline-day-${day.toLowerCase()}-history.pdf`;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -70,14 +84,38 @@ export default function DayReportButton({
     }
   }
   return (
-    <div className="max-w-xs">
+    <div className="max-w-xs space-y-2">
+      {currentWeek !== undefined && (
+        <label className="grid gap-1 font-sans text-xs font-medium text-muted-foreground">
+          <span>PDF range</span>
+          <select
+            aria-label={`Day ${day} PDF week range`}
+            value={scope}
+            disabled={busy || loading}
+            onChange={(event) => {
+              setScope(event.target.value as 'all' | 'recent');
+              setMessage('');
+            }}
+            className="h-11 max-w-full rounded-lg border bg-card px-3 text-base text-foreground outline-none focus:ring-3 focus:ring-ring/30"
+          >
+            <option value="all">All saved weeks</option>
+            <option value="recent">Current + previous week</option>
+          </select>
+          {scope === 'recent' && (
+            <span>
+              {currentWeek > 1 ? `${reportWeekLabel(currentWeek - 1)} + ` : ''}
+              {reportWeekLabel(currentWeek)} · selected in Liftline
+            </span>
+          )}
+        </label>
+      )}
       <Button
         type="button"
         size="sm"
         variant="outline"
         disabled={busy || loading}
         onClick={download}
-        aria-label={`Download Day ${day} PDF report with all saved sessions`}
+        aria-label={`Download Day ${day} PDF report ${selectedScope.kind === 'all' ? 'with all saved sessions' : 'for the current and previous week'}`}
       >
         {busy ? <Loader2 className="animate-spin" /> : <Download />}{' '}
         {busy ? 'Creating PDF…' : 'Download PDF'}

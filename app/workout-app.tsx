@@ -3356,6 +3356,7 @@ export function WorkoutApp() {
             }
           >
             <ProgressView
+              activeWeek={activeWeek}
               key={activePhase}
               activePhase={activePhase}
               activeRoutine={activeRoutine}

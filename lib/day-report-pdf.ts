@@ -5,6 +5,7 @@ import {
   reportMetrics,
   reportSets,
   reportWeek,
+  reportWeekLabel,
   isTimedEntry,
   type DayReport,
 } from './day-report';
@@ -15,6 +16,8 @@ const muted = rgb(0.33, 0.4, 0.51);
 const pale = rgb(0.93, 0.96, 1);
 const fmt = (value: number) =>
   new Intl.NumberFormat('en-GB', { maximumFractionDigits: 1 }).format(value);
+const setValue = (value: number) =>
+  new Intl.NumberFormat('en-GB', { maximumFractionDigits: 20 }).format(value);
 const dateLabel = (value: string | null) =>
   value && !Number.isNaN(Date.parse(value))
     ? new Intl.DateTimeFormat('en-GB', {
@@ -81,6 +84,7 @@ export async function createDayReportPdf(
       .join('');
   let page!: PDFPage;
   let y = 0;
+  let weekContext: number | null = null;
   const width = 595.28,
     height = 841.89,
     margin = 42,
@@ -96,6 +100,14 @@ export async function createDayReportPdf(
       font,
       color: blue,
     });
+    if (weekContext !== null)
+      page.drawText(reportWeekLabel(weekContext), {
+        x: width - margin - 160,
+        y: height - 36,
+        size: 9,
+        font,
+        color: muted,
+      });
     y = height - 64;
   };
   const ensure = (space: number) => {
@@ -153,13 +165,13 @@ export async function createDayReportPdf(
   newPage();
   text(`Day ${report.day} - training history`, 25);
   text(
-    `All saved programme sessions | Generated ${dateLabel(generatedAt.toISOString())}`,
+    `${report.scope.kind === 'all' ? 'All saved programme sessions' : 'Current and previous programme week'} | Generated ${dateLabel(generatedAt.toISOString())}`,
     10,
     muted,
   );
   y -= 14;
   const cards = [
-    ['Sessions recorded', String(report.sessions.length)],
+    ['Sessions recorded', String(report.recordedSessions)],
     ['Exercise logs', String(report.records.length)],
     ['Loaded volume', `${fmt(report.volume)} kg`],
   ];
@@ -191,7 +203,9 @@ export async function createDayReportPdf(
   text(
     'Scope: Day ' +
       report.day +
-      ' across all recorded phases and weeks. Includes partial saved logs; unsaved drafts and Holiday sessions are excluded.',
+      ' / ' +
+      report.scopeLabel +
+      '. Includes partial saved logs; unsaved drafts and Holiday sessions are excluded.',
     10,
     muted,
   );
@@ -207,16 +221,19 @@ export async function createDayReportPdf(
     muted,
   );
   heading('Session volume trend');
-  if (report.sessions.length) {
+  const recordedSessions = report.sessions.filter(
+    (session) => session.records.length > 0,
+  );
+  if (recordedSessions.length) {
     // Chunk the chart instead of dropping earlier sessions or packing unreadable labels.
-    for (let offset = 0; offset < report.sessions.length; offset += 12) {
-      const sessions = report.sessions.slice(offset, offset + 12);
+    for (let offset = 0; offset < recordedSessions.length; offset += 12) {
+      const sessions = recordedSessions.slice(offset, offset + 12);
       ensure(158);
       const chartTop = y - 8,
         chartBottom = chartTop - 88;
       const maximum = Math.max(
         1,
-        ...report.sessions.map((session) => session.volume),
+        ...recordedSessions.map((session) => session.volume),
       );
       text(`Loaded volume (kg) | scale 0 - ${fmt(maximum)}`, 9, muted);
       const slot = content / sessions.length;
@@ -253,9 +270,164 @@ export async function createDayReportPdf(
       11,
       muted,
     );
+  newPage();
+  heading('Weekly routines and set details');
+  text(
+    'Each included week is listed explicitly, in programme order. Exercise names and set values are the saved records, not a reconstructed plan. Partial logs, all five sets, per-set RIR and notes are retained.',
+    9,
+    muted,
+  );
+  for (const session of report.sessions) {
+    weekContext = session.week;
+    const firstEntry = session.records[0];
+    ensure(
+      firstEntry
+        ? 205 +
+            reportSets(firstEntry).length * 22 +
+            (firstEntry.notes?.trim() ? 45 : 0)
+        : 150,
+    );
+    heading(`${reportWeekLabel(session.week)} - Day ${report.day}`);
+    const dates = [
+      ...new Set(
+        session.records
+          .map((entry) => entry.completedAt ?? entry.updatedAt ?? null)
+          .filter(Boolean)
+          .map((value) => dateLabel(value!)),
+      ),
+    ];
+    text(
+      `Recorded date(s): ${dates.length ? dates.join(', ') : 'None recorded'}`,
+      9,
+      muted,
+    );
+    if (!session.records.length) {
+      text(
+        `No saved Day ${report.day} exercise logs for this week. This is not recorded as a completed session.`,
+        10,
+        muted,
+      );
+      rule();
+      continue;
+    }
+    text(
+      `${session.records.length} saved exercise(s) | Loaded volume ${fmt(session.volume)} kg | ${session.reps} reps${session.seconds ? ` | ${session.seconds} seconds of holds` : ''}`,
+      10,
+      muted,
+    );
+    y -= 8;
+    for (const entry of session.records) {
+      const sets = reportSets(entry);
+      const noteLines = entry.notes?.trim()
+        ? wrap('Notes: ' + entry.notes, content - 10, 10).length
+        : 0;
+      ensure(105 + sets.length * 22 + Math.min(noteLines, 3) * 15);
+      text(`${entry.exerciseOrder}. ${entry.exercise}`, 12, blue);
+      text(
+        `Target: ${entry.target || 'Not recorded'} | ${entry.completed ? 'Logged' : 'Partial save'}${entry.offlinePending ? ' | Awaiting sync' : ''}`,
+        9,
+        muted,
+      );
+      text(
+        `Recorded: ${dateLabel(entry.completedAt ?? entry.updatedAt ?? null)}${entry.rir == null ? '' : ` | Legacy exercise RIR: ${entry.rir}`}`,
+        9,
+        muted,
+      );
+      y -= 4;
+      const headers = [
+        'SET',
+        'LOAD (KG)',
+        isTimedEntry(entry) ? 'SECONDS' : 'REPS',
+        'RIR',
+      ];
+      const offsets = [8, 100, 250, 410];
+      const tableHeader = () => {
+        ensure(44);
+        page.drawRectangle({
+          x: margin,
+          y: y - 20,
+          width: content,
+          height: 24,
+          color: pale,
+        });
+        headers.forEach((label, i) =>
+          page.drawText(label, {
+            x: margin + offsets[i],
+            y: y - 12,
+            size: 8,
+            font,
+            color: muted,
+          }),
+        );
+        y -= 26;
+      };
+      if (sets.length) {
+        tableHeader();
+        for (const set of sets) {
+          if (y - 22 < 58) {
+            newPage();
+            text(
+              `${reportWeekLabel(session.week)} - Day ${report.day} (continued)`,
+              9,
+              blue,
+            );
+            text(entry.exercise, 11, ink);
+            tableHeader();
+          }
+          const values = [
+            String(set.set),
+            set.weight === null ? '-' : setValue(set.weight),
+            set.reps === null ? '-' : setValue(set.reps),
+            set.rir === null ? '-' : setValue(set.rir),
+          ];
+          values.forEach((value, i) =>
+            page.drawText(value, {
+              x: margin + offsets[i],
+              y: y - 10,
+              size: 10,
+              font,
+              color: ink,
+            }),
+          );
+          page.drawRectangle({
+            x: margin,
+            y: y - 16,
+            width: content,
+            height: 0.4,
+            color: rgb(0.87, 0.9, 0.95),
+          });
+          y -= 22;
+        }
+        text(
+          'RIR is recorded per set; - means not recorded. Legacy exercise RIR is listed separately.',
+          8,
+          muted,
+        );
+      } else text('No set values recorded.', 10, muted);
+      if (entry.notes?.trim()) {
+        for (const line of wrap('Notes: ' + entry.notes, content - 10, 10)) {
+          if (y - 15 < 58) {
+            newPage();
+            text(
+              `${reportWeekLabel(session.week)} - Day ${report.day} / ${entry.exercise} (notes continued)`,
+              9,
+              blue,
+            );
+          }
+          text(line, 10, ink, 10);
+        }
+      }
+      y -= 10;
+    }
+    rule();
+  }
+  if (!report.sessions.length)
+    text(`No saved Day ${report.day} exercise logs are available.`, 10, muted);
+  weekContext = null;
+  ensure(180);
   heading('Exercise trends');
   text(
-    'First vs latest valid sets, grouped by phase and recorded exercise name. Notes below provide context for machine changes, substitutions and corrected entries.',
+    'First vs latest valid sets within the selected report range, grouped by phase and recorded exercise name. Weekly notes above provide context for substitutions, machine changes and corrected entries.',
     9,
     muted,
   );
@@ -285,7 +457,7 @@ export async function createDayReportPdf(
         );
       else {
         text(
-          `Top load: ${a.topWeight === null ? 'bodyweight / unrecorded' : fmt(a.topWeight) + ' kg'} to ${b.topWeight === null ? 'bodyweight / unrecorded' : fmt(b.topWeight) + ' kg'} | Reps: ${a.reps} to ${b.reps}`,
+          `Top load: ${a.topWeight === null ? 'bodyweight / unrecorded' : setValue(a.topWeight) + ' kg'} to ${b.topWeight === null ? 'bodyweight / unrecorded' : setValue(b.topWeight) + ' kg'} | Reps: ${a.reps} to ${b.reps}`,
           10,
         );
         const change =
@@ -305,47 +477,6 @@ export async function createDayReportPdf(
         );
     }
     y -= 8;
-    rule();
-  }
-  newPage();
-  heading('Complete session log');
-  text(
-    'Chronological programme order. All recorded sets and notes are included, even when an exercise was left incomplete.',
-    9,
-    muted,
-  );
-  for (const session of report.sessions) {
-    ensure(132); // Keep a session heading with its first exercise, not at a page foot.
-    heading(`${reportWeek(session.week)} / ${dateLabel(session.date)}`);
-    text(
-      `${session.records.length} exercise log(s) | Volume ${fmt(session.volume)} kg | ${session.reps} reps${session.seconds ? ` | ${session.seconds} seconds of holds` : ''}`,
-      10,
-      muted,
-    );
-    y -= 8;
-    for (const entry of session.records) {
-      ensure(66);
-      text(`${entry.exerciseOrder}. ${entry.exercise}`, 12, blue);
-      text(
-        `Target: ${entry.target || 'Not recorded'} | ${entry.completed ? 'Logged' : 'Partial save'}${entry.offlinePending ? ' | Awaiting sync' : ''}${entry.rir == null ? '' : ` | Exercise RIR ${entry.rir}`}`,
-        9,
-        muted,
-      );
-      const sets = reportSets(entry);
-      text(
-        sets.length
-          ? sets
-              .map(
-                (set) =>
-                  `Set ${set.set}: ${set.weight === null ? '' : fmt(set.weight) + ' kg x '}${set.reps === null ? 'not recorded' : fmt(set.reps)} ${isTimedEntry(entry) ? 'sec' : 'reps'}${set.rir === null ? '' : ` · RIR ${set.rir}`}`,
-              )
-              .join('  |  ')
-          : 'No set values recorded.',
-        10,
-      );
-      if (entry.notes?.trim()) text('Notes: ' + entry.notes, 10, ink, 10);
-      y -= 10;
-    }
     rule();
   }
   if (replacedSymbols)

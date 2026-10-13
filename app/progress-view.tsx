@@ -190,6 +190,7 @@ function EarlierHistoryDisclosure({
 }
 
 type Props = {
+  activeWeek?: number;
   activePhase: number;
   activeRoutine: RoutineExercise[];
   phaseEntries: WorkoutEntry[];
@@ -224,6 +225,7 @@ type Props = {
   setView: (view: 'today') => void;
 };
 export default function ProgressView({
+  activeWeek,
   activePhase,
   activeRoutine,
   phaseEntries,
@@ -605,6 +607,7 @@ export default function ProgressView({
                         </div>
                         <div className="flex flex-wrap items-center justify-end gap-2">
                           <DayReportButton
+                            currentWeek={activeWeek}
                             day={day}
                             entries={allEntries}
                             loading={loading}

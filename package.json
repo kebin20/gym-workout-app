@@ -1,6 +1,6 @@
 {
   "name": "sites-project",
-  "version": "3.15.1",
+  "version": "3.16.0",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
@@ -16,7 +16,7 @@
     "db:generate": "drizzle-kit generate",
     "verify:brand": "node scripts/verify-brand-assets.mjs",
     "test:workout": "node --test scripts/test-workout-reliability.mjs",
-    "test:regression": "node --test scripts/test-startup-stages.mjs scripts/test-programme-recovery.mjs scripts/test-leg-extension.mjs scripts/test-startup-dialogs.mjs scripts/test-startup-readiness.mjs scripts/test-compact-set-cards.mjs scripts/test-input-focus-zoom.mjs scripts/test-set-rir.mjs scripts/test-workout-reliability.mjs scripts/test-day-report-alerts.mjs scripts/test-rest-alert-reliability.mjs scripts/test-startup-cache.mjs",
+    "test:regression": "node --test scripts/test-day-report-weeks.mjs scripts/test-startup-stages.mjs scripts/test-programme-recovery.mjs scripts/test-leg-extension.mjs scripts/test-startup-dialogs.mjs scripts/test-startup-readiness.mjs scripts/test-compact-set-cards.mjs scripts/test-input-focus-zoom.mjs scripts/test-set-rir.mjs scripts/test-workout-reliability.mjs scripts/test-day-report-alerts.mjs scripts/test-rest-alert-reliability.mjs scripts/test-startup-cache.mjs",
     "test:mobile": "node --test scripts/test-native-bundle.mjs",
     "build:mobile": "vite build --config vite.mobile.config.ts",
     "preview:mobile": "vite preview --config vite.mobile.config.ts --host 127.0.0.1",

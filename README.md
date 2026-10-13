@@ -10,7 +10,7 @@ Made with ChatGPT Codex
 
 The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgpt.site](https://liftline-strength-plan.ktanzyl.chatgpt.site). Access is restricted to the site owner.
 
-Current production version: **v3.15.1**
+Current production version: **v3.16.0**
 
 The experimental [bundled iOS foundation](docs/native-ios.md) is included in the repository, but is not ready for personal logging: native devices display a setup guard until the storage/connection choice and real-device tests are complete. The private web app keeps its existing storage and functionality, with faster cached startup. See the [release rollback notes](docs/rollback.md) for the pre-release backup.
 
@@ -62,6 +62,12 @@ The experimental [bundled iOS foundation](docs/native-ios.md) is included in the
 - Responsive Material-inspired interface using Geist typography
 
 ## Version history
+
+### v3.16.0
+
+- Choose all saved weeks or the selected current and immediately previous programme week for each Day A/B/C PDF. Empty included weeks are explicitly marked; Week 1 and the Phase 1/2 boundary remain unambiguous.
+- Present full phase/week headings and actual saved exercises, set-by-set load/reps/seconds/RIR tables, partial/pending labels and notes before exercise trends. Recorded decimal loads and zero RIR are preserved; range summaries and embedded raw records use only the chosen weeks.
+- Keep archived programme PDFs as full-history reports. No workout records or programme selection are changed by export.
 
 ### v3.15.1
 
