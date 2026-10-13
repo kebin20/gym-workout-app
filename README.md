@@ -64,6 +64,18 @@ The experimental [bundled iOS foundation](docs/native-ios.md) is included in the
 
 ## Version history
 
+Recent highlights:
+
+- **Editable history:** correct saved weights, reps, RIR and notes while preserving workout dates and updating eligible Google Sheet rows.
+- **Flexible PDF reports:** export Day A/B/C history for all saved weeks or just the current and previous week, with routines, sets and trends.
+- **Cleaner mobile logging:** compact per-set inputs, consistent spacing, larger touch targets and tidier dialogs.
+- **Faster Home Screen startup:** cached workouts and interface, with optional screens and tools loaded only when needed.
+- **Safer long-term records:** recoverable offline saves, preview-first backups and restore, and archived programmes when starting again.
+
+<details>
+
+<summary>Full changelog</summary>
+
 ### v3.17 — Editable history and layout polish
 
 - In v3.17.2, inset and vertically centre the PDF range chevron with reserved text padding. Keep the native select, keyboard/iOS picker behaviour and a native-arrow fallback in forced-colour mode; report contents and workout data remain unchanged.
@@ -304,6 +316,8 @@ Minor fixes, visual refinements, and deployment maintenance are grouped into the
 
 - Converted the 12-week, three-day spreadsheet routine into a responsive React workout tracker.
 - Added weight, rep, RIR, notes, completion, weekly progress, and D1-backed persistence.
+
+</details>
 
 ## Technology
 
