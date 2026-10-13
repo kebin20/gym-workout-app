@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { Download, Loader2 } from 'lucide-react';
+import { ChevronDown, Download, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   buildDayReport,
@@ -91,19 +91,25 @@ export default function DayReportButton({
       {currentWeek !== undefined && (
         <label className="grid min-w-0 gap-1 font-sans text-sm font-medium text-muted-foreground">
           <span>PDF range</span>
-          <select
-            aria-label={`Day ${day} PDF week range`}
-            value={scope}
-            disabled={busy || loading}
-            onChange={(event) => {
-              setScope(event.target.value as 'all' | 'recent');
-              setMessage('');
-            }}
-            className="h-11 w-full min-w-0 rounded-lg border bg-card px-3 text-base text-foreground outline-none focus:ring-3 focus:ring-ring/30"
-          >
-            <option value="all">All saved weeks</option>
-            <option value="recent">Current + previous week</option>
-          </select>
+          <span className="relative block min-w-0">
+            <select
+              aria-label={`Day ${day} PDF week range`}
+              value={scope}
+              disabled={busy || loading}
+              onChange={(event) => {
+                setScope(event.target.value as 'all' | 'recent');
+                setMessage('');
+              }}
+              className="h-11 w-full min-w-0 appearance-none rounded-lg border bg-card pl-3 pr-10 text-base text-foreground outline-none focus:ring-3 focus:ring-ring/30 forced-colors:appearance-auto"
+            >
+              <option value="all">All saved weeks</option>
+              <option value="recent">Current + previous week</option>
+            </select>
+            <ChevronDown
+              aria-hidden="true"
+              className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground forced-colors:hidden"
+            />
+          </span>
         </label>
       )}
       <Button

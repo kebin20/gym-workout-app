@@ -155,6 +155,21 @@ test('PDF controls have aligned mobile/desktop layouts and do not grow across th
     assert.ok(html.includes('sm:max-w-xl'));
     assert.ok(html.includes('sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end'));
     assert.match(html, /<select[^>]*class="[^"]*w-full min-w-0/);
+    assert.match(
+      html,
+      /<select[^>]*class="[^"]*appearance-none[^\"]*pl-3 pr-10/,
+    );
+    const chevron = html.match(
+      /<svg\b[^>]*class="[^"]*lucide-chevron-down[^>]*>/,
+    )?.[0];
+    assert.ok(chevron);
+    assert.match(chevron, /aria-hidden="true"/);
+    assert.match(
+      chevron,
+      /pointer-events-none absolute right-3 top-1\/2 size-4 -translate-y-1\/2/,
+    );
+    assert.ok(html.includes('forced-colors:appearance-auto'));
+    assert.ok(html.includes('forced-colors:hidden'));
     assert.ok(html.includes('aria-label="Day A PDF week range"'));
     assert.ok(html.includes('Download PDF'));
     const archive = renderToStaticMarkup(
