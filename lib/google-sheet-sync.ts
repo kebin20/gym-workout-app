@@ -115,6 +115,23 @@ export async function syncWorkoutEntries(
 
   if (entries.length === 0) return { ok: true, configured: true, synced: 0 };
 
+  // A historical correction must never fabricate today's completion date.
+  // Leave all rows untouched when a completed record has no usable date.
+  if (
+    entries.some(
+      (entry) =>
+        entry.completed &&
+        (!entry.completedAt || !Number.isFinite(Date.parse(entry.completedAt))),
+    )
+  )
+    return {
+      ok: false,
+      configured: true,
+      synced: 0,
+      message:
+        'A completed workout has no original date. Sheet sync was not sent, to avoid changing its date.',
+    };
+
   try {
     const response = await fetch(config.webhookUrl, {
       method: 'POST',

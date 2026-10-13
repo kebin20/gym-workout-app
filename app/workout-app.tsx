@@ -109,6 +109,7 @@ import ExerciseDraftBoundary, {
 } from './exercise-draft-boundary';
 import { useOutboxRetry } from './use-outbox-retry';
 import { useOutboxSnapshot } from './use-outbox-snapshot';
+import type { SaveHistoryEdit } from './history-edit-dialog';
 import { recallSets, validateWorkoutNumbers } from '@/lib/workout-validation';
 import {
   removeLastDraftSet,
@@ -1891,6 +1892,85 @@ export function WorkoutApp() {
     }
   }
 
+  const saveHistoryEdit: SaveHistoryEdit = async (original, fields) => {
+    const editingProgramme = original.programmeId ?? 'initial';
+    if (editingProgramme !== programmeIdRef.current)
+      throw Error(
+        'The programme changed. Close the editor and refresh before editing history.',
+      );
+    if (
+      !navigator.onLine ||
+      hasPendingOutbox(window.localStorage) ||
+      saving ||
+      programSaving ||
+      undoing ||
+      backupBusy ||
+      dataActionLoading
+    )
+      throw Error(
+        'Reconnect and finish syncing or saving before correcting history. Your edits remain here.',
+      );
+    if (exerciseDraft.dirty)
+      throw Error(
+        'Finish or discard your current workout draft in Today before correcting history.',
+      );
+    mutationSequence.current++;
+    try {
+      const response = await fetch('/api/workouts', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...fields,
+          programmeId: editingProgramme,
+          id: original.id,
+          expectedUpdatedAt: original.updatedAt,
+          expectedServerRevision: original.serverRevision,
+        }),
+        signal: AbortSignal.timeout(15_000),
+      });
+      const data = (await response.json()) as {
+        entry?: WorkoutEntry;
+        sheetSyncQueued?: boolean;
+        error?: string;
+      };
+      mutationSequence.current++;
+      if (!response.ok || !data.entry) {
+        throw Error(
+          data.error ??
+            'Unable to confirm this correction. Close the editor and refresh before retrying; your edits remain here.',
+        );
+      }
+      if (
+        editingProgramme !== programmeIdRef.current ||
+        data.entry.programmeId !== editingProgramme ||
+        data.entry.id !== original.id
+      )
+        throw Error(
+          'The programme changed while saving. Close the editor and refresh to review history.',
+        );
+      const saved = normaliseWorkoutEntries([
+        { ...data.entry, offlinePending: false },
+      ])[0];
+      setEntries((current) => {
+        const next = replaceWorkoutEntry(current, saved);
+        cacheWorkoutEntries(next, undefined, editingProgramme);
+        return next;
+      });
+      setLastSave(null);
+      setNotice(
+        `History corrected · original date preserved${data.sheetSyncQueued ? ' · Sheet sync queued' : ' · Liftline only'}`,
+      );
+      window.setTimeout(() => {
+        void refreshWorkoutData().catch(() => undefined);
+      }, 3500);
+    } finally {
+      mutationSequence.current++;
+      // Reconcile an ambiguous network failure as well as a confirmed save.
+      // Start after invalidating refreshes launched during the correction.
+      void refreshWorkoutData().catch(() => undefined);
+    }
+  };
+
   async function undoLastSave() {
     if (
       !lastSave ||
@@ -3356,8 +3436,10 @@ export function WorkoutApp() {
             }
           >
             <ProgressView
+              programmeId={programmeId}
+              onSaveHistory={saveHistoryEdit}
               activeWeek={activeWeek}
-              key={activePhase}
+              key={`${programmeId}|${activePhase}`}
               activePhase={activePhase}
               activeRoutine={activeRoutine}
               phaseEntries={phaseEntries}

@@ -10,7 +10,7 @@ Made with ChatGPT Codex
 
 The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgpt.site](https://liftline-strength-plan.ktanzyl.chatgpt.site). Access is restricted to the site owner.
 
-Current production version: **v3.16.0**
+Current production version: **v3.17.0**
 
 The experimental [bundled iOS foundation](docs/native-ios.md) is included in the repository, but is not ready for personal logging: native devices display a setup guard until the storage/connection choice and real-device tests are complete. The private web app keeps its existing storage and functionality, with faster cached startup. See the [release rollback notes](docs/rollback.md) for the pre-release backup.
 
@@ -40,6 +40,7 @@ The experimental [bundled iOS foundation](docs/native-ios.md) is included in the
 - Weekly session progress plus selectable per-exercise progress charts
 - End-of-session summaries with volume, set count, duration, comparisons, and personal records
 - Responsive day-by-day exercise history carousel and grid with dates, sets, RIR, and notes
+- Correct a saved exercise directly from its week in Progress, preserving its original date, routine and completion status; revision guards reject conflicting changes and eligible corrections mirror the original Sheet row
 - Automatically rotating training tips covering form, progression, rest, and recovery
 - Routine guide with targets, rest periods, muscle groups, and alternatives
 - Persistent workout data backed by Cloudflare D1
@@ -62,6 +63,13 @@ The experimental [bundled iOS foundation](docs/native-ios.md) is included in the
 - Responsive Material-inspired interface using Geist typography
 
 ## Version history
+
+### v3.17.0
+
+- Add **Edit saved exercise** inside each expanded history week, including earlier weeks. Correct load, reps/seconds, per-set RIR, older exercise RIR and notes in compact mobile-safe fields. Cancel protects unsaved edits; failed saves leave the editor values intact.
+- Correct only an existing record using its ID, timestamp, server revision and active programme. Preserve its exercise, target, set count, original date and completion status; do not advance Today, run timers, insert another workout or edit immutable programme archives.
+- Mirror eligible original Phase 1 corrections to their existing Google Sheet row in the background. The unchanged Sheet layout supports the first three sets, exercise RIR and notes; extra sets and per-set RIR remain in Liftline. Phase 2, custom exercises and later programmes stay app-only. Records without original dates are not sent to the Sheet, rather than inventing today's date; sync errors remain visible/retryable.
+- Refresh local history, trends and PDF data after confirmation. Keep the new editor outside the cold-start asset graph. No existing workout values are changed by releasing this feature.
 
 ### v3.16.0
 

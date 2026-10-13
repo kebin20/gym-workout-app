@@ -8,6 +8,7 @@ import {
   History,
   Medal,
   NotebookPen,
+  Pencil,
   Sparkles,
   Target,
   TrendingUp,
@@ -40,6 +41,8 @@ import { exerciseNameMatches } from '@/lib/exercise-identity';
 import { dayPresentation } from '@/lib/day-presentation';
 import type { WorkoutEntry } from '@/lib/workout-types';
 import DayReportButton from './day-report-button';
+import type { SaveHistoryEdit } from './history-edit-dialog';
+const HistoryEditDialog = lazy(() => import('./history-edit-dialog'));
 import ProgressDataMenu from './progress-data-menu';
 const ProgressChart = lazy(() => import('./progress-chart'));
 const ExerciseProgressChart = lazy(() => import('./exercise-progress-chart'));
@@ -78,10 +81,12 @@ function HistoryWeekDisclosure({
   entry,
   displayName,
   defaultExpanded,
+  onEdit,
 }: {
   entry: WorkoutEntry;
   displayName: string;
   defaultExpanded: boolean;
+  onEdit?: (entry: WorkoutEntry) => void;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const evenWeek = entry.week % 2 === 0;
@@ -145,6 +150,31 @@ function HistoryWeekDisclosure({
               {entry.notes}
             </p>
           )}
+          {onEdit && (
+            <div className="mt-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                aria-label={`Edit Phase ${entry.week > 12 ? 2 : 1} Week ${displayWeekNumber(entry.week)} Day ${entry.day} ${entry.exercise}`}
+                disabled={
+                  entry.offlinePending ||
+                  !entry.updatedAt ||
+                  entry.serverRevision == null
+                }
+                onClick={() => onEdit(entry)}
+              >
+                <Pencil className="size-3.5" /> Edit saved exercise
+              </Button>
+              {(entry.offlinePending ||
+                !entry.updatedAt ||
+                entry.serverRevision == null) && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Reconnect and sync this record before editing.
+                </p>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -154,9 +184,11 @@ function HistoryWeekDisclosure({
 function EarlierHistoryDisclosure({
   entries,
   displayName,
+  onEdit,
 }: {
   entries: WorkoutEntry[];
   displayName: string;
+  onEdit?: (entry: WorkoutEntry) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -181,6 +213,7 @@ function EarlierHistoryDisclosure({
               entry={entry}
               displayName={displayName}
               defaultExpanded={false}
+              onEdit={onEdit}
             />
           ))}
         </div>
@@ -190,6 +223,8 @@ function EarlierHistoryDisclosure({
 }
 
 type Props = {
+  programmeId?: string;
+  onSaveHistory?: SaveHistoryEdit;
   activeWeek?: number;
   activePhase: number;
   activeRoutine: RoutineExercise[];
@@ -225,6 +260,8 @@ type Props = {
   setView: (view: 'today') => void;
 };
 export default function ProgressView({
+  programmeId = 'initial',
+  onSaveHistory,
   activeWeek,
   activePhase,
   activeRoutine,
@@ -252,6 +289,10 @@ export default function ProgressView({
   setView,
 }: Props) {
   const [startupOpen, setStartupOpen] = useState(false);
+  const [editing, setEditing] = useState<WorkoutEntry | null>(null);
+  const editHistory = onSaveHistory
+    ? (entry: WorkoutEntry) => setEditing({ ...entry, programmeId })
+    : undefined;
   const [insightsOpen, setInsightsOpen] = useState(false);
   const [progressExerciseKey, setProgressExerciseKey] = useState('');
   const optionKey = (item: RoutineExercise) =>
@@ -677,12 +718,14 @@ export default function ProgressView({
                                       entry={entry}
                                       displayName={displayName}
                                       defaultExpanded
+                                      onEdit={editHistory}
                                     />
                                   ))}
                                   {exerciseEntries.length > 3 && (
                                     <EarlierHistoryDisclosure
                                       entries={exerciseEntries.slice(3)}
                                       displayName={displayName}
+                                      onEdit={editHistory}
                                     />
                                   )}
                                 </div>
@@ -715,6 +758,22 @@ export default function ProgressView({
       {startupOpen && (
         <Suspense fallback={null}>
           <StartupDetails onClose={() => setStartupOpen(false)} />
+        </Suspense>
+      )}
+      {editing && onSaveHistory && (
+        <Suspense
+          fallback={
+            <p role="status" className="font-sans text-sm">
+              Opening saved exercise…
+            </p>
+          }
+        >
+          <HistoryEditDialog
+            entry={editing}
+            sheetAvailable={Boolean(sheetAvailable)}
+            onClose={() => setEditing(null)}
+            onSave={onSaveHistory}
+          />
         </Suspense>
       )}
     </section>
