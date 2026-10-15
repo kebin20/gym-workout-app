@@ -315,8 +315,15 @@
   }
 
   .workout-history-card {
-    content-visibility: auto;
-    contain-intrinsic-size: auto 22rem;
+    /* Compact mobile headers must not reserve a full history panel's height. */
+    content-visibility: visible;
+  }
+
+  @media (min-width: 768px) {
+    .workout-history-card {
+      content-visibility: auto;
+      contain-intrinsic-size: auto 22rem;
+    }
   }
 
   .beta-training-spotlight::after,

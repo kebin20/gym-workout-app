@@ -1,9 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import vm from 'node:vm';
+import ts from 'typescript';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { routeFixture } from './route-test-harness.mjs';
+
+const require = createRequire(import.meta.url);
 
 // Structural/CSS regressions, not a substitute for real viewport/iPhone QA.
 const source = (file) =>
@@ -13,6 +18,143 @@ function elements(tree) {
   if (!tree || typeof tree !== 'object' || !tree.props) return [];
   return [tree, ...elements(tree.props.children)];
 }
+
+test('exercise history starts compact on mobile, remains expanded on desktop and exposes unique accessible controls', () => {
+  const f = routeFixture();
+  try {
+    const Card = f.load('app/history-exercise-card.tsx').default;
+    const html = renderToStaticMarkup(
+      createElement(
+        'div',
+        null,
+        ...[0, 1, 6].map((sessionCount) =>
+          createElement(
+            Card,
+            {
+              key: sessionCount,
+              order: sessionCount + 1,
+              displayName: 'LongCustomExerciseName'.repeat(5),
+              description: '3 × 6–8 · Quads / glutes / core',
+              sessionCount,
+            },
+            createElement('button', null, 'Edit saved exercise'),
+          ),
+        ),
+      ),
+    );
+    assert.equal((html.match(/aria-expanded="false"/g) ?? []).length, 3);
+    assert.equal((html.match(/class="hidden md:block"/g) ?? []).length, 3);
+    assert.equal((html.match(/Edit saved exercise/g) ?? []).length, 3);
+    const ids = [...html.matchAll(/aria-controls="([^"]+)"/g)].map((m) => m[1]);
+    assert.equal(new Set(ids).size, 3);
+    for (const id of ids) assert.ok(html.includes(`id="${id}"`));
+    assert.match(html, /No logged sessions yet/);
+    assert.match(html, /1 saved session</);
+    assert.match(html, /6 saved sessions/);
+    assert.match(html, /min-h-11 w-full/);
+    assert.match(html, /md:min-h-56/);
+    assert.doesNotMatch(html, /flex min-h-56/);
+    assert.match(html, /hidden items-start gap-3 md:flex/);
+    assert.match(html, /overflow-wrap:anywhere/);
+  } finally {
+    f.close();
+  }
+  const css = source('app/globals.css');
+  assert.match(
+    css,
+    /\.workout-history-card\s*\{[^}]*content-visibility: visible;/,
+  );
+  assert.match(
+    css,
+    /@media \(min-width: 768px\)\s*\{\s*\.workout-history-card\s*\{\s*content-visibility: auto;\s*contain-intrinsic-size: auto 22rem;/,
+  );
+});
+
+test('mobile history toggles independently without unmounting week details, changing records or intercepting editing', () => {
+  function harness() {
+    let expanded;
+    const module = { exports: {} };
+    vm.runInNewContext(
+      ts.transpileModule(source('app/history-exercise-card.tsx'), {
+        compilerOptions: {
+          module: ts.ModuleKind.CommonJS,
+          jsx: ts.JsxEmit.ReactJSX,
+        },
+      }).outputText,
+      {
+        module,
+        exports: module.exports,
+        require: (name) =>
+          name === 'react'
+            ? {
+                useId: () => 'stable-history-id',
+                useState: (initial) => {
+                  expanded ??= initial;
+                  return [
+                    expanded,
+                    (update) => {
+                      expanded = update(expanded);
+                    },
+                  ];
+                },
+              }
+            : require(name),
+      },
+    );
+    return (props) => elements(module.exports.default(props));
+  }
+  let edits = 0;
+  const child = createElement(
+    'button',
+    { onClick: () => edits++ },
+    'Edit saved exercise',
+  );
+  const props = Object.freeze({
+    order: 1,
+    displayName: 'Squat',
+    description: 'Quads',
+    sessionCount: 6,
+    children: child,
+  });
+  const render = harness(),
+    other = harness();
+  const toggle = (tree) => tree.find((n) => n.props['aria-controls']);
+  const body = (tree) => tree.find((n) => n.props.id === 'stable-history-id');
+  let tree = render(props);
+  assert.equal(toggle(tree).props['aria-expanded'], false);
+  toggle(tree).props.onClick();
+  tree = render(props);
+  assert.equal(toggle(tree).props['aria-expanded'], true);
+  assert.equal(body(tree).props.className, 'block');
+  assert.equal(body(tree).props.children, child);
+  assert.equal(toggle(other(props)).props['aria-expanded'], false);
+  child.props.onClick();
+  assert.equal(edits, 1);
+  toggle(tree).props.onClick();
+  tree = render(props);
+  assert.equal(body(tree).props.className, 'hidden md:block');
+  assert.equal(body(tree).props.children, child);
+  assert.equal(props.sessionCount, 6);
+  assert.equal(edits, 1);
+  const progress = source('app/progress-view.tsx');
+  assert.match(
+    progress,
+    /<HistoryExerciseCard[\s\S]*?sessionCount=\{exerciseEntries.length\}/,
+  );
+  assert.match(
+    progress,
+    /<HistoryWeekDisclosure[\s\S]*?defaultExpanded[\s\S]*?onEdit=\{editHistory\}/,
+  );
+  assert.match(
+    progress,
+    /<EarlierHistoryDisclosure[\s\S]*?onEdit=\{editHistory\}/,
+  );
+  // Existing adaptive height observes slide resizes when a card opens/closes.
+  assert.match(
+    source('components/ui/carousel.tsx'),
+    /resizeObserver.observe\(selectedSlide\)/,
+  );
+});
 
 test('shared dialogs constrain tall content, retain internal-scroll overrides and reserve a 44px close target', () => {
   const f = routeFixture();
