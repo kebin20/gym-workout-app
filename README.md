@@ -10,7 +10,7 @@ Made with ChatGPT Codex
 
 The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgpt.site](https://liftline-strength-plan.ktanzyl.chatgpt.site). Access is restricted to the site owner.
 
-Current production version: **v3.17.2**
+Current production version: **v3.17.3**
 
 The experimental [bundled iOS foundation](docs/native-ios.md) is included in the repository, but is not ready for personal logging: native devices display a setup guard until the storage/connection choice and real-device tests are complete. The private web app keeps its existing storage and functionality, with faster cached startup. See the [release rollback notes](docs/rollback.md) for the pre-release backup.
 
@@ -68,7 +68,7 @@ Recent highlights:
 
 - **Editable history:** correct saved weights, reps, RIR and notes while preserving workout dates and updating eligible Google Sheet rows.
 - **Flexible PDF reports:** export Day A/B/C history for all saved weeks or just the current and previous week, with routines, sets and trends.
-- **Cleaner mobile logging:** compact per-set inputs, consistent spacing, larger touch targets and tidier dialogs.
+- **Cleaner mobile layout:** compact logging, collapsible exercise history, consistent spacing and tidier dialogs.
 - **Faster Home Screen startup:** cached workouts and interface, with optional screens and tools loaded only when needed.
 - **Safer long-term records:** recoverable offline saves, preview-first backups and restore, and archived programmes when starting again.
 
@@ -78,6 +78,7 @@ Recent highlights:
 
 ### v3.17 — Editable history and layout polish
 
+- In v3.17.3, start exercise-history cards collapsed on mobile with a full-width accessible toggle and saved-session count. Keep desktop cards expanded, preserve individual week states and editing, and avoid reserving empty panel space for collapsed mobile cards. Workout data and PDF exports are unchanged.
 - In v3.17.2, inset and vertically centre the PDF range chevron with reserved text padding. Keep the native select, keyboard/iOS picker behaviour and a native-arrow fallback in forced-colour mode; report contents and workout data remain unchanged.
 - In v3.17.1, give long mobile exercise headings their own row, align numeric fields under wrapping labels, group history totals separately from bounded PDF controls, align desktop Plan actions, and reduce narrow-screen decorative artwork. Add consistent modal scrolling/close clearance and mobile touch targets, safer long-text wrapping, a viewport-bounded programme menu and Holiday safe-area padding. Behaviour, stored records and the established colour scheme remain unchanged. Structural layout tests are not a substitute for real iPhone keyboard/viewport QA.
 

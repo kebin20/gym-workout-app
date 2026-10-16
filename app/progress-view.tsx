@@ -41,6 +41,7 @@ import { exerciseNameMatches } from '@/lib/exercise-identity';
 import { dayPresentation } from '@/lib/day-presentation';
 import type { WorkoutEntry } from '@/lib/workout-types';
 import DayReportButton from './day-report-button';
+import HistoryExerciseCard from './history-exercise-card';
 import type { SaveHistoryEdit } from './history-edit-dialog';
 const HistoryEditDialog = lazy(() => import('./history-edit-dialog'));
 import ProgressDataMenu from './progress-data-menu';
@@ -582,8 +583,8 @@ export default function ProgressView({
             </CardTitle>
             <CardDescription className="mt-1 font-sans">
               Swipe between Day A, B, and C to review every completed exercise,
-              set, and note. The latest three weeks open by default; earlier
-              weeks stay tucked away.
+              set, and note. On mobile, tap an exercise to view its history. The
+              latest three weeks open inside; earlier weeks stay tucked away.
             </CardDescription>
           </div>
         </CardHeader>
@@ -693,24 +694,13 @@ export default function ProgressView({
                             exerciseEntries[0]?.exercise ?? item.name;
 
                           return (
-                            <article
+                            <HistoryExerciseCard
                               key={`${day}-${item.order}`}
-                              className="workout-history-card flex min-h-56 flex-col rounded-xl border border-border/70 bg-card p-3 sm:p-4"
+                              order={item.order}
+                              displayName={displayName}
+                              description={`${targetLabel(item)} · ${item.muscles}`}
+                              sessionCount={exerciseEntries.length}
                             >
-                              <div className="flex items-start gap-3">
-                                <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-secondary font-sans text-xs font-bold">
-                                  {item.order}
-                                </span>
-                                <div className="min-w-0 flex-1">
-                                  <h3 className="font-sans text-sm font-semibold [overflow-wrap:anywhere] sm:text-base">
-                                    {displayName}
-                                  </h3>
-                                  <p className="mt-0.5 font-sans text-sm text-muted-foreground">
-                                    {targetLabel(item)} · {item.muscles}
-                                  </p>
-                                </div>
-                              </div>
-
                               {exerciseEntries.length > 0 ? (
                                 <div className="mt-3 max-h-96 space-y-2 overflow-y-auto pr-1">
                                   {exerciseEntries.slice(0, 3).map((entry) => (
@@ -735,7 +725,7 @@ export default function ProgressView({
                                   No logged sessions yet.
                                 </p>
                               )}
-                            </article>
+                            </HistoryExerciseCard>
                           );
                         })}
                       </div>
