@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
+import { createWorkoutRefreshCoordinator } from '../lib/workout-refresh.ts';
 
 const source = ts.createSourceFile(
   'app/workout-app.tsx',
@@ -43,7 +44,11 @@ function fixture(snapshot) {
   let cached = JSON.stringify(snapshot);
   const calls = [];
   const state = {};
+  const refreshIntents = [];
   let responseData;
+  let holdResponses = false;
+  let releaseResponse;
+  let onRefreshIntent = () => {};
   const ctx = {
     Date,
     JSON,
@@ -56,13 +61,25 @@ function fixture(snapshot) {
       },
     },
     workoutCacheKey: 'liftline.workout-entries.v1',
+    readCachedWorkoutEntries: () => JSON.parse(cached),
     useCallback: (callback) => callback,
     refreshSequence: { current: 0 },
     mutationSequence: { current: 0 },
+    latestLifecycle: { current: { blocked: false, draftDirty: false } },
+    lifecycleRefresh: {
+      current: {
+        trigger: (reason) => {
+          refreshIntents.push(reason);
+          onRefreshIntent(reason);
+        },
+      },
+    },
     programmeIdRef: { current: 'initial' },
     markStartup: () => {},
     fetch: async (url) => {
       calls.push(url);
+      if (holdResponses)
+        await new Promise((resolve) => (releaseResponse = resolve));
       return Response.json(responseData);
     },
     normaliseWorkoutEntries: (entries) => entries,
@@ -110,6 +127,24 @@ function fixture(snapshot) {
   return {
     state,
     calls,
+    refreshIntents,
+    set onRefreshIntent(callback) {
+      onRefreshIntent = callback;
+    },
+    set draftDirty(value) {
+      ctx.latestLifecycle.current.draftDirty = value;
+      ctx.latestLifecycle.current.blocked = value;
+    },
+    set blocked(value) {
+      ctx.latestLifecycle.current.blocked = value;
+    },
+    holdResponses() {
+      holdResponses = true;
+    },
+    releaseResponse() {
+      holdResponses = false;
+      releaseResponse?.();
+    },
     get cache() {
       return JSON.parse(cached);
     },
@@ -203,4 +238,96 @@ test('an invalidated local snapshot cannot strand a different tab’s correction
   });
   assert.deepEqual(f.calls, ['/api/workouts']);
   assert.deepEqual(f.cache.entries, authoritative);
+});
+
+test('a read finishing after typing starts defers its programme and plan, retaining one refresh intent', async () => {
+  const snapshot = {
+    programmeId: 'initial',
+    syncedAt: '22',
+    entries: [entry(1, 50)],
+  };
+  const data = {
+    programmeId: 'new-programme',
+    cursor: '24',
+    entries: [entry(2, 70)],
+    sessionExercises: [{ order: 2, name: 'Different selected exercise' }],
+  };
+  const f = fixture(snapshot);
+  let blocked = true;
+  let finishDeferredRefresh;
+  const deferredRefresh = new Promise((resolve) => {
+    finishDeferredRefresh = resolve;
+  });
+  const timers = new Map();
+  const coordinator = createWorkoutRefreshCoordinator({
+    windowTarget: {
+      addEventListener() {},
+      removeEventListener() {},
+      setTimeout(callback) {
+        timers.set(1, callback);
+        return 1;
+      },
+      clearTimeout: (id) => timers.delete(id),
+    },
+    documentTarget: { addEventListener() {}, removeEventListener() {} },
+    refresh: async () => {
+      await f.refresh(
+        snapshot.entries,
+        snapshot.syncedAt,
+        snapshot.programmeId,
+        data,
+      );
+      finishDeferredRefresh();
+    },
+    isOnline: () => true,
+    isVisible: () => true,
+    isBlocked: () => blocked,
+    storageKeys: [],
+  });
+  f.onRefreshIntent = (reason) => coordinator.trigger(reason);
+  f.holdResponses();
+  const pending = f.refresh(
+    snapshot.entries,
+    snapshot.syncedAt,
+    snapshot.programmeId,
+    data,
+  );
+  f.draftDirty = true;
+  f.releaseResponse();
+  await pending;
+  assert.deepEqual(f.state, {}, 'no server state reaches the live draft');
+  assert.deepEqual(
+    f.cache,
+    snapshot,
+    'deferred response cannot replace the cache',
+  );
+  assert.deepEqual(f.refreshIntents, ['resume']);
+  assert.equal(timers.size, 0, 'dirty response retains intent without polling');
+
+  f.draftDirty = false;
+  blocked = false;
+  coordinator.resumePending();
+  assert.equal(timers.size, 1, 'finishing the draft resumes the pending intent');
+  const run = timers.get(1);
+  timers.delete(1);
+  run();
+  await deferredRefresh;
+  assert.equal(f.state.ProgrammeId, 'new-programme');
+  assert.deepEqual(f.cache.entries, data.entries);
+  assert.deepEqual(f.state.SessionExercises, data.sessionExercises);
+  coordinator.dispose();
+});
+
+test('startup loading without a dirty draft still applies the first authoritative read', async () => {
+  const f = fixture({ programmeId: 'initial', entries: [] });
+  f.blocked = true;
+  await f.refresh(undefined, undefined, undefined, {
+    programmeId: 'initial',
+    cursor: '24',
+    entries: [entry(1, 70)],
+    sessionExercises: [],
+  });
+  assert.deepEqual(f.cache.entries, [entry(1, 70)]);
+  assert.equal(f.cache.syncedAt, '24');
+  assert.deepEqual(f.refreshIntents, []);
 });

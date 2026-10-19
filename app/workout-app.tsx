@@ -1017,7 +1017,11 @@ export function WorkoutApp() {
   const refreshSequence = useRef(0);
   const mutationSequence = useRef(0);
   const initialRefreshPending = useRef(true);
-  const latestLifecycle = useRef({ blocked: false, refresh: async () => {} });
+  const latestLifecycle = useRef({
+    blocked: false,
+    draftDirty: false,
+    refresh: async () => {},
+  });
   const lifecycleRefresh = useRef<ReturnType<
     typeof createWorkoutRefreshCoordinator
   > | null>(null);
@@ -1174,6 +1178,13 @@ export function WorkoutApp() {
         mutation !== mutationSequence.current
       )
         return readCachedWorkoutEntries()?.entries ?? [];
+      if (latestLifecycle.current.draftDirty) {
+        // A clean-screen read may finish after typing starts. Defer applying
+        // its plan/programme too, and retain one refresh intent until the
+        // draft is saved; startup loading alone must not block the first GET.
+        lifecycleRefresh.current?.trigger('resume');
+        return readCachedWorkoutEntries()?.entries ?? [];
+      }
       const incomingEntries = normaliseWorkoutEntries(data.entries ?? []);
       const nextProgrammeId = data.programmeId ?? 'initial';
       const programmeChanged = nextProgrammeId !== programmeIdRef.current;
@@ -1429,6 +1440,7 @@ export function WorkoutApp() {
   ]);
 
   latestLifecycle.current = {
+    draftDirty: exerciseDraft.dirty,
     blocked:
       saving ||
       programSaving ||
