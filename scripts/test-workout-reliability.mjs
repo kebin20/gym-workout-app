@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import vm from 'node:vm';
+import ts from 'typescript';
 import { DatabaseSync } from 'node:sqlite';
 import { parseSyncCursor } from '../lib/sync-cursor.ts';
 import {
@@ -223,7 +224,7 @@ test('UI polish keeps the focus toggle, desktop-only rail, day identity and all 
       assert.ok(html.includes(dayPresentation[day].badge));
     }
 
-    const DataMenu = fixture.load('app/progress-data-menu.tsx').default;
+    const DataTrigger = fixture.load('app/progress-data-menu.tsx').default;
     const { DropdownMenuItem } = fixture.load(
       'components/ui/dropdown-menu.tsx',
     );
@@ -240,6 +241,61 @@ test('UI polish keeps the focus toggle, desktop-only rail, day identity and all 
       downloadBackup: () => calls.push('download'),
       onRestoreBackup: () => calls.push('restore'),
     };
+    const triggerHtml = renderToString(createElement(DataTrigger, props));
+    assert.match(triggerHtml, /aria-haspopup="menu"/);
+    assert.match(triggerHtml, /aria-expanded="false"/);
+    // The action panel intentionally does not mount with its persistent trigger.
+    // Exercise the actual intent-loaded panel's callbacks with inert refs,
+    // rather than invoking a hook-bearing component outside a React renderer.
+    const popup = { exports: {} };
+    const jsx = (type, values, key) => createElement(type, { ...values, key });
+    vm.runInNewContext(
+      ts.transpileModule(
+        readFileSync('app/progress-data-menu-popup.tsx', 'utf8'),
+        {
+          compilerOptions: {
+            module: ts.ModuleKind.CommonJS,
+            jsx: ts.JsxEmit.ReactJSX,
+          },
+        },
+      ).outputText,
+      {
+        module: popup,
+        exports: popup.exports,
+        require(name) {
+          if (name === 'react')
+            return { useRef: (value) => ({ current: value }) };
+          if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx };
+          if (name === '@base-ui/react/menu')
+            return {
+              Menu: {
+                Root: 'div',
+                Portal: 'div',
+                Positioner: 'div',
+                Popup: 'div',
+              },
+            };
+          if (name === 'lucide-react')
+            return Object.fromEntries(
+              [
+                'Database',
+                'Download',
+                'FileSpreadsheet',
+                'Timer',
+                'Upload',
+              ].map((name) => [name, 'svg']),
+            );
+          return fixture.load(name.slice(2) + '.tsx');
+        },
+      },
+    );
+    const DataMenu = (values) =>
+      popup.exports.default({
+        open: true,
+        triggerRef: { current: null },
+        onOpenChange() {},
+        ...values,
+      });
     const items = (element) => {
       const found = [];
       const visit = (node) => {
@@ -296,7 +352,7 @@ test('UI polish keeps the focus toggle, desktop-only rail, day identity and all 
       [false, false, true, true],
     );
     const busyHtml = renderToString(
-      createElement(DataMenu, { ...props, syncingSheet: true }),
+      createElement(DataTrigger, { ...props, syncingSheet: true }),
     );
     assert.ok(busyHtml.includes('role="status"'));
     assert.ok(busyHtml.includes('Sending to Google Sheet'));
@@ -678,10 +734,14 @@ test('undo clears a new save through delta sync, restores prior values, and reje
     assert.equal(delta.entries[0].set1Reps, null);
     const newerPayload = {
       ...payload,
+      expectedUpdatedAt: delta.entries[0].updatedAt,
       set1Weight: 50,
       clientUpdatedAt: new Date(Date.now() + 100).toISOString(),
     };
-    const newer = (await (await post(newerPayload)).json()).entry;
+    const newerResponse = await post(newerPayload);
+    assert.equal(newerResponse.status, 200);
+    const newer = (await newerResponse.json()).entry;
+    assert.equal(newer.set1Weight, 50);
     assert.equal((await post(undoWorkoutPayload(saved))).status, 409);
     assert.equal((await post(undoWorkoutPayload(newer, saved))).status, 200);
     const restored = (

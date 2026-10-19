@@ -64,7 +64,7 @@ test('per-set RIR is optional, preserves zero and rejects invalid values, includ
     );
   }
 });
-test('API persists all five efforts, delta sync returns them, old clients preserve them and explicit null clears', async () => {
+test('API persists all five efforts, versioned partial requests preserve them and explicit null clears', async () => {
   const fixture = routeFixture();
   try {
     const route = fixture.load('app/api/workouts/route.ts');
@@ -77,6 +77,7 @@ test('API persists all five efforts, delta sync returns them, old clients preser
     assert.deepEqual(efforts(delta.entries[0]), [0, 1, null, 3, 10]);
     const legacy = {
       ...base(),
+      expectedUpdatedAt: saved.updatedAt,
       clientUpdatedAt: new Date(
         Date.parse(saved.updatedAt) + 1000,
       ).toISOString(),
@@ -86,6 +87,7 @@ test('API persists all five efforts, delta sync returns them, old clients preser
     assert.deepEqual(efforts(preserved), [0, 1, null, 3, 10]);
     const cleared = await save(route, {
       ...base(),
+      expectedUpdatedAt: preserved.updatedAt,
       set1Rir: null,
       set4Rir: null,
       clientUpdatedAt: new Date(
@@ -113,6 +115,7 @@ test('backup/restore and undo round-trip per-set effort without inventing values
     assert.deepEqual(efforts(exported.entries[0]), [0, 1, null, 3, 10]);
     const edited = await save(route, {
       ...base(),
+      expectedUpdatedAt: saved.updatedAt,
       set1Rir: 4,
       clientUpdatedAt: new Date(
         Date.parse(saved.updatedAt) + 1000,

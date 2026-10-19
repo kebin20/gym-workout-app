@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { displayWeekNumber } from '@/lib/routine';
+import { formatWorkoutDate, workoutCalendarDate } from '@/lib/workout-date';
 import {
   historyFields,
   historySetNumbers,
@@ -43,9 +44,7 @@ export default function HistoryEditDialog({
   const [error, setError] = useState('');
   const [discarding, setDiscarding] = useState(false);
   const busy = useRef(false);
-  const hasOriginalDate = Boolean(
-    entry.completedAt && Number.isFinite(Date.parse(entry.completedAt)),
-  );
+  const hasOriginalDate = workoutCalendarDate(entry.completedAt) !== null;
   const dirty = JSON.stringify(values) !== JSON.stringify(historyValues(entry));
   const visibleSets = Math.max(
     entry.setCount ?? 3,
@@ -124,12 +123,7 @@ export default function HistoryEditDialog({
           <p className="font-sans text-xs text-muted-foreground">
             Recorded date:{' '}
             {hasOriginalDate
-              ? new Intl.DateTimeFormat('en-GB', {
-                  day: 'numeric',
-                  month: 'short',
-                  year: 'numeric',
-                  timeZone: 'Asia/Tokyo',
-                }).format(new Date(entry.completedAt!))
+              ? formatWorkoutDate(entry.completedAt)
               : 'Unavailable (not replaced with today)'}
           </p>
         </DialogHeader>

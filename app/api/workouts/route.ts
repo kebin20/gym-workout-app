@@ -48,7 +48,9 @@ type WorkoutPayload = SetRirValues & {
   completed: boolean;
   completedAt?: string | null;
   clientUpdatedAt?: string | null;
-  expectedUpdatedAt?: string;
+  // null means create-only; an existing record requires the version loaded by
+  // the editor. Older queued payloads omit this and can only create or replay.
+  expectedUpdatedAt?: string | null;
 };
 
 function workoutDatabase() {
@@ -69,6 +71,42 @@ function safeIsoDate(value: unknown, fallback: string) {
   if (Number.isNaN(date.getTime())) return fallback;
   if (date.getTime() > Date.now() + 5 * 60_000) return fallback;
   return date.toISOString();
+}
+
+function replaysWorkoutSave(
+  saved: WorkoutEntry,
+  body: Partial<WorkoutPayload>,
+  updatedAt: string,
+  completedAt: string | null,
+  setCount: number,
+) {
+  if (
+    saved.updatedAt !== updatedAt ||
+    saved.setCount !== setCount ||
+    Boolean(saved.completed) !== body.completed ||
+    saved.rir !== nullableNumber(body.rir) ||
+    (saved.notes ?? '') !== String(body.notes ?? '').slice(0, 1000)
+  )
+    return false;
+  // A legacy caller may omit the completion date. Its first successful save
+  // assigned that date, so a retry must not compare a new server-time fallback.
+  if (
+    (!body.completed ||
+      (typeof body.completedAt === 'string' &&
+        Number.isFinite(Date.parse(body.completedAt)))) &&
+    saved.completedAt !== completedAt
+  )
+    return false;
+  for (const set of [1, 2, 3, 4, 5] as const) {
+    for (const metric of ['Weight', 'Reps', 'Rir'] as const) {
+      const field = `set${set}${metric}` as const;
+      // Old requests did not contain per-set effort. They leave it unchanged,
+      // rather than treating a missing field as a request to clear it.
+      if (metric === 'Rir' && !Object.hasOwn(body, field)) continue;
+      if ((saved[field] ?? null) !== nullableNumber(body[field])) return false;
+    }
+  }
+  return true;
 }
 
 function routineFromSessionExercise(
@@ -292,6 +330,7 @@ export async function POST(request: Request) {
     if (
       typeof body.completed !== 'boolean' ||
       (body.expectedUpdatedAt !== undefined &&
+        body.expectedUpdatedAt !== null &&
         (typeof body.expectedUpdatedAt !== 'string' ||
           !Number.isFinite(Date.parse(body.expectedUpdatedAt))))
     )
@@ -340,7 +379,11 @@ export async function POST(request: Request) {
       set2_reps, set3_weight, set3_reps, set4_weight, set4_reps, set5_weight, set5_reps,
       set_count, rir, notes, completed, completed_at, sync_status, sheet_synced_at, sync_error, updated_at,
       set1_rir, set2_rir, set3_rir, set4_rir, set5_rir
-    ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ? WHERE ${programmeGuardSql}
+    ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?
+    WHERE ${programmeGuardSql}
+      AND (? IS NULL OR EXISTS (
+        SELECT 1 FROM workout_entries WHERE week = ? AND day = ? AND exercise_order = ? AND updated_at = ?
+      ))
     ON CONFLICT(week, day, exercise_order) DO UPDATE SET
       exercise = excluded.exercise, target = excluded.target,
       set1_weight = excluded.set1_weight, set1_reps = excluded.set1_reps,
@@ -358,7 +401,7 @@ export async function POST(request: Request) {
       ,set4_rir = CASE WHEN ? THEN excluded.set4_rir ELSE workout_entries.set4_rir END
       ,set5_rir = CASE WHEN ? THEN excluded.set5_rir ELSE workout_entries.set5_rir END
     WHERE excluded.updated_at > workout_entries.updated_at
-      AND (? IS NULL OR workout_entries.updated_at = ?)`)
+      AND ? IS NOT NULL AND workout_entries.updated_at = ?`)
       .bind(
         week,
         day,
@@ -388,6 +431,11 @@ export async function POST(request: Request) {
         nullableNumber(body.set4Rir),
         nullableNumber(body.set5Rir),
         programmeId,
+        body.expectedUpdatedAt ?? null,
+        week,
+        day,
+        exerciseOrder,
+        body.expectedUpdatedAt ?? null,
         Object.hasOwn(body, 'set1Rir') ? 1 : 0,
         Object.hasOwn(body, 'set2Rir') ? 1 : 0,
         Object.hasOwn(body, 'set3Rir') ? 1 : 0,
@@ -404,7 +452,7 @@ export async function POST(request: Request) {
       )
       .bind(week, day, exerciseOrder)
       .first<WorkoutEntry>();
-    if (!saved || !programmeMatches(programmeId, await activeProgrammeId(db)))
+    if (!programmeMatches(programmeId, await activeProgrammeId(db)))
       return Response.json(
         {
           error:
@@ -412,11 +460,23 @@ export async function POST(request: Request) {
         },
         { status: 409 },
       );
-    if (saved && saved.updatedAt !== updatedAt)
+    if (!saved)
       return Response.json(
         {
           error:
-            'A newer version of this workout is already saved. Reload and review before saving again.',
+            'This workout was removed or replaced before saving. Your input has not recreated it. Refresh and review before saving again; queued input remains on this device.',
+          code: 'WORKOUT_SAVE_CONFLICT',
+        },
+        { status: 409 },
+      );
+    // A timestamp alone is not an acknowledgement: competing requests can
+    // share one millisecond. Only an exact replay may confirm a skipped write.
+    if (!replaysWorkoutSave(saved, body, updatedAt, completedAt, setCount))
+      return Response.json(
+        {
+          error:
+            'This workout changed or this older save has no base version. Your input has not overwritten it. Refresh and review before saving again; queued input remains on this device.',
+          code: 'WORKOUT_SAVE_CONFLICT',
           entry: saved,
         },
         { status: 409 },
@@ -426,7 +486,7 @@ export async function POST(request: Request) {
     }
     return Response.json({
       entry: { ...saved, programmeId },
-      sheetSyncQueued: syncStatus === 'pending',
+      sheetSyncQueued: saved.syncStatus === 'pending',
     });
   } catch (error) {
     return Response.json(

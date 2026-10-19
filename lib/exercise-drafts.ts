@@ -4,6 +4,9 @@ const maxDrafts = 32;
 const maxAge = 30 * 24 * 60 * 60 * 1000;
 
 export type ExerciseDraft = {
+  // The data version first loaded, not the latest background refresh. Missing
+  // means a legacy draft whose base is unknown and must never be guessed.
+  expectedUpdatedAt?: string | null;
   sets: {
     weight: string;
     reps?: string;
@@ -28,6 +31,10 @@ function validDraft(value: unknown): value is ExerciseDraft {
     draft.setCount <= 5 &&
     typeof draft.rir === 'string' &&
     typeof draft.notes === 'string' &&
+    (draft.expectedUpdatedAt === undefined ||
+      draft.expectedUpdatedAt === null ||
+      (typeof draft.expectedUpdatedAt === 'string' &&
+        Number.isFinite(Date.parse(draft.expectedUpdatedAt)))) &&
     Array.isArray(draft.sets) &&
     draft.sets.length === 5 &&
     draft.sets.every(
@@ -112,8 +119,12 @@ export function readExerciseDraft<T extends ExerciseDraft>(
   const compatible = saved && {
     ...saved,
     sets: saved.sets.map((set, index) => ({
-      ...(typeof fallback.sets[index].rir === 'string' ? { rir: '' } : {}),
       ...set,
+      // Preserve property order for unchanged snapshots. Draft acknowledgement
+      // compares the serialized submitted value and must remove an exact save.
+      ...(typeof fallback.sets[index].rir === 'string' && set.rir === undefined
+        ? { rir: '' }
+        : {}),
     })),
   };
   // Do not restore a main-plan record into a Holiday input, or vice versa.

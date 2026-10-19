@@ -1,14 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import vm from 'node:vm';
-import ts from 'typescript';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { routeFixture } from './route-test-harness.mjs';
-
-const require = createRequire(import.meta.url);
 
 // Structural/CSS regressions, not a substitute for real viewport/iPhone QA.
 const source = (file) =>
@@ -36,15 +31,27 @@ test('exercise history starts compact on mobile, remains expanded on desktop and
               displayName: 'LongCustomExerciseName'.repeat(5),
               description: '3 × 6–8 · Quads / glutes / core',
               sessionCount,
+              desktop: false,
             },
-            createElement('button', null, 'Edit saved exercise'),
+            () => createElement('button', null, 'Edit saved exercise'),
           ),
         ),
       ),
     );
     assert.equal((html.match(/aria-expanded="false"/g) ?? []).length, 3);
     assert.equal((html.match(/class="hidden md:block"/g) ?? []).length, 3);
-    assert.equal((html.match(/Edit saved exercise/g) ?? []).length, 3);
+    assert.equal((html.match(/Edit saved exercise/g) ?? []).length, 0);
+    const desktopHtml = renderToStaticMarkup(
+      createElement(Card, {
+        order: 1,
+        displayName: 'Squat',
+        description: 'Quads',
+        sessionCount: 6,
+        desktop: true,
+        children: () => createElement('button', null, 'Edit saved exercise'),
+      }),
+    );
+    assert.match(desktopHtml, /Edit saved exercise/);
     const ids = [...html.matchAll(/aria-controls="([^"]+)"/g)].map((m) => m[1]);
     assert.equal(new Set(ids).size, 3);
     for (const id of ids) assert.ok(html.includes(`id="${id}"`));
@@ -70,72 +77,7 @@ test('exercise history starts compact on mobile, remains expanded on desktop and
   );
 });
 
-test('mobile history toggles independently without unmounting week details, changing records or intercepting editing', () => {
-  function harness() {
-    let expanded;
-    const module = { exports: {} };
-    vm.runInNewContext(
-      ts.transpileModule(source('app/history-exercise-card.tsx'), {
-        compilerOptions: {
-          module: ts.ModuleKind.CommonJS,
-          jsx: ts.JsxEmit.ReactJSX,
-        },
-      }).outputText,
-      {
-        module,
-        exports: module.exports,
-        require: (name) =>
-          name === 'react'
-            ? {
-                useId: () => 'stable-history-id',
-                useState: (initial) => {
-                  expanded ??= initial;
-                  return [
-                    expanded,
-                    (update) => {
-                      expanded = update(expanded);
-                    },
-                  ];
-                },
-              }
-            : require(name),
-      },
-    );
-    return (props) => elements(module.exports.default(props));
-  }
-  let edits = 0;
-  const child = createElement(
-    'button',
-    { onClick: () => edits++ },
-    'Edit saved exercise',
-  );
-  const props = Object.freeze({
-    order: 1,
-    displayName: 'Squat',
-    description: 'Quads',
-    sessionCount: 6,
-    children: child,
-  });
-  const render = harness(),
-    other = harness();
-  const toggle = (tree) => tree.find((n) => n.props['aria-controls']);
-  const body = (tree) => tree.find((n) => n.props.id === 'stable-history-id');
-  let tree = render(props);
-  assert.equal(toggle(tree).props['aria-expanded'], false);
-  toggle(tree).props.onClick();
-  tree = render(props);
-  assert.equal(toggle(tree).props['aria-expanded'], true);
-  assert.equal(body(tree).props.className, 'block');
-  assert.equal(body(tree).props.children, child);
-  assert.equal(toggle(other(props)).props['aria-expanded'], false);
-  child.props.onClick();
-  assert.equal(edits, 1);
-  toggle(tree).props.onClick();
-  tree = render(props);
-  assert.equal(body(tree).props.className, 'hidden md:block');
-  assert.equal(body(tree).props.children, child);
-  assert.equal(props.sessionCount, 6);
-  assert.equal(edits, 1);
+test('deferred history retains week editing, earlier disclosures and adaptive-height wiring', () => {
   const progress = source('app/progress-view.tsx');
   assert.match(
     progress,

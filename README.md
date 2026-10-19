@@ -10,7 +10,7 @@ Made with ChatGPT Codex
 
 The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgpt.site](https://liftline-strength-plan.ktanzyl.chatgpt.site). Access is restricted to the site owner.
 
-Current production version: **v3.17.3**
+Current production version: **v3.18.0**
 
 The experimental [bundled iOS foundation](docs/native-ios.md) is included in the repository, but is not ready for personal logging: native devices display a setup guard until the storage/connection choice and real-device tests are complete. The private web app keeps its existing storage and functionality, with faster cached startup. See the [release rollback notes](docs/rollback.md) for the pre-release backup.
 
@@ -66,15 +66,24 @@ The experimental [bundled iOS foundation](docs/native-ios.md) is included in the
 
 Recent highlights:
 
-- **Editable history:** correct saved weights, reps, RIR and notes while preserving workout dates and updating eligible Google Sheet rows.
+- **Safer editable history:** correct saved weights, reps, RIR and notes, with stale-save protection and eligible Google Sheet updates.
 - **Flexible PDF reports:** export Day A/B/C history for all saved weeks or just the current and previous week, with routines, sets and trends.
-- **Cleaner mobile layout:** compact logging, collapsible exercise history, consistent spacing and tidier dialogs.
+- **Lighter mobile history:** compact logging and collapsible history that loads exercise details and extra tools only when needed.
 - **Faster Home Screen startup:** cached workouts and interface, with optional screens and tools loaded only when needed.
 - **Safer long-term records:** recoverable offline saves, preview-first backups and restore, and archived programmes when starting again.
 
 <details>
 
 <summary>Full changelog</summary>
+
+### v3.18 — Lighter Progress and safer saves
+
+- Defer mobile history details until first expansion and unvisited training-day histories until needed, retaining state after opening. Load the Data menu's dropdown internals on intent instead of entering Progress. Preserve desktop details, week editing and PDF exports; these target Progress rendering/memory, not a promised iPhone cold-launch timing gain. Keep existing blur styling pending physical-device evidence.
+- Normal saves check the version first loaded by the draft, including after refresh or reopening. Concurrent changes and older queued updates are kept for explicit review; exact retries of confirmed saves remain safe. No record migration or workout-value changes.
+- Coalesce resume, reconnect and relevant cross-tab refreshes, deferring them while editing or saving. Preserve draft inputs and timer state; an actual programme switch still selects that programme's unfinished session. Show a recoverable refresh warning when cached data cannot be verified; avoid initial-load duplicate requests and cache-age refresh loops.
+- Keep cache cursors paired with their authoritative snapshot and programme. Local edits invalidate the cursor so another tab's newer sync marker cannot strand stale history or mislabel old programme records.
+- Use Tokyo workout-calendar dates consistently in the app, PDFs, programme archives and Sheet payloads. Preserve stored instants and date-only session keys.
+- Fix successful-save draft acknowledgement and restoration of valid cached Holiday session dates. Extend synthetic API, draft, lifecycle and PDF regressions. Physical iPhone/Home Screen checks remain a manual release check.
 
 ### v3.17 — Editable history and layout polish
 

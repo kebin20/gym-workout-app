@@ -1,6 +1,7 @@
 // This entire module (including the PDF/font engine) is loaded on export only.
 import { PDFDocument, rgb, type PDFPage } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
+import { formatWorkoutDate } from './workout-date';
 import {
   reportMetrics,
   reportSets,
@@ -18,15 +19,7 @@ const fmt = (value: number) =>
   new Intl.NumberFormat('en-GB', { maximumFractionDigits: 1 }).format(value);
 const setValue = (value: number) =>
   new Intl.NumberFormat('en-GB', { maximumFractionDigits: 20 }).format(value);
-const dateLabel = (value: string | null) =>
-  value && !Number.isNaN(Date.parse(value))
-    ? new Intl.DateTimeFormat('en-GB', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-        timeZone: 'UTC',
-      }).format(new Date(value))
-    : 'Date unavailable';
+const dateLabel = formatWorkoutDate;
 export function reportFontPath(report: DayReport) {
   return /[\u3000-\u9fff\uac00-\ud7af\uff00-\uffef]/u.test(
     JSON.stringify(report.records),
