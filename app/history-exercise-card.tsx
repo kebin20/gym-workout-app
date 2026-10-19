@@ -1,24 +1,65 @@
 'use client';
 
-import { useId, useState, type ReactNode } from 'react';
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react';
 import { ChevronDown } from 'lucide-react';
+
+const desktopQuery = '(min-width: 768px)';
+function desktopSnapshot() {
+  return (
+    typeof window !== 'undefined' && window.matchMedia(desktopQuery).matches
+  );
+}
+function subscribeDesktop(onChange: () => void) {
+  const query = window.matchMedia(desktopQuery);
+  query.addEventListener('change', onChange);
+  return () => query.removeEventListener('change', onChange);
+}
+const serverDesktopSnapshot = () => false;
+
+// One subscription belongs to the Progress screen, not to every history card.
+// The mobile server snapshot also makes the first hydration render identical.
+export function useHistoryDesktopLayout() {
+  return useSyncExternalStore(
+    subscribeDesktop,
+    desktopSnapshot,
+    serverDesktopSnapshot,
+  );
+}
 
 export default function HistoryExerciseCard({
   order,
   displayName,
   description,
   sessionCount,
+  desktop,
   children,
 }: {
   order: number;
   displayName: string;
   description: string;
   sessionCount: number;
-  children: ReactNode;
+  desktop: boolean;
+  children: () => ReactNode;
 }) {
-  // Mobile-only presentation state. Keep week disclosures mounted so their
-  // state survives collapsing a card or switching between viewport sizes.
   const [expanded, setExpanded] = useState(false);
+  const [hasMounted, setHasMounted] = useState(desktop);
+  useEffect(() => {
+    if (desktop) setHasMounted(true);
+  }, [desktop]);
+  const shouldMount = desktop || hasMounted;
+  // Never-opened mobile details do no rendering work. Once visited, retain the
+  // same subtree across collapse/resize so nested week state is not lost.
+  const content = useMemo(
+    () => (shouldMount ? children() : null),
+    [shouldMount, children],
+  );
   const contentId = useId();
   const number = (
     <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-secondary font-sans text-xs font-bold">
@@ -34,7 +75,10 @@ export default function HistoryExerciseCard({
           aria-label={`${displayName} history`}
           aria-expanded={expanded}
           aria-controls={contentId}
-          onClick={() => setExpanded((current) => !current)}
+          onClick={() => {
+            setHasMounted(true);
+            setExpanded((current) => !current);
+          }}
           className="flex min-h-11 w-full items-center gap-3 rounded-lg text-left focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
         >
           {number}
@@ -69,7 +113,7 @@ export default function HistoryExerciseCard({
         </div>
       </div>
       <div id={contentId} className={expanded ? 'block' : 'hidden md:block'}>
-        {children}
+        {content}
       </div>
     </article>
   );

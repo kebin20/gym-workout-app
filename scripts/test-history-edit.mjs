@@ -601,7 +601,9 @@ test('Progress renders a labeled edit action inside the correct week without nes
   const f = routeFixture();
   try {
     const entry = seed(f);
-    const Progress = f.load('app/progress-view.tsx').default;
+    const { default: Progress, HistoryWeekDisclosure } = f.load(
+      'app/progress-view.tsx',
+    );
     const routine = f.load('lib/routine.ts').routineForWeek(5);
     const props = {
       activeWeek: 6,
@@ -632,7 +634,18 @@ test('Progress renders a labeled edit action inside the correct week without nes
       onSaveHistory: async () => {},
       sheetAvailable: true,
     };
-    const html = renderToString(createElement(Progress, props));
+    const initial = renderToString(createElement(Progress, props));
+    assert.ok(initial.includes('Saved machine substitution history'));
+    assert.ok(initial.includes('Download Day A PDF report'));
+    assert.ok(!initial.includes('Edit saved exercise'));
+    const html = renderToString(
+      createElement(HistoryWeekDisclosure, {
+        entry,
+        displayName: entry.exercise,
+        defaultExpanded: true,
+        onEdit() {},
+      }),
+    );
     assert.match(
       html,
       /aria-label="Edit Phase 1 Week 5 Day A Saved machine substitution"/,
@@ -644,12 +657,11 @@ test('Progress renders a labeled edit action inside the correct week without nes
     );
     const offline = { ...entry, offlinePending: true };
     const blocked = renderToString(
-      createElement(Progress, {
-        ...props,
-        entryIndex: {
-          ...props.entryIndex,
-          completedByExercise: new Map([['1|A|1', [offline]]]),
-        },
+      createElement(HistoryWeekDisclosure, {
+        entry: offline,
+        displayName: offline.exercise,
+        defaultExpanded: true,
+        onEdit() {},
       }),
     );
     assert.match(
@@ -665,6 +677,9 @@ test('Progress renders a labeled edit action inside the correct week without nes
 });
 
 test('Sheet transport preserves the completion calendar day and refuses undated historical records without any external request', async () => {
+  const f = routeFixture();
+  const workoutDates = f.load('lib/workout-date.ts');
+  f.close();
   const requests = [];
   const module = { exports: {} };
   vm.runInNewContext(
@@ -682,13 +697,16 @@ test('Sheet transport preserves the completion calendar day and refuses undated 
       Date,
       Number,
       AbortSignal,
-      require: () => ({
-        env: {
-          GOOGLE_SHEETS_WEBHOOK_URL:
-            'https://script.google.com/macros/s/synthetic-test/exec',
-          GOOGLE_SHEETS_SYNC_TOKEN: 'synthetic-test-token',
-        },
-      }),
+      require: (name) =>
+        name === '@/lib/workout-date'
+          ? workoutDates
+          : {
+              env: {
+                GOOGLE_SHEETS_WEBHOOK_URL:
+                  'https://script.google.com/macros/s/synthetic-test/exec',
+                GOOGLE_SHEETS_SYNC_TOKEN: 'synthetic-test-token',
+              },
+            },
       fetch: async (_, request) => {
         requests.push(JSON.parse(request.body));
         return {

@@ -52,6 +52,7 @@ import { Input, Textarea } from '@/components/liftline-form-controls';
 import { latestDraftKey } from '@/lib/exercise-drafts';
 import { useExerciseDraft } from './use-exercise-draft';
 import { validateWorkoutNumbers } from '@/lib/workout-validation';
+import { formatWorkoutDate, workoutCalendarDate } from '@/lib/workout-date';
 import {
   acknowledgeOutbox,
   blockOutbox,
@@ -291,18 +292,7 @@ function blankDraft(exercise: HolidayExercise): HolidayDraft {
 }
 
 function tokyoDate() {
-  const parts = Object.fromEntries(
-    new Intl.DateTimeFormat('en-US', {
-      timeZone: 'Asia/Tokyo',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    })
-      .formatToParts(new Date())
-      .filter((part) => ['year', 'month', 'day'].includes(part.type))
-      .map((part) => [part.type, part.value]),
-  );
-  return `${parts.year}-${parts.month}-${parts.day}`;
+  return workoutCalendarDate(new Date())!;
 }
 
 function newSessionId() {
@@ -317,12 +307,7 @@ function numberOrNull(value: string) {
 }
 
 function displayDate(value: string) {
-  const date = new Date(`${value}T12:00:00Z`);
-  return new Intl.DateTimeFormat('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  }).format(date);
+  return formatWorkoutDate(value);
 }
 
 function draftFromEntry(entry: HolidayWorkoutEntry, exercise: HolidayExercise) {
@@ -530,7 +515,8 @@ export default function HolidayWorkout({
       if (
         saved &&
         /^[a-zA-Z0-9_-]{8,80}$/.test(saved.sessionId) &&
-        /^\\d{4}-\\d{2}-\\d{2}$/.test(saved.sessionDate) &&
+        /^\d{4}-\d{2}-\d{2}$/.test(saved.sessionDate) &&
+        workoutCalendarDate(saved.sessionDate) === saved.sessionDate &&
         ['A', 'B'].includes(saved.sessionType)
       )
         cachedSession = saved;

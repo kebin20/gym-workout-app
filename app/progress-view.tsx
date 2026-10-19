@@ -1,5 +1,5 @@
 'use client';
-import { lazy, Suspense, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import {
   CheckCircle2,
   ChevronDown,
@@ -29,6 +29,7 @@ import {
   CarouselItem,
   CarouselNext,
   CarouselPrevious,
+  type CarouselApi,
 } from '@/components/ui/carousel';
 import {
   days,
@@ -37,11 +38,14 @@ import {
   type RoutineExercise,
 } from '@/lib/routine';
 import { workoutMetrics } from '@/lib/workout-metrics';
+import { formatWorkoutDate } from '@/lib/workout-date';
 import { exerciseNameMatches } from '@/lib/exercise-identity';
 import { dayPresentation } from '@/lib/day-presentation';
 import type { WorkoutEntry } from '@/lib/workout-types';
 import DayReportButton from './day-report-button';
-import HistoryExerciseCard from './history-exercise-card';
+import HistoryExerciseCard, {
+  useHistoryDesktopLayout,
+} from './history-exercise-card';
 import type { SaveHistoryEdit } from './history-edit-dialog';
 const HistoryEditDialog = lazy(() => import('./history-edit-dialog'));
 import ProgressDataMenu from './progress-data-menu';
@@ -58,17 +62,6 @@ function entryVolume(entry: WorkoutEntry) {
   }, 0);
 }
 
-function formatWorkoutDate(value?: string | null) {
-  if (!value) return 'Date unavailable';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'Date unavailable';
-  return new Intl.DateTimeFormat('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  }).format(date);
-}
-
 function loggedSets(entry: WorkoutEntry) {
   return setNumbers.flatMap((set) => {
     const weight = entry[`set${set}Weight`];
@@ -78,7 +71,7 @@ function loggedSets(entry: WorkoutEntry) {
   });
 }
 
-function HistoryWeekDisclosure({
+export function HistoryWeekDisclosure({
   entry,
   displayName,
   defaultExpanded,
@@ -225,6 +218,37 @@ function EarlierHistoryDisclosure({
   );
 }
 
+export function useHistoryDayMounts() {
+  const [api, setApi] = useState<CarouselApi>();
+  const [visited, setVisited] = useState<ReadonlySet<string>>(
+    () => new Set([days[0]]),
+  );
+  useEffect(() => {
+    if (!api) return;
+    const visit = () => {
+      // Prepare the incoming day while it is dragged into view, rather than
+      // waiting for the swipe to settle. Keep every visited subtree mounted.
+      const visibleDays = [api.selectedScrollSnap(), ...api.slidesInView()]
+        .map((index) => days[index])
+        .filter((day) => day != null);
+      setVisited((current) => {
+        if (visibleDays.every((day) => current.has(day))) return current;
+        return new Set([...current, ...visibleDays]);
+      });
+    };
+    visit();
+    api.on('select', visit);
+    api.on('slidesInView', visit);
+    api.on('reInit', visit);
+    return () => {
+      api.off('select', visit);
+      api.off('slidesInView', visit);
+      api.off('reInit', visit);
+    };
+  }, [api]);
+  return [visited, setApi] as const;
+}
+
 type Props = {
   programmeId?: string;
   onSaveHistory?: SaveHistoryEdit;
@@ -291,6 +315,8 @@ export default function ProgressView({
   selectWeek,
   setView,
 }: Props) {
+  const desktopHistory = useHistoryDesktopLayout();
+  const [visitedHistoryDays, setHistoryApi] = useHistoryDayMounts();
   const [startupOpen, setStartupOpen] = useState(false);
   const [editing, setEditing] = useState<WorkoutEntry | null>(null);
   const editHistory = onSaveHistory
@@ -591,6 +617,7 @@ export default function ProgressView({
         <CardContent className="pt-5">
           <Carousel
             opts={{ align: 'start', loop: false, duration: 18 }}
+            setApi={setHistoryApi}
             adaptiveHeight
             wheelNavigation
             aria-label="Workout history by training day"
@@ -684,51 +711,58 @@ export default function ProgressView({
                         />
                       </div>
 
-                      <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-                        {dayExercises.map((item) => {
-                          const exerciseEntries =
-                            entryIndex.completedByExercise.get(
-                              `${activePhase}|${day}|${item.order}`,
-                            ) ?? [];
-                          const displayName =
-                            exerciseEntries[0]?.exercise ?? item.name;
+                      {visitedHistoryDays.has(day) && (
+                        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+                          {dayExercises.map((item) => {
+                            const exerciseEntries =
+                              entryIndex.completedByExercise.get(
+                                `${activePhase}|${day}|${item.order}`,
+                              ) ?? [];
+                            const displayName =
+                              exerciseEntries[0]?.exercise ?? item.name;
 
-                          return (
-                            <HistoryExerciseCard
-                              key={`${day}-${item.order}`}
-                              order={item.order}
-                              displayName={displayName}
-                              description={`${targetLabel(item)} · ${item.muscles}`}
-                              sessionCount={exerciseEntries.length}
-                            >
-                              {exerciseEntries.length > 0 ? (
-                                <div className="mt-3 max-h-96 space-y-2 overflow-y-auto pr-1">
-                                  {exerciseEntries.slice(0, 3).map((entry) => (
-                                    <HistoryWeekDisclosure
-                                      key={`${entry.id ?? entry.week}-${entry.exerciseOrder}`}
-                                      entry={entry}
-                                      displayName={displayName}
-                                      defaultExpanded
-                                      onEdit={editHistory}
-                                    />
-                                  ))}
-                                  {exerciseEntries.length > 3 && (
-                                    <EarlierHistoryDisclosure
-                                      entries={exerciseEntries.slice(3)}
-                                      displayName={displayName}
-                                      onEdit={editHistory}
-                                    />
-                                  )}
-                                </div>
-                              ) : (
-                                <p className="mt-3 flex flex-1 items-center justify-center rounded-lg bg-muted/45 px-3 py-5 text-center font-sans text-xs text-muted-foreground">
-                                  No logged sessions yet.
-                                </p>
-                              )}
-                            </HistoryExerciseCard>
-                          );
-                        })}
-                      </div>
+                            return (
+                              <HistoryExerciseCard
+                                key={`${day}-${item.order}`}
+                                order={item.order}
+                                displayName={displayName}
+                                description={`${targetLabel(item)} · ${item.muscles}`}
+                                sessionCount={exerciseEntries.length}
+                                desktop={desktopHistory}
+                              >
+                                {() =>
+                                  exerciseEntries.length > 0 ? (
+                                    <div className="mt-3 max-h-96 space-y-2 overflow-y-auto pr-1">
+                                      {exerciseEntries
+                                        .slice(0, 3)
+                                        .map((entry) => (
+                                          <HistoryWeekDisclosure
+                                            key={`${entry.id ?? entry.week}-${entry.exerciseOrder}`}
+                                            entry={entry}
+                                            displayName={displayName}
+                                            defaultExpanded
+                                            onEdit={editHistory}
+                                          />
+                                        ))}
+                                      {exerciseEntries.length > 3 && (
+                                        <EarlierHistoryDisclosure
+                                          entries={exerciseEntries.slice(3)}
+                                          displayName={displayName}
+                                          onEdit={editHistory}
+                                        />
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <p className="mt-3 flex flex-1 items-center justify-center rounded-lg bg-muted/45 px-3 py-5 text-center font-sans text-xs text-muted-foreground">
+                                      No logged sessions yet.
+                                    </p>
+                                  )
+                                }
+                              </HistoryExerciseCard>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   </CarouselItem>
                 );

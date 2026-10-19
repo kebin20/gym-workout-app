@@ -102,6 +102,12 @@ import { isBundledApp } from '@/lib/client-runtime';
 import { retainInstalledStorage } from '@/lib/startup-storage';
 import { observeWorkoutLoggerReady } from '@/lib/startup-readiness';
 import { markStartup } from '@/lib/startup-timing';
+import { formatWorkoutDate } from '@/lib/workout-date';
+import { createWorkoutRefreshCoordinator } from '@/lib/workout-refresh';
+import {
+  workoutDraftBase,
+  workoutSaveTimestamp,
+} from '@/lib/workout-draft-base';
 import { sessionProgress } from '@/lib/session-progress';
 import { dayPresentation } from '@/lib/day-presentation';
 import ExerciseDraftBoundary, {
@@ -139,6 +145,7 @@ markStartup('app-module');
 type TrainingTool = 'schedule' | 'readiness' | 'calculator' | 'metrics';
 
 type Draft = {
+  expectedUpdatedAt?: string | null;
   sets: { weight: string; reps: string; done: boolean; rir: string }[];
   rir: string;
   notes: string;
@@ -153,6 +160,7 @@ type SheetSyncResult = {
 };
 
 type WorkoutPayload = SetRirValues & {
+  expectedUpdatedAt?: string | null;
   programmeId?: string;
   week: number;
   day: TrainingDay;
@@ -268,26 +276,20 @@ function readCachedWorkoutEntries(): {
 
 function cacheWorkoutEntries(
   entries: WorkoutEntry[],
-  syncedAt?: string,
-  programmeId?: string,
+  syncedAt: string | undefined,
+  programmeId: string,
 ) {
   try {
-    const current = window.localStorage.getItem(workoutCacheKey);
-    const currentSyncedAt = current
-      ? (JSON.parse(current) as { syncedAt?: string }).syncedAt
-      : undefined;
+    // A cursor belongs to the complete snapshot that came with it, not the
+    // shared storage slot. Another tab may have advanced that slot while this
+    // tab was editing. Local writes invalidate their cursor until a full GET.
     window.localStorage.setItem(
       workoutCacheKey,
       JSON.stringify({
         entries,
-        programmeId:
-          programmeId ??
-          (current
-            ? (JSON.parse(current) as { programmeId?: string }).programmeId
-            : undefined) ??
-          'initial',
+        programmeId,
         cachedAt: Date.now(),
-        syncedAt: syncedAt ?? currentSyncedAt ?? null,
+        syncedAt: syncedAt ?? null,
       }),
     );
   } catch {
@@ -719,17 +721,6 @@ function progressionAdvice(
   return exercise.name === 'Plank' ? 'Keep building' : 'Keep this load';
 }
 
-function formatWorkoutDate(value?: string | null) {
-  if (!value) return 'Date unavailable';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'Date unavailable';
-  return new Intl.DateTimeFormat('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  }).format(date);
-}
-
 function loggedSets(entry: WorkoutEntry) {
   return setNumbers.flatMap((set) => {
     const weight = entry[`set${set}Weight`];
@@ -977,6 +968,11 @@ export function WorkoutApp() {
   const [sheetImportError, setSheetImportError] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [refreshIssue, setRefreshIssue] = useState('');
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<number | null>(null);
+  const [saveConflicts, setSaveConflicts] = useState<
+    Record<string, WorkoutEntry>
+  >({});
   const [exerciseDraft, setDraftStatus] = useState<DraftStatus>({
     dirty: false,
     persisted: false,
@@ -1020,6 +1016,15 @@ export function WorkoutApp() {
   const startupWeekApplied = useRef(false);
   const refreshSequence = useRef(0);
   const mutationSequence = useRef(0);
+  const initialRefreshPending = useRef(true);
+  const latestLifecycle = useRef({
+    blocked: false,
+    draftDirty: false,
+    refresh: async () => {},
+  });
+  const lifecycleRefresh = useRef<ReturnType<
+    typeof createWorkoutRefreshCoordinator
+  > | null>(null);
   const currentSelection = useRef('');
   currentSelection.current = `${programmeId}|${activeWeek}|${activeDay}|${activeIndex}`;
 
@@ -1139,11 +1144,16 @@ export function WorkoutApp() {
     : 60;
 
   const refreshWorkoutData = useCallback(
-    async (cachedEntries?: WorkoutEntry[], syncedAt?: string | null) => {
+    async (
+      cachedEntries?: WorkoutEntry[],
+      syncedAt?: string | null,
+      cachedProgrammeId?: string,
+    ) => {
       const requestSequence = ++refreshSequence.current;
       const mutation = mutationSequence.current;
+      const matchingCache = cachedProgrammeId === programmeIdRef.current;
       const query =
-        cachedEntries && syncedAt
+        cachedEntries && syncedAt && matchingCache
           ? `?cursor=${encodeURIComponent(syncedAt)}&programmeId=${encodeURIComponent(programmeIdRef.current)}`
           : '';
       markStartup('refresh-start');
@@ -1168,6 +1178,13 @@ export function WorkoutApp() {
         mutation !== mutationSequence.current
       )
         return readCachedWorkoutEntries()?.entries ?? [];
+      if (latestLifecycle.current.draftDirty) {
+        // A clean-screen read may finish after typing starts. Defer applying
+        // its plan/programme too, and retain one refresh intent until the
+        // draft is saved; startup loading alone must not block the first GET.
+        lifecycleRefresh.current?.trigger('resume');
+        return readCachedWorkoutEntries()?.entries ?? [];
+      }
       const incomingEntries = normaliseWorkoutEntries(data.entries ?? []);
       const nextProgrammeId = data.programmeId ?? 'initial';
       const programmeChanged = nextProgrammeId !== programmeIdRef.current;
@@ -1179,7 +1196,11 @@ export function WorkoutApp() {
         setPersonalRecordOpen(false);
       }
       const serverEntries =
-        data.partial && cachedEntries && !programmeChanged
+        data.partial &&
+        cachedEntries &&
+        matchingCache &&
+        cachedProgrammeId === nextProgrammeId &&
+        !programmeChanged
           ? mergeWorkoutEntries(cachedEntries, incomingEntries)
           : incomingEntries;
       const freshEntries = programmeOverlay(
@@ -1224,6 +1245,8 @@ export function WorkoutApp() {
       }
       cacheWorkoutEntries(freshEntries, data.cursor, nextProgrammeId);
       cacheSessionExercises(freshSessionExercises);
+      setRefreshIssue('');
+      setLastRefreshedAt(Date.now());
       return freshEntries;
     },
     [refreshPendingWorkouts],
@@ -1252,11 +1275,22 @@ export function WorkoutApp() {
             } else if (!retryableStatus(response.status)) {
               const data = (await response.json().catch(() => ({}))) as {
                 error?: string;
+                entry?: WorkoutEntry;
               };
               const message =
                 data.error ??
                 'This queued workout needs review before it can sync.';
               blockOutbox('workout', item, message, window.localStorage);
+              if (
+                response.status === 409 &&
+                data.entry &&
+                (item.payload.programmeId ?? 'initial') ===
+                  programmeIdRef.current
+              )
+                setSaveConflicts((current) => ({
+                  ...current,
+                  [item.key]: normaliseWorkoutEntries([data.entry!])[0],
+                }));
               setError(message);
             }
           } catch {
@@ -1348,15 +1382,25 @@ export function WorkoutApp() {
       setSessionExercises(cachedSessionExercises);
     setIsOnline(navigator.onLine);
     setQueueIssue(outboxStorageIssue(window.localStorage));
-    refreshWorkoutData(cachedEntries ?? undefined, cachedSnapshot?.syncedAt)
+    refreshWorkoutData(
+      cachedEntries ?? undefined,
+      cachedSnapshot?.syncedAt,
+      cachedSnapshot?.programmeId,
+    )
       .then(() => {
         if (!cancelled) setError('');
       })
       .catch((loadError: Error) => {
         if (!cancelled && !cachedEntries) setError(loadError.message);
+        if (!cancelled && cachedEntries)
+          setRefreshIssue(
+            'Couldn’t refresh saved workouts. Showing device data; your inputs are kept.',
+          );
       })
       .finally(() => {
+        initialRefreshPending.current = false;
         if (!cancelled) setLoading(false);
+        if (!cancelled) lifecycleRefresh.current?.resumePending();
       });
     if (navigator.onLine && pending.length) void flushPendingWorkouts();
 
@@ -1365,12 +1409,19 @@ export function WorkoutApp() {
       void flushPendingWorkouts();
     };
     const handleOffline = () => setIsOnline(false);
-    const handleStorage = () => {
+    const handleStorage = (event: StorageEvent) => {
+      if (
+        event.key !== null &&
+        !event.key.startsWith('liftline.outbox.v2.') &&
+        event.key !== 'liftline.pending-workouts.v1'
+      )
+        return;
       const pending = refreshPendingWorkouts();
       setQueueIssue(outboxStorageIssue(window.localStorage));
       setEntries((current) =>
         programmeOverlay(current, pending, programmeIdRef.current),
       );
+      lifecycleRefresh.current?.trigger('storage');
     };
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
@@ -1386,6 +1437,69 @@ export function WorkoutApp() {
     initialWeek,
     refreshWorkoutData,
     refreshPendingWorkouts,
+  ]);
+
+  latestLifecycle.current = {
+    draftDirty: exerciseDraft.dirty,
+    blocked:
+      saving ||
+      programSaving ||
+      undoing ||
+      backupBusy ||
+      dataActionRunning.current ||
+      exerciseDraft.dirty ||
+      loading,
+    refresh: async () => {
+      // Read the snapshot at execution time, not when this listener mounted.
+      const cached = readCachedWorkoutEntries();
+      await refreshWorkoutData(
+        cached?.entries,
+        cached?.syncedAt,
+        cached?.programmeId,
+      );
+    },
+  };
+  useEffect(() => {
+    const coordinator = createWorkoutRefreshCoordinator({
+      windowTarget: window,
+      documentTarget: document,
+      isOnline: () => navigator.onLine,
+      isVisible: () => !document.hidden,
+      isBlocked: () =>
+        initialRefreshPending.current || latestLifecycle.current.blocked,
+      refresh: () => latestLifecycle.current.refresh(),
+      storageKeys: [workoutCacheKey, sessionExerciseCacheKey, scheduleCacheKey],
+      onError: () =>
+        setRefreshIssue(
+          'Couldn’t refresh saved workouts. Showing device data; your inputs are kept.',
+        ),
+    });
+    lifecycleRefresh.current = coordinator;
+    return () => {
+      lifecycleRefresh.current = null;
+      coordinator.dispose();
+    };
+  }, []);
+  useEffect(() => {
+    // Re-attempt a coalesced event after a save or protected data operation.
+    if (
+      !loading &&
+      !saving &&
+      !programSaving &&
+      !undoing &&
+      !backupBusy &&
+      !dataActionLoading &&
+      !exerciseDraft.dirty
+    )
+      lifecycleRefresh.current?.resumePending();
+  }, [
+    loading,
+    saving,
+    programSaving,
+    undoing,
+    backupBusy,
+    dataActionLoading,
+    exerciseDraft.dirty,
   ]);
 
   useEffect(() => {
@@ -1719,8 +1833,11 @@ export function WorkoutApp() {
     const savedSelection = currentSelection.current;
     setError('');
     setNotice('');
-    const now = new Date().toISOString();
+    const now = workoutSaveTimestamp(draft.expectedUpdatedAt);
     const payload: WorkoutPayload = {
+      ...(Object.hasOwn(draft, 'expectedUpdatedAt')
+        ? { expectedUpdatedAt: draft.expectedUpdatedAt }
+        : {}),
       programmeId,
       week: activeWeek,
       day: activeDay,
@@ -1754,7 +1871,7 @@ export function WorkoutApp() {
     const records = personalRecordsFor(localEntry, phaseEntries);
     const nextEntries = replaceWorkoutEntry(entries, localEntry);
     setEntries(nextEntries);
-    cacheWorkoutEntries(nextEntries);
+    cacheWorkoutEntries(nextEntries, undefined, programmeId);
     const sessionComplete = dayExercises
       .filter((item) => !item.skipped)
       .every((item) =>
@@ -1784,7 +1901,7 @@ export function WorkoutApp() {
       ) {
         if ((payload.programmeId ?? 'initial') === programmeIdRef.current) {
           setEntries(entries);
-          cacheWorkoutEntries(entries);
+          cacheWorkoutEntries(entries, undefined, programmeId);
         }
         setSessionCelebrationPending(false);
         setPersonalRecordOpen(false);
@@ -1838,8 +1955,27 @@ export function WorkoutApp() {
         return;
       }
       if (!response.ok && !retryableStatus(response.status)) {
-        setEntries(entries);
-        cacheWorkoutEntries(entries);
+        // Roll back only this workout; a different queued save may have
+        // completed while this request was in flight.
+        setEntries((current) => {
+          const restored = data.entry
+            ? normaliseWorkoutEntries([data.entry])[0]
+            : existingEntry;
+          const next = restored
+            ? replaceWorkoutEntry(current, restored)
+            : current.filter(
+                (entry) => workoutKey(entry) !== workoutKey(payload),
+              );
+          cacheWorkoutEntries(next, undefined, programmeId);
+          return next;
+        });
+        if (response.status === 409 && data.entry)
+          setSaveConflicts((current) => ({
+            ...current,
+            [programmeOutboxKey(payload, programmeId)]: normaliseWorkoutEntries(
+              [data.entry!],
+            )[0],
+          }));
         setSessionCelebrationPending(false);
         setPersonalRecordOpen(false);
         setError(data.error ?? 'Review your inputs before saving again.');
@@ -1853,13 +1989,18 @@ export function WorkoutApp() {
         offlinePending: false,
       };
       setLastSave({ saved, before: existingEntry });
+      setSaveConflicts((current) => {
+        const next = { ...current };
+        delete next[programmeOutboxKey(payload, programmeId)];
+        return next;
+      });
       previousPending.forEach((item) =>
         acknowledgeOutbox('workout', item, window.localStorage),
       );
       refreshPendingWorkouts();
       setEntries((current) => {
         const refreshed = replaceWorkoutEntry(current, saved);
-        cacheWorkoutEntries(refreshed);
+        cacheWorkoutEntries(refreshed, undefined, programmeId);
         return refreshed;
       });
       setNotice(
@@ -1889,6 +2030,65 @@ export function WorkoutApp() {
       advance();
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function reviewPendingWorkout(item: PendingWorkout) {
+    if ((item.payload.programmeId ?? 'initial') !== programmeIdRef.current) {
+      setError(
+        'This queued workout belongs to an archived programme. Export device recovery to keep its inputs; it cannot overwrite the current programme.',
+      );
+      return;
+    }
+    setActiveWeek(item.record.week);
+    setActiveDay(item.record.day);
+    setActiveIndex(
+      Math.max(
+        0,
+        planForSession(
+          sessionExercises,
+          item.record.week,
+          item.record.day,
+        ).findIndex((exercise) => exercise.order === item.record.exerciseOrder),
+      ),
+    );
+    setView('today');
+    try {
+      const response = await fetch('/api/workouts', {
+        cache: 'no-store',
+        signal: AbortSignal.timeout(15_000),
+      });
+      const data = (await response.json()) as {
+        entries?: WorkoutEntry[];
+        programmeId?: string;
+        error?: string;
+      };
+      if (!response.ok)
+        throw Error(data.error ?? 'Unable to load the saved version.');
+      if ((data.programmeId ?? 'initial') !== programmeIdRef.current)
+        throw Error(
+          'The programme changed. Your local inputs are kept; refresh and review before continuing.',
+        );
+      const saved = data.entries?.find(
+        (entry) =>
+          entry.week === item.record.week &&
+          entry.day === item.record.day &&
+          entry.exerciseOrder === item.record.exerciseOrder,
+      );
+      if (!saved)
+        throw Error(
+          'The saved record was removed. Your queued input is kept; export device recovery before making a new record.',
+        );
+      setSaveConflicts((current) => ({
+        ...current,
+        [item.key]: normaliseWorkoutEntries([saved])[0],
+      }));
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : 'Reconnect to review the saved version. Your local inputs are kept.',
+      );
     }
   }
 
@@ -2006,7 +2206,7 @@ export function WorkoutApp() {
       };
       setEntries((current) => {
         const next = replaceWorkoutEntry(current, restored);
-        cacheWorkoutEntries(next);
+        cacheWorkoutEntries(next, undefined, programmeId);
         return next;
       });
       setPersonalRecordOpen(false);
@@ -2284,7 +2484,7 @@ export function WorkoutApp() {
                 Liftline
               </span>
               <span
-                className={`flex items-center gap-1.5 font-sans text-xs ${isOnline ? 'text-success' : 'text-destructive'}`}
+                className={`flex items-center gap-1.5 font-sans text-xs ${refreshIssue ? 'text-amber-700' : isOnline ? 'text-success' : 'text-destructive'}`}
                 aria-label={`${isOnline ? 'Online' : 'Offline'}. ${
                   pendingWorkoutCount > 0
                     ? `${pendingWorkoutCount} changes pending`
@@ -2292,11 +2492,13 @@ export function WorkoutApp() {
                       ? exerciseDraft.persisted
                         ? 'Draft saved on this device'
                         : 'Unsaved draft'
-                      : 'Changes saved'
+                      : refreshIssue
+                        ? 'Showing device data. Refresh unavailable'
+                        : 'Changes saved'
                 }`}
               >
                 <span
-                  className={`size-1.5 rounded-full ${isOnline ? 'bg-success' : 'bg-destructive'}`}
+                  className={`size-1.5 rounded-full ${refreshIssue ? 'bg-amber-600' : isOnline ? 'bg-success' : 'bg-destructive'}`}
                   aria-hidden="true"
                 />
                 {pendingWorkoutCount > 0
@@ -2305,7 +2507,9 @@ export function WorkoutApp() {
                     ? exerciseDraft.persisted
                       ? 'Draft on device'
                       : 'Unsaved draft'
-                    : 'Changes saved'}
+                    : refreshIssue
+                      ? 'Refresh unavailable'
+                      : 'Changes saved'}
               </span>
             </span>
           </button>
@@ -2436,6 +2640,47 @@ export function WorkoutApp() {
       </header>
 
       <div className="beta-app-content mx-auto max-w-6xl py-5 md:py-8">
+        {refreshIssue && (
+          <div
+            role="status"
+            className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950"
+          >
+            <p>{refreshIssue}</p>
+            {lastRefreshedAt && (
+              <p className="mt-1 text-xs">
+                Last refreshed: {formatWorkoutDate(new Date(lastRefreshedAt))}
+              </p>
+            )}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="mt-2"
+              disabled={
+                loading ||
+                saving ||
+                programSaving ||
+                undoing ||
+                backupBusy ||
+                dataActionLoading ||
+                exerciseDraft.dirty
+              }
+              title={
+                exerciseDraft.dirty
+                  ? 'Finish the current draft before refreshing.'
+                  : undefined
+              }
+              onClick={() => lifecycleRefresh.current?.trigger('online')}
+            >
+              Try refresh
+            </Button>
+            {exerciseDraft.dirty && (
+              <p className="mt-1 text-xs">
+                Refresh will resume after your current draft is saved.
+              </p>
+            )}
+          </div>
+        )}
         {queueIssue && (
           <Alert variant="destructive" className="mb-3">
             <AlertTitle>Offline data needs attention</AlertTitle>
@@ -2451,24 +2696,8 @@ export function WorkoutApp() {
             <Button
               variant="outline"
               className="mt-2"
-              onClick={() => {
-                setActiveWeek(item.record.week);
-                setActiveDay(item.record.day);
-                setActiveIndex(
-                  Math.max(
-                    0,
-                    planForSession(
-                      sessionExercises,
-                      item.record.week,
-                      item.record.day,
-                    ).findIndex(
-                      (exercise) =>
-                        exercise.order === item.record.exerciseOrder,
-                    ),
-                  ),
-                );
-                setView('today');
-              }}
+              disabled={loading || saving}
+              onClick={() => void reviewPendingWorkout(item)}
             >
               Review pending workout
             </Button>
@@ -2794,6 +3023,21 @@ export function WorkoutApp() {
                 draftKey={draftKey}
                 baseline={{
                   ...draftFromEntry(existingEntry),
+                  ...workoutDraftBase(
+                    existingEntry,
+                    pendingWorkouts.find(
+                      (item) =>
+                        item.key ===
+                        programmeOutboxKey(
+                          {
+                            week: activeWeek,
+                            day: activeDay,
+                            exerciseOrder: exercise.order,
+                          },
+                          programmeId,
+                        ),
+                    )?.payload,
+                  ),
                   setCount: visibleSetsForEntry(
                     existingEntry,
                     exercise.targetSets,
@@ -2807,13 +3051,56 @@ export function WorkoutApp() {
                   const { showNotes, setShowNotes } = exerciseDraft;
                   const draft = exerciseDraft.value;
                   const visibleSetCount = draft.setCount;
+                  const conflictKey = programmeOutboxKey(
+                    {
+                      week: activeWeek,
+                      day: activeDay,
+                      exerciseOrder: exercise.order,
+                    },
+                    programmeId,
+                  );
+                  const conflict = saveConflicts[conflictKey];
+                  const reviewConflict = (useSaved: boolean) => {
+                    if (!conflict || !conflict.updatedAt) return;
+                    if (
+                      !window.confirm(
+                        useSaved
+                          ? 'Replace the inputs shown here with the saved version? Any queued copy is retained until you confirm a successful save.'
+                          : 'Have you compared the saved version below with your inputs? Your next save will intentionally update that version.',
+                      )
+                    )
+                      return;
+                    exerciseDraft.setValue((current) =>
+                      useSaved
+                        ? {
+                            ...draftFromEntry(conflict),
+                            expectedUpdatedAt: conflict.updatedAt,
+                            setCount: visibleSetsForEntry(
+                              conflict,
+                              exercise.targetSets,
+                            ),
+                          }
+                        : { ...current, expectedUpdatedAt: conflict.updatedAt },
+                    );
+                    setSaveConflicts((current) => {
+                      const next = { ...current };
+                      delete next[conflictKey];
+                      return next;
+                    });
+                    setError('');
+                    setNotice(
+                      'Version reviewed. Press Save or Update to confirm; nothing has been written to the server yet.',
+                    );
+                  };
                   function setDraft(
                     update: Draft | ((current: Draft) => Draft),
                   ) {
                     exerciseDraft.setValue((current) => ({
+                      ...current,
                       ...(typeof update === 'function'
                         ? update(current)
                         : update),
+                      expectedUpdatedAt: current.expectedUpdatedAt,
                       setCount: current.setCount,
                     }));
                   }
@@ -3086,6 +3373,67 @@ export function WorkoutApp() {
                         )}
                       </CardHeader>
                       <CardContent className="py-(--card-spacing)">
+                        {conflict && (
+                          <div
+                            role="alert"
+                            className="mb-4 min-w-0 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950"
+                          >
+                            <p className="font-semibold">
+                              This workout has a different saved version
+                            </p>
+                            <p className="mt-1">
+                              Your inputs are kept. Compare them before choosing
+                              which values to save.
+                            </p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {loggedSets(conflict).map((set) => (
+                                <span
+                                  key={set.set}
+                                  className="rounded-lg border border-amber-200 bg-white px-2 py-1"
+                                >
+                                  Saved set {set.set}:{' '}
+                                  {set.weight == null
+                                    ? ''
+                                    : `${set.weight} kg × `}
+                                  {set.reps}
+                                  {conflict[`set${set.set}Rir`] != null
+                                    ? ` · RIR ${conflict[`set${set.set}Rir`]}`
+                                    : ''}
+                                </span>
+                              ))}
+                            </div>
+                            {conflict.rir != null && (
+                              <p className="mt-2">
+                                Saved exercise RIR: {conflict.rir}
+                              </p>
+                            )}
+                            {conflict.notes && (
+                              <p className="mt-2 whitespace-pre-wrap [overflow-wrap:anywhere]">
+                                Saved note: {conflict.notes}
+                              </p>
+                            )}
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={loading || saving}
+                                onClick={() => reviewConflict(true)}
+                              >
+                                Use saved values
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={loading || saving}
+                                onClick={() => reviewConflict(false)}
+                              >
+                                Keep my inputs after review
+                              </Button>
+                            </div>
+                          </div>
+                        )}
                         <fieldset
                           disabled={loading || saving}
                           className="min-w-0"

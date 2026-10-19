@@ -12,6 +12,7 @@ import {
 import DayReportButton from './day-report-button';
 import type { WorkoutEntry } from '@/lib/workout-types';
 import { reportSets } from '@/lib/day-report';
+import { formatWorkoutDate } from '@/lib/workout-date';
 
 type Archive = { id: string; label: string; createdAt: string };
 type Detail = Archive & {
@@ -182,7 +183,7 @@ export default function ProgrammeManager({
             <h3 className="font-semibold">{detail.label}</h3>
             <p className="text-sm text-muted-foreground">
               {detail.snapshot.entries.length} saved exercise records · archived{' '}
-              {new Date(detail.createdAt).toLocaleDateString()}
+              {formatWorkoutDate(detail.createdAt)}
             </p>
             <Button variant="outline" onClick={exportArchive}>
               Download this archive
@@ -213,9 +214,7 @@ export default function ProgrammeManager({
                       </summary>
                       <p className="mt-2 text-sm">
                         {entry.target} ·{' '}
-                        {entry.completedAt
-                          ? new Date(entry.completedAt).toLocaleDateString()
-                          : 'Date unavailable'}
+                        {formatWorkoutDate(entry.completedAt)}
                       </p>
                       {reportSets(entry).map((set) => (
                         <p key={set.set} className="text-sm">

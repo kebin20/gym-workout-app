@@ -2,6 +2,7 @@ import { env } from 'cloudflare:workers';
 
 import type { HolidayWorkoutEntry } from '@/lib/holiday-workout-types';
 import type { SetRirValues } from '@/lib/workout-types';
+import { workoutCalendarDate } from '@/lib/workout-date';
 
 export type WorkoutSheetEntry = SetRirValues & {
   week: number;
@@ -62,33 +63,8 @@ function getSyncConfig() {
   }
 }
 
-const WORKOUT_TIME_ZONE = 'Asia/Tokyo';
-const workoutDateFormatter = new Intl.DateTimeFormat('en-US', {
-  timeZone: WORKOUT_TIME_ZONE,
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-});
-
-function workoutCalendarDate(value?: string | null) {
-  const date = value ? new Date(value) : new Date();
-  if (Number.isNaN(date.getTime())) return null;
-
-  const parts = Object.fromEntries(
-    workoutDateFormatter
-      .formatToParts(date)
-      .filter(
-        (part) =>
-          part.type === 'year' || part.type === 'month' || part.type === 'day',
-      )
-      .map((part) => [part.type, part.value]),
-  );
-
-  return `${parts.year}-${parts.month}-${parts.day}`;
-}
-
 function prepareEntryForSheet(entry: WorkoutSheetEntry): WorkoutSheetEntry {
-  const completedOn = workoutCalendarDate(entry.completedAt);
+  const completedOn = workoutCalendarDate(entry.completedAt || new Date());
   if (!completedOn) return entry;
 
   return {
@@ -121,7 +97,7 @@ export async function syncWorkoutEntries(
     entries.some(
       (entry) =>
         entry.completed &&
-        (!entry.completedAt || !Number.isFinite(Date.parse(entry.completedAt))),
+        !workoutCalendarDate(entry.completedAt),
     )
   )
     return {
