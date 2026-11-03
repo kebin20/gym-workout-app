@@ -48,8 +48,7 @@ The experimental [bundled iOS foundation](docs/native-ios.md) is included in the
 - Visible device-save and Google Sheet sync status with manual retry controls
 - Review-first import from and automatic mirroring to the original Google Sheet layout
 - Fast database-first saves with Google Sheet mirroring completed in the background
-- Previous-session recall beside each exercise, including the logged date, weights, reps, RIR, and saved note
-- Optional one-tap copying of previous-session weights and reps
+- Previous-session summaries beside each exercise, plus expandable history of earlier Day A/B/C workouts with exercises, sets, RIR, and notes
 - Fresh weight and rep inputs for each new week, without copying the previous workout into the new record
 - Session-only exercise substitution, reordering, skipping, and custom exercise additions
 - Downloadable JSON backups with preview-first, non-destructive restore
@@ -66,6 +65,7 @@ The experimental [bundled iOS foundation](docs/native-ios.md) is included in the
 
 Recent highlights:
 
+- **Full workout-day history:** expand past sessions for a selected training day and review each logged exercise, set, RIR, and note.
 - **Safer editable history:** correct saved weights, reps, RIR and notes, with stale-save protection and eligible Google Sheet updates.
 - **Flexible PDF reports:** export Day A/B/C history for all saved weeks or just the current and previous week, with routines, sets and trends.
 - **Lighter mobile history:** compact logging and collapsible history that loads exercise details and extra tools only when needed.
@@ -75,6 +75,10 @@ Recent highlights:
 <details>
 
 <summary>Full changelog</summary>
+
+### v3.18.1 — Full workout-day history
+
+- Replace the **Use previous** action with a collapsed list of all earlier logged workouts for the selected Day A/B/C. Show week, date, exercises, sets, per-set and exercise RIR, and notes, including sessions from Phase 1 when viewing Phase 2.
 
 ### v3.18 — Lighter Progress and safer saves
 

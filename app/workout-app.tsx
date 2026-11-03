@@ -24,7 +24,6 @@ import {
   ChevronRight,
   CirclePlay,
   Clock3,
-  Copy,
   Download,
   Dumbbell,
   FileSpreadsheet,
@@ -116,7 +115,7 @@ import ExerciseDraftBoundary, {
 import { useOutboxRetry } from './use-outbox-retry';
 import { useOutboxSnapshot } from './use-outbox-snapshot';
 import type { SaveHistoryEdit } from './history-edit-dialog';
-import { recallSets, validateWorkoutNumbers } from '@/lib/workout-validation';
+import { validateWorkoutNumbers } from '@/lib/workout-validation';
 import {
   removeLastDraftSet,
   restoreRemovedDraftSet,
@@ -1138,6 +1137,20 @@ export function WorkoutApp() {
             exerciseNameMatches(entry, exercise.name),
         )
     : undefined;
+  const pastDayWorkouts = useMemo(
+    () =>
+      Array.from({ length: Math.max(0, activeWeek - 1) }, (_, index) =>
+        activeWeek - index - 1,
+      )
+        .map((week) => ({
+          week,
+          entries: [
+            ...(entryIndex.completedBySession.get(`${week}|${activeDay}`) ?? []),
+          ].sort((left, right) => left.exerciseOrder - right.exerciseOrder),
+        }))
+        .filter((workout) => workout.entries.length > 0),
+    [activeDay, activeWeek, entryIndex],
+  );
   const activeSets = exercise ? workingSetsForWeek(exercise, activeWeek) : 1;
   const suggestedRestSeconds = exercise
     ? recommendedRestSeconds(exercise.rest)
@@ -3209,29 +3222,6 @@ export function WorkoutApp() {
                     if (!set.done) restTimerRef.current?.start();
                   }
 
-                  function usePreviousSession() {
-                    if (!previousEntry) return;
-                    exerciseDraft.setRemovedSets([]);
-                    exerciseDraft.setShowValidation(false);
-                    const previousDraft = draftFromEntry(previousEntry);
-                    setDraft({
-                      ...previousDraft,
-                      sets: recallSets(previousDraft.sets).map((set) => ({
-                        ...set,
-                        rir: '',
-                      })),
-                      rir: '',
-                      notes: '',
-                    });
-                    setVisibleSetCount(
-                      visibleSetsForEntry(previousEntry, exercise.targetSets),
-                    );
-                    setShowNotes(false);
-                    setNotice(
-                      'Previous weights and reps copied. Review them before saving.',
-                    );
-                  }
-
                   return (
                     <Card className="beta-workout-card gap-0 border-0 py-0 shadow-sm shadow-slate-900/5 ring-border">
                       <CardHeader className="border-b bg-muted/35 pt-(--card-spacing)">
@@ -3282,7 +3272,9 @@ export function WorkoutApp() {
                           suggestedSeconds={suggestedRestSeconds}
                           notificationIconHref={notificationIconHref}
                         />
-                        {(!workoutFocus || previousEntry) && (
+                        {(!workoutFocus ||
+                          previousEntry ||
+                          pastDayWorkouts.length > 0) && (
                           <details
                             key={`${activeWeek}|${activeDay}|${exercise.order}|${workoutFocus}`}
                             open={!workoutFocus}
@@ -3331,22 +3323,11 @@ export function WorkoutApp() {
                                     </span>
                                   ))}
                                 </div>
-                                <div className="mt-2 flex flex-wrap items-center gap-2">
-                                  {previousEntry.rir != null && (
-                                    <span className="rounded-lg bg-success-soft px-2.5 py-1.5 font-sans text-xs font-medium text-success">
-                                      Exercise RIR {previousEntry.rir}
-                                    </span>
-                                  )}
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    className="text-sm"
-                                    onClick={usePreviousSession}
-                                  >
-                                    <Copy /> Use previous
-                                  </Button>
-                                </div>
+                                {previousEntry.rir != null && (
+                                  <span className="mt-2 inline-flex rounded-lg bg-success-soft px-2.5 py-1.5 font-sans text-xs font-medium text-success">
+                                    Exercise RIR {previousEntry.rir}
+                                  </span>
+                                )}
                                 {(previousEntry.notes ?? '').trim() && (
                                   <div className="mt-2.5 flex items-start gap-2 rounded-lg border border-primary/10 bg-background/65 px-3 py-2.5">
                                     <NotebookPen
@@ -3364,10 +3345,109 @@ export function WorkoutApp() {
                               </div>
                             ) : (
                               <p className="mt-2 font-sans text-sm leading-relaxed text-muted-foreground">
-                                No earlier session for this exercise yet. Your
-                                last sets and date will appear here from Week 2
-                                onward.
+                                No earlier session for this exercise in the
+                                current phase yet.
                               </p>
+                            )}
+                            {pastDayWorkouts.length > 0 && (
+                              <details className="group mt-3 rounded-lg border border-primary/10 bg-background/70">
+                                <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-lg px-3 py-2 font-sans text-sm font-semibold text-primary [&::-webkit-details-marker]:hidden">
+                                  <span className="flex min-w-0 items-center gap-2">
+                                    <History
+                                      className="size-4 shrink-0"
+                                      aria-hidden="true"
+                                    />
+                                    <span className="truncate">
+                                      Show all past workouts for Day {activeDay}
+                                    </span>
+                                    <span className="shrink-0 rounded-full bg-accent px-2 py-0.5 text-xs tabular-nums text-foreground">
+                                      {pastDayWorkouts.length}
+                                    </span>
+                                  </span>
+                                  <ChevronDown
+                                    className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
+                                    aria-hidden="true"
+                                  />
+                                </summary>
+                                <div className="space-y-2 border-t border-primary/10 p-2.5">
+                                  {pastDayWorkouts.map((workout) => {
+                                    const sessionDate = workout.entries.find(
+                                      (entry) =>
+                                        entry.completedAt || entry.updatedAt,
+                                    );
+                                    return (
+                                      <section
+                                        key={workout.week}
+                                        className="rounded-lg bg-muted/60 p-3"
+                                      >
+                                        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                                          <h3 className="font-sans text-sm font-semibold">
+                                            Phase {workout.week > 12 ? 2 : 1}
+                                            {' · Week '}
+                                            {displayWeekNumber(workout.week)}
+                                          </h3>
+                                          <p className="font-sans text-xs text-muted-foreground">
+                                            {formatWorkoutDate(
+                                              sessionDate?.completedAt ??
+                                                sessionDate?.updatedAt,
+                                            )}
+                                          </p>
+                                        </div>
+                                        <ul className="mt-2 space-y-2">
+                                          {workout.entries.map((entry) => {
+                                            const sets = loggedSets(entry);
+                                            return (
+                                              <li
+                                                key={entry.exerciseOrder}
+                                                className="min-w-0 border-t border-border/70 pt-2 first:border-0 first:pt-0"
+                                              >
+                                                <p className="break-words font-sans text-sm font-medium">
+                                                  {entry.exercise}
+                                                </p>
+                                                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                                                  {sets.map((set) => {
+                                                    const rir = entry[
+                                                      `set${set.set as 1 | 2 | 3 | 4 | 5}Rir`
+                                                    ];
+                                                    return (
+                                                      <span
+                                                        key={set.set}
+                                                        className="rounded-md bg-background px-2 py-1 font-sans text-xs font-medium tabular-nums text-foreground"
+                                                      >
+                                                        Set {set.set}:{' '}
+                                                        {set.weight == null
+                                                          ? `${set.reps} ${/sec/i.test(entry.target) ? 'sec' : 'reps'}`
+                                                          : `${set.weight} kg × ${set.reps}`}
+                                                        {rir != null &&
+                                                          ` · RIR ${rir}`}
+                                                      </span>
+                                                    );
+                                                  })}
+                                                  {sets.length === 0 && (
+                                                    <span className="font-sans text-xs text-muted-foreground">
+                                                      No sets recorded
+                                                    </span>
+                                                  )}
+                                                  {entry.rir != null && (
+                                                    <span className="rounded-md bg-success-soft px-2 py-1 font-sans text-xs font-medium text-success">
+                                                      Exercise RIR {entry.rir}
+                                                    </span>
+                                                  )}
+                                                </div>
+                                                {(entry.notes ?? '').trim() && (
+                                                  <p className="mt-1.5 break-words font-sans text-xs leading-relaxed text-muted-foreground">
+                                                    {entry.notes.trim()}
+                                                  </p>
+                                                )}
+                                              </li>
+                                            );
+                                          })}
+                                        </ul>
+                                      </section>
+                                    );
+                                  })}
+                                </div>
+                              </details>
                             )}
                           </details>
                         )}
