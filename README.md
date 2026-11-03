@@ -342,6 +342,11 @@ Minor fixes, visual refinements, and deployment maintenance are grouped into the
 - Drizzle ORM with Cloudflare D1/SQLite
 - OpenAI Sites hosting on Cloudflare Workers
 
+Cloudflare migration work is isolated on the `codex/cloudflare-migration`
+branch. Its preview target and manual deployment steps are documented in
+[Cloudflare migration](docs/CLOUDFLARE_MIGRATION.md); the current private Site
+remains the production app.
+
 ## Run locally
 
 Requirements: Node.js 22.13 or newer and npm.
