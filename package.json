@@ -13,6 +13,7 @@
     "postbuild": "node scripts/build-startup-assets.mjs",
     "start": "wrangler dev --config dist/server/wrangler.json",
     "deploy:cloudflare:preview": "node scripts/deploy-cloudflare-preview.mjs",
+    "deploy:cloudflare:production": "node scripts/deploy-cloudflare-production.mjs",
     "lint": "oxlint",
     "format": "oxfmt",
     "db:generate": "drizzle-kit generate",

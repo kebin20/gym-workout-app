@@ -1,0 +1,56 @@
+name: Deploy Liftline Cloudflare production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: liftline-cloudflare-production
+  cancel-in-progress: false
+
+jobs:
+  deploy-production:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: cloudflare-production
+    timeout-minutes: 40
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      LIFTLINE_CLOUDFLARE_TARGET: production
+      LIFTLINE_CLOUDFLARE_PRODUCTION_D1_DATABASE_ID: ${{ vars.LIFTLINE_CLOUDFLARE_PRODUCTION_D1_DATABASE_ID }}
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.1
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit --incremental false
+
+      - name: Run regression checks
+        run: npm run test:regression
+
+      - name: Build Cloudflare Worker
+        run: npm run build:cloudflare
+
+      - name: Check production deployment target
+        run: node scripts/check-cloudflare-deploy-config.mjs
+
+      - name: Apply production database migrations
+        run: npx wrangler d1 migrations apply liftline-cloudflare-production --remote --config dist/server/wrangler.json
+
+      - name: Deploy production Worker
+        run: npm run deploy:cloudflare:production

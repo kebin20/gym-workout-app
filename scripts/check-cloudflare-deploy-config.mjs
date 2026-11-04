@@ -1,9 +1,21 @@
 import { readFile } from 'node:fs/promises';
 
 const configPath = new URL('../dist/server/wrangler.json', import.meta.url);
-const expectedWorkerName = 'liftline-cloudflare-preview';
-const expectedDatabaseName = 'liftline-cloudflare-preview';
+const deploymentTarget = process.env.LIFTLINE_CLOUDFLARE_TARGET || 'preview';
 const placeholderDatabaseId = '00000000-0000-4000-8000-000000000000';
+
+if (!['preview', 'production'].includes(deploymentTarget)) {
+  console.error('LIFTLINE_CLOUDFLARE_TARGET must be "preview" or "production".');
+  process.exit(1);
+}
+
+const expectedWorkerName = `liftline-cloudflare-${deploymentTarget}`;
+const expectedDatabaseName = expectedWorkerName;
+const databaseIdVariable =
+  deploymentTarget === 'production'
+    ? 'LIFTLINE_CLOUDFLARE_PRODUCTION_D1_DATABASE_ID'
+    : 'LIFTLINE_CLOUDFLARE_D1_DATABASE_ID';
+const expectedDatabaseId = process.env[databaseIdVariable];
 
 let config;
 try {
@@ -22,22 +34,23 @@ if (config) {
     errors.push(`Expected Worker "${expectedWorkerName}".`);
   }
   if (config.workers_dev !== true) {
-    errors.push('The public preview Worker must expose its workers.dev route.');
+    errors.push('The Worker must expose its workers.dev route.');
   }
   if (config.preview_urls !== false) {
-    errors.push('The preview Worker must not expose version preview URLs.');
+    errors.push('The Worker must not expose version preview URLs.');
   }
 
   const database = config.d1_databases?.find(({ binding }) => binding === 'DB');
   if (!database) {
     errors.push('The generated config has no D1 database bound as DB.');
   } else {
-    if (
-      !database.database_id ||
-      database.database_id === placeholderDatabaseId
-    ) {
+    if (!expectedDatabaseId || expectedDatabaseId === placeholderDatabaseId) {
       errors.push(
-        'Set LIFTLINE_CLOUDFLARE_D1_DATABASE_ID to the new preview D1 database ID, then rebuild.',
+        `Set ${databaseIdVariable} to the ${deploymentTarget} D1 database ID, then rebuild.`,
+      );
+    } else if (database.database_id !== expectedDatabaseId) {
+      errors.push(
+        `The generated config does not use ${databaseIdVariable}; rebuild with the correct ${deploymentTarget} database ID.`,
       );
     }
     if (database.database_name !== expectedDatabaseName) {
@@ -53,6 +66,8 @@ if (config) {
     for (const error of errors) console.error(`- ${error}`);
     process.exitCode = 1;
   } else {
-    console.log('Cloudflare preview config passed the deployment safety checks.');
+    console.log(
+      `Cloudflare ${deploymentTarget} config passed the deployment safety checks.`,
+    );
   }
 }

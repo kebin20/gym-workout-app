@@ -374,6 +374,8 @@ npm run test:workout # Run draft, queue, API, migration, backup, undo and startu
 
 New fixes and features are developed on `codex/` branches, tested, typechecked, built, and reviewed before promotion to `main`. Sites publication uses the tested source and matching production archive while preserving owner-only access.
 
+Cloudflare preview and production use separate Workers and D1 databases. The preview deployment is manually triggered; production deployment runs after pushes to `main` once the `cloudflare-production` GitHub environment is configured with `CLOUDFLARE_ACCOUNT_ID`, `LIFTLINE_CLOUDFLARE_PRODUCTION_D1_DATABASE_ID`, and the `CLOUDFLARE_API_TOKEN` secret. Add `GOOGLE_SHEETS_WEBHOOK_URL` and `GOOGLE_SHEETS_SYNC_TOKEN` as secrets on the production Worker after its first deploy. Deploying code does not copy workout records: use a full Liftline JSON backup to move Phase 2, Holiday, body metrics, and other app-only records between databases.
+
 ## Project structure
 
 ```text

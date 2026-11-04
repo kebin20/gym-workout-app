@@ -5,11 +5,15 @@ import { fileURLToPath } from 'node:url';
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const wranglerCli = resolve(projectRoot, 'node_modules/wrangler/bin/wrangler.js');
 const configPath = 'dist/server/wrangler.json';
+const env = {
+  ...process.env,
+  LIFTLINE_CLOUDFLARE_TARGET: 'preview',
+};
 
 const configCheck = spawnSync(
   process.execPath,
   ['scripts/check-cloudflare-deploy-config.mjs'],
-  { cwd: projectRoot, env: process.env, stdio: 'inherit' },
+  { cwd: projectRoot, env, stdio: 'inherit' },
 );
 
 if (configCheck.error) throw configCheck.error;
@@ -23,7 +27,7 @@ const deploy = spawnSync(
   {
     cwd: projectRoot,
     env: {
-      ...process.env,
+      ...env,
       WRANGLER_WRITE_LOGS: process.env.WRANGLER_WRITE_LOGS ?? 'false',
     },
     stdio: 'inherit',

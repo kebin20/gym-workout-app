@@ -8,8 +8,14 @@ const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
   '00000000-0000-4000-8000-000000000000';
 const isCloudflareDeploy =
   process.env.LIFTLINE_CLOUDFLARE_DEPLOY === 'true';
+const cloudflareTarget =
+  process.env.LIFTLINE_CLOUDFLARE_TARGET === 'production'
+    ? 'production'
+    : 'preview';
 const cloudflareDatabaseId =
-  process.env.LIFTLINE_CLOUDFLARE_D1_DATABASE_ID ||
+  (cloudflareTarget === 'production'
+    ? process.env.LIFTLINE_CLOUDFLARE_PRODUCTION_D1_DATABASE_ID
+    : process.env.LIFTLINE_CLOUDFLARE_D1_DATABASE_ID) ||
   SITE_CREATOR_PLACEHOLDER_DATABASE_ID;
 
 const { d1, r2 } = hostingConfig;
@@ -22,8 +28,8 @@ const localBindingConfig = {
   compatibility_flags: ['nodejs_compat'],
   ...(isCloudflareDeploy
     ? {
-        // Keep preview separate from production while allowing public access.
-        name: 'liftline-cloudflare-preview',
+        // Keep the public preview and production environments isolated.
+        name: `liftline-cloudflare-${cloudflareTarget}`,
         keep_vars: true,
         workers_dev: true,
         preview_urls: false,
@@ -34,7 +40,7 @@ const localBindingConfig = {
         {
           binding: d1,
           database_name: isCloudflareDeploy
-            ? 'liftline-cloudflare-preview'
+            ? `liftline-cloudflare-${cloudflareTarget}`
             : 'site-creator-d1',
           database_id: isCloudflareDeploy
             ? cloudflareDatabaseId
