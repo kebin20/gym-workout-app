@@ -40,11 +40,11 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit --incremental false
 
-      - name: Run regression checks
-        run: npm run test:regression
-
       - name: Build Cloudflare Worker
         run: npm run build:cloudflare
+
+      - name: Run regression checks
+        run: npm run test:regression
 
       - name: Check production deployment target
         run: node scripts/check-cloudflare-deploy-config.mjs
