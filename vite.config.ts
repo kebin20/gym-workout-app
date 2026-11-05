@@ -6,6 +6,17 @@ import hostingConfig from './.openai/hosting.json';
 
 const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
   '00000000-0000-4000-8000-000000000000';
+const isCloudflareDeploy =
+  process.env.LIFTLINE_CLOUDFLARE_DEPLOY === 'true';
+const cloudflareTarget =
+  process.env.LIFTLINE_CLOUDFLARE_TARGET === 'production'
+    ? 'production'
+    : 'preview';
+const cloudflareDatabaseId =
+  (cloudflareTarget === 'production'
+    ? process.env.LIFTLINE_CLOUDFLARE_PRODUCTION_D1_DATABASE_ID
+    : process.env.LIFTLINE_CLOUDFLARE_D1_DATABASE_ID) ||
+  SITE_CREATOR_PLACEHOLDER_DATABASE_ID;
 
 const { d1, r2 } = hostingConfig;
 
@@ -15,12 +26,26 @@ const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === 'seatbelt';
 const localBindingConfig = {
   main: 'vinext/server/fetch-handler',
   compatibility_flags: ['nodejs_compat'],
+  ...(isCloudflareDeploy
+    ? {
+        // Keep the public preview and production environments isolated.
+        name: `liftline-cloudflare-${cloudflareTarget}`,
+        keep_vars: true,
+        workers_dev: true,
+        preview_urls: false,
+      }
+    : {}),
   d1_databases: d1
     ? [
         {
           binding: d1,
-          database_name: 'site-creator-d1',
-          database_id: SITE_CREATOR_PLACEHOLDER_DATABASE_ID,
+          database_name: isCloudflareDeploy
+            ? `liftline-cloudflare-${cloudflareTarget}`
+            : 'site-creator-d1',
+          database_id: isCloudflareDeploy
+            ? cloudflareDatabaseId
+            : SITE_CREATOR_PLACEHOLDER_DATABASE_ID,
+          ...(isCloudflareDeploy ? { migrations_dir: '../../drizzle' } : {}),
         },
       ]
     : [],
@@ -51,7 +76,7 @@ export default defineConfig(async () => {
       : undefined,
     plugins: [
       vinext(),
-      sites(),
+      ...(!isCloudflareDeploy ? [sites()] : []),
       cloudflare({
         viteEnvironment: { name: 'rsc', childEnvironments: ['ssr'] },
         config: localBindingConfig,

@@ -342,6 +342,11 @@ Minor fixes, visual refinements, and deployment maintenance are grouped into the
 - Drizzle ORM with Cloudflare D1/SQLite
 - OpenAI Sites hosting on Cloudflare Workers
 
+Cloudflare migration work is isolated on the `codex/cloudflare-migration`
+branch. Its preview target and manual deployment steps are documented in
+[Cloudflare migration](docs/CLOUDFLARE_MIGRATION.md); the current private Site
+remains the production app.
+
 ## Run locally
 
 Requirements: Node.js 22.13 or newer and npm.
@@ -368,6 +373,8 @@ npm run test:workout # Run draft, queue, API, migration, backup, undo and startu
 ## Release workflow
 
 New fixes and features are developed on `codex/` branches, tested, typechecked, built, and reviewed before promotion to `main`. Sites publication uses the tested source and matching production archive while preserving owner-only access.
+
+Cloudflare preview and production use separate Workers and D1 databases. The preview deployment is manually triggered; production deployment runs after pushes to `main` once the `cloudflare-production` GitHub environment is configured with `CLOUDFLARE_ACCOUNT_ID`, `LIFTLINE_CLOUDFLARE_PRODUCTION_D1_DATABASE_ID`, and the `CLOUDFLARE_API_TOKEN` secret. Add `GOOGLE_SHEETS_WEBHOOK_URL` and `GOOGLE_SHEETS_SYNC_TOKEN` as secrets on the production Worker after its first deploy. Deploying code does not copy workout records: use a full Liftline JSON backup to move Phase 2, Holiday, body metrics, and other app-only records between databases.
 
 ## Project structure
 
