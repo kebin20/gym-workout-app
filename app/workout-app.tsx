@@ -1138,18 +1138,25 @@ export function WorkoutApp() {
         )
     : undefined;
   const pastDayWorkouts = useMemo(
-    () =>
-      Array.from({ length: Math.max(0, activeWeek - 1) }, (_, index) =>
+    () => {
+      if (!exercise) return [];
+
+      return Array.from({ length: Math.max(0, activeWeek - 1) }, (_, index) =>
         activeWeek - index - 1,
       )
         .map((week) => ({
           week,
-          entries: [
-            ...(entryIndex.completedBySession.get(`${week}|${activeDay}`) ?? []),
-          ].sort((left, right) => left.exerciseOrder - right.exerciseOrder),
+          entries: (
+            entryIndex.completedBySession.get(`${week}|${activeDay}`) ?? []
+          ).filter(
+            (entry) =>
+              entry.exerciseOrder === exercise.order &&
+              exerciseNameMatches(entry, exercise.name),
+          ),
         }))
-        .filter((workout) => workout.entries.length > 0),
-    [activeDay, activeWeek, entryIndex],
+        .filter((workout) => workout.entries.length > 0);
+    },
+    [activeDay, activeWeek, entryIndex, exercise],
   );
   const activeSets = exercise ? workingSetsForWeek(exercise, activeWeek) : 1;
   const suggestedRestSeconds = exercise
@@ -3358,7 +3365,7 @@ export function WorkoutApp() {
                                       aria-hidden="true"
                                     />
                                     <span className="truncate">
-                                      Show all past workouts for Day {activeDay}
+                                      Show all past sessions for this exercise
                                     </span>
                                     <span className="shrink-0 rounded-full bg-accent px-2 py-0.5 text-xs tabular-nums text-foreground">
                                       {pastDayWorkouts.length}

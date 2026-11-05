@@ -98,6 +98,16 @@ test('deferred history retains week editing, earlier disclosures and adaptive-he
   );
 });
 
+test('Today past-session history is limited to the selected exercise', () => {
+  const app = source('app/workout-app.tsx');
+  assert.match(app, /Show all past sessions for this exercise/);
+  assert.match(
+    app,
+    /entry\.exerciseOrder === exercise\.order\s*&&\s*exerciseNameMatches\(entry, exercise\.name\)/,
+  );
+  assert.doesNotMatch(app, /Show all past workouts for Day/);
+});
+
 test('shared dialogs constrain tall content, retain internal-scroll overrides and reserve a 44px close target', () => {
   const f = routeFixture();
   try {
