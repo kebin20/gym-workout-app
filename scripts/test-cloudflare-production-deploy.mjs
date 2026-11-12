@@ -25,11 +25,11 @@ function fixture(mode = '', routes = []) {
   writeFileSync(join(root, 'node_modules/wrangler/bin/wrangler.js'), `
     import { appendFileSync, writeFileSync } from 'node:fs';
     const args = process.argv.slice(2);
-    appendFileSync('calls.jsonl', JSON.stringify({ args, output: process.env.WRANGLER_OUTPUT_FILE }) + '\\n');
+    appendFileSync('calls.jsonl', JSON.stringify({ args, output: process.env.WRANGLER_OUTPUT_FILE_PATH }) + '\\n');
     const mode = process.env.TEST_DEPLOY_MODE;
     if (args[1] === 'upload') {
       if (mode === 'upload-fail') process.exit(2);
-      if (mode !== 'missing-output') writeFileSync(process.env.WRANGLER_OUTPUT_FILE, JSON.stringify({
+      if (mode !== 'missing-output') writeFileSync(process.env.WRANGLER_OUTPUT_FILE_PATH, JSON.stringify({
         type: 'version-upload',
         worker_name: mode === 'wrong-worker' ? 'another-worker' : 'liftline-cloudflare-production',
         version_id: mode === 'invalid-version' ? 'latest' : '${versionId}',

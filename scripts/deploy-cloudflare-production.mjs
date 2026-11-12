@@ -39,7 +39,7 @@ function runWrangler(args, outputFile) {
       cwd: projectRoot,
       env: {
         ...env,
-        WRANGLER_OUTPUT_FILE: outputFile,
+        WRANGLER_OUTPUT_FILE_PATH: outputFile,
         WRANGLER_WRITE_LOGS: process.env.WRANGLER_WRITE_LOGS ?? 'false',
       },
       stdio: 'inherit',
