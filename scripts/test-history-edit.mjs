@@ -490,6 +490,128 @@ function dialogHarness(f) {
   };
 }
 
+function submitDialog(render, props, blur = () => {}) {
+  render(props)
+    .find((node) => node.type === 'form')
+    .props.onSubmit({
+      preventDefault() {},
+      currentTarget: { querySelector: () => ({ blur }) },
+    });
+}
+
+test('mobile decimal input reaches the historical PATCH and the submit button belongs to the form', async () => {
+  const f = routeFixture();
+  try {
+    const entry = seed(f);
+    const render = dialogHarness(f);
+    let closes = 0,
+      blurred = 0,
+      saves = 0;
+    const props = {
+      entry,
+      sheetAvailable: true,
+      onClose: () => closes++,
+      onSave: async (original, fields) => {
+        saves++;
+        assert.equal(fields.set1Weight, 88.3);
+        assert.equal(fields.set1Reps, 11);
+        const response = await patch(f, { ...payload(f, original), ...fields });
+        assert.equal(response.status, 200);
+      },
+    };
+    let nodes = render(props);
+    const form = nodes.find((node) => node.type === 'form');
+    assert.equal(form.props.noValidate, true);
+    assert.ok(elements(form).some((node) => node.props.type === 'submit'));
+    for (const node of nodes.filter((node) => node.props.inputMode))
+      assert.equal(
+        node.props.type,
+        'text',
+        'raw keyboard values reach custom validation',
+      );
+    nodes
+      .find((node) => node.props['aria-label'] === 'Set 1 weight')
+      .props.onChange({ target: { value: '88,3' } });
+    nodes = render(props);
+    nodes
+      .find((node) => node.props['aria-label'] === 'Set 1 reps')
+      .props.onChange({ target: { value: '11' } });
+    submitDialog(render, props, () => blurred++);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(blurred, 1);
+    assert.equal(saves, 1);
+    assert.equal(closes, 1);
+    assert.equal(read(f).set1Weight, 88.3);
+    assert.equal(read(f).set1Reps, 11);
+    assert.equal(read(f).completedAt, entry.completedAt);
+    assert.equal(read(f).set5Weight, entry.set5Weight);
+  } finally {
+    f.close();
+  }
+});
+
+test('invalid input and a blocked correction keep edits and show feedback beside Save, outside the scroll area', async () => {
+  const f = routeFixture();
+  try {
+    const entry = seed(f);
+    const render = dialogHarness(f);
+    let saves = 0,
+      closes = 0;
+    const props = {
+      entry,
+      sheetAvailable: true,
+      onClose: () => closes++,
+      onSave: async () => {
+        saves++;
+        throw Error('Finish syncing your phone before correcting history.');
+      },
+    };
+    render(props)
+      .find((node) => node.props['aria-label'] === 'Set 1 weight')
+      .props.onChange({ target: { value: '88,3.2' } });
+    submitDialog(render, props);
+    let nodes = render(props);
+    assert.equal(saves, 0);
+    const footerError = () => {
+      const footer = render(props).find(
+        (node) => node.type?.name === 'DialogFooter',
+      );
+      return elements(footer).find(
+        (node) => node.props.id === 'history-edit-error',
+      );
+    };
+    assert.match(footerError().props.children, /valid number/);
+    const scrollBody = nodes.find((node) =>
+      node.props.className?.includes('overflow-y-auto'),
+    );
+    assert.ok(
+      !elements(scrollBody).some(
+        (node) => node.props.id === 'history-edit-error',
+      ),
+    );
+    assert.equal(
+      nodes.find((node) => node.props['aria-label'] === 'Set 1 weight').props
+        .value,
+      '88,3.2',
+    );
+    nodes
+      .find((node) => node.props['aria-label'] === 'Set 1 weight')
+      .props.onChange({ target: { value: '88.3' } });
+    submitDialog(render, props);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(saves, 1);
+    assert.equal(closes, 0);
+    assert.match(footerError().props.children, /Finish syncing your phone/);
+    assert.equal(
+      render(props).find((node) => node.props['aria-label'] === 'Set 1 weight')
+        .props.value,
+      '88.3',
+    );
+  } finally {
+    f.close();
+  }
+});
+
 test('editor retains values/errors, protects unsaved dismissal and double submits, and uses compact labeled controls', async () => {
   const f = routeFixture();
   try {
@@ -527,10 +649,7 @@ test('editor retains values/errors, protects unsaved dismissal and double submit
     nodes[0].props.onOpenChange(false);
     assert.equal(closes, 0);
     assert.ok(render(props).some((n) => n.props.role === 'alert'));
-    const submit = () =>
-      render(props)
-        .find((n) => n.type === 'form')
-        .props.onSubmit({ preventDefault() {} });
+    const submit = () => submitDialog(render, props);
     submit();
     submit();
     assert.equal(saves, 1);

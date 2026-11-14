@@ -1137,27 +1137,25 @@ export function WorkoutApp() {
             exerciseNameMatches(entry, exercise.name),
         )
     : undefined;
-  const pastDayWorkouts = useMemo(
-    () => {
-      if (!exercise) return [];
+  const pastDayWorkouts = useMemo(() => {
+    if (!exercise) return [];
 
-      return Array.from({ length: Math.max(0, activeWeek - 1) }, (_, index) =>
-        activeWeek - index - 1,
-      )
-        .map((week) => ({
-          week,
-          entries: (
-            entryIndex.completedBySession.get(`${week}|${activeDay}`) ?? []
-          ).filter(
-            (entry) =>
-              entry.exerciseOrder === exercise.order &&
-              exerciseNameMatches(entry, exercise.name),
-          ),
-        }))
-        .filter((workout) => workout.entries.length > 0);
-    },
-    [activeDay, activeWeek, entryIndex, exercise],
-  );
+    return Array.from(
+      { length: Math.max(0, activeWeek - 1) },
+      (_, index) => activeWeek - index - 1,
+    )
+      .map((week) => ({
+        week,
+        entries: (
+          entryIndex.completedBySession.get(`${week}|${activeDay}`) ?? []
+        ).filter(
+          (entry) =>
+            entry.exerciseOrder === exercise.order &&
+            exerciseNameMatches(entry, exercise.name),
+        ),
+      }))
+      .filter((workout) => workout.entries.length > 0);
+  }, [activeDay, activeWeek, entryIndex, exercise]);
   const activeSets = exercise ? workingSetsForWeek(exercise, activeWeek) : 1;
   const suggestedRestSeconds = exercise
     ? recommendedRestSeconds(exercise.rest)
@@ -3285,18 +3283,18 @@ export function WorkoutApp() {
                           <details
                             key={`${activeWeek}|${activeDay}|${exercise.order}|${workoutFocus}`}
                             open={!workoutFocus}
-                            className="mt-3 rounded-xl border border-primary/15 bg-background/90 p-3"
+                            className="mt-3 min-w-0 max-w-full rounded-xl border border-primary/15 bg-background/90 p-3"
                           >
-                            <summary className="flex cursor-pointer list-none items-center gap-3 [&::-webkit-details-marker]:hidden">
+                            <summary className="grid min-w-0 cursor-pointer list-none grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 [&::-webkit-details-marker]:hidden">
                               <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-accent text-primary">
                                 <History className="size-4" />
                               </span>
-                              <div className="flex min-w-0 flex-1 flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                              <div className="grid min-w-0 gap-1 sm:flex sm:flex-wrap sm:items-baseline sm:justify-between sm:gap-x-3">
                                 <p className="font-sans text-sm font-semibold">
                                   Previous session
                                 </p>
                                 {previousEntry && (
-                                  <p className="font-sans text-sm font-medium text-muted-foreground">
+                                  <p className="min-w-0 font-sans text-xs font-medium text-muted-foreground [overflow-wrap:anywhere] sm:text-sm">
                                     {formatWorkoutDate(
                                       previousEntry.completedAt ??
                                         previousEntry.updatedAt,
@@ -3317,7 +3315,7 @@ export function WorkoutApp() {
                                   {loggedSets(previousEntry).map((set) => (
                                     <span
                                       key={set.set}
-                                      className="rounded-lg bg-secondary px-2 py-1.5 font-sans text-sm font-medium tabular-nums"
+                                      className="max-w-full rounded-lg bg-secondary px-2 py-1.5 font-sans text-sm font-medium tabular-nums [overflow-wrap:anywhere]"
                                     >
                                       Set {set.set}:{' '}
                                       {set.weight == null
@@ -3357,19 +3355,20 @@ export function WorkoutApp() {
                               </p>
                             )}
                             {pastDayWorkouts.length > 0 && (
-                              <details className="group mt-3 rounded-lg border border-primary/10 bg-background/70">
-                                <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-lg px-3 py-2 font-sans text-sm font-semibold text-primary [&::-webkit-details-marker]:hidden">
-                                  <span className="flex min-w-0 items-center gap-2">
-                                    <History
-                                      className="size-4 shrink-0"
-                                      aria-hidden="true"
-                                    />
-                                    <span className="truncate">
-                                      Show all past sessions for this exercise
-                                    </span>
-                                    <span className="shrink-0 rounded-full bg-accent px-2 py-0.5 text-xs tabular-nums text-foreground">
-                                      {pastDayWorkouts.length}
-                                    </span>
+                              <details className="group mt-3 min-w-0 max-w-full rounded-lg border border-primary/10 bg-background/70">
+                                <summary
+                                  aria-label={`Show all past sessions for ${exercise.name}`}
+                                  className="grid min-h-11 min-w-0 cursor-pointer list-none grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-2 rounded-lg px-3 py-2.5 font-sans text-sm font-semibold text-primary [&::-webkit-details-marker]:hidden"
+                                >
+                                  <History
+                                    className="size-4 shrink-0"
+                                    aria-hidden="true"
+                                  />
+                                  <span className="min-w-0 whitespace-normal [overflow-wrap:anywhere]">
+                                    All past sessions
+                                  </span>
+                                  <span className="shrink-0 rounded-full bg-accent px-2 py-0.5 text-xs tabular-nums text-foreground">
+                                    {pastDayWorkouts.length}
                                   </span>
                                   <ChevronDown
                                     className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
@@ -3413,9 +3412,10 @@ export function WorkoutApp() {
                                                 </p>
                                                 <div className="mt-1.5 flex flex-wrap gap-1.5">
                                                   {sets.map((set) => {
-                                                    const rir = entry[
-                                                      `set${set.set as 1 | 2 | 3 | 4 | 5}Rir`
-                                                    ];
+                                                    const rir =
+                                                      entry[
+                                                        `set${set.set as 1 | 2 | 3 | 4 | 5}Rir`
+                                                      ];
                                                     return (
                                                       <span
                                                         key={set.set}

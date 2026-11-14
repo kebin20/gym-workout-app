@@ -21,8 +21,15 @@ export function historyValues(entry: WorkoutEntry): HistoryValues {
   };
 }
 export function historyFields(values: HistoryValues) {
-  const number = (value: string) =>
-    value.trim() === '' ? null : Number(value);
+  // Keep mobile keyboard input intact until validation. Decimal commas are
+  // accepted as decimal separators; mixed/grouped separators stay invalid.
+  const number = (value: string) => {
+    const trimmed = value.trim();
+    if (trimmed === '') return null;
+    if (!/^[+-]?(?:\d+(?:[.,]\d*)?|[.,]\d+)(?:e[+-]?\d+)?$/i.test(trimmed))
+      return NaN;
+    return Number(trimmed.replace(',', '.'));
+  };
   return {
     ...Object.fromEntries(
       historySetNumbers.flatMap((set, index) => [
