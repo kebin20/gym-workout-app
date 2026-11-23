@@ -1,6 +1,6 @@
 # Liftline
 
-Liftline is a mobile-friendly workout tracker for two progressive 12-week, three-day strength phases. It turns the original spreadsheet routine and its specialized follow-up programme into a clean, touch-first web app for logging weight, reps, RIR, notes, volume, and weekly progress.
+Liftline is a mobile-friendly workout tracker for an ongoing Phase 1 and an optional 12-week Phase 2, each with three training days. It turns the original spreadsheet routine and its specialized follow-up programme into a clean, touch-first web app for logging weight, reps, RIR, notes, volume, and weekly progress.
 
 Made with ChatGPT Codex
 
@@ -8,18 +8,18 @@ Made with ChatGPT Codex
 
 ## Live app
 
-The production app is hosted privately at [liftline-strength-plan.ktanzyl.chatgpt.site](https://liftline-strength-plan.ktanzyl.chatgpt.site). Access is restricted to the site owner.
+The production app is hosted at [liftline-cloudflare-production.kaikei-app.workers.dev](https://liftline-cloudflare-production.kaikei-app.workers.dev/).
 
-Current production version: **v3.18.0**
+Current production version: **v3.19.0**
 
 The experimental [bundled iOS foundation](docs/native-ios.md) is included in the repository, but is not ready for personal logging: native devices display a setup guard until the storage/connection choice and real-device tests are complete. The private web app keeps its existing storage and functionality, with faster cached startup. See the [release rollback notes](docs/rollback.md) for the pre-release backup.
 
 ## Features
 
-- Two complete 12-week plans with Day A, B, and C workouts
+- Open-ended Phase 1 and an optional 12-week Phase 2, with Day A, B, and C workouts
 - Repeat the programme with explicit, immutable archives; review old records and export their Day A/B/C PDFs without overwriting active history
 - Growth-safe transactional JSON restore, including programme archives; separate private device-recovery export for raw drafts and unsynced queues
-- Locked Phase 2 transition after all 36 Phase 1 sessions are complete
+- Optional Phase 2 selection after the first 36 Phase 1 sessions are complete; Phase 1 continues through Week 13 and beyond
 - Specialized Phase 2 programming with chest/quad, back/posterior-chain, and shoulders/arms emphasis
 - Phase-specific progress, workout history, guidance, and rotating training tips
 - Large mobile-friendly controls for entering weight, reps, and RIR
@@ -75,6 +75,11 @@ Recent highlights:
 <details>
 
 <summary>Full changelog</summary>
+
+### v3.19.0 — Ongoing Phase 1
+
+- Continue Phase 1 through Week 13 and beyond, with no fixed ending or automatic Phase 2 switch. Existing Phase 2 records retain their identity and remain available by explicit phase selection.
+- Include continuation weeks in logging, saved-workout corrections, readiness checks, trends, archives, backups and PDF reports. The original Google Sheet layout still mirrors only Phase 1 Weeks 1–12; continuation weeks remain saved in Liftline and its exports.
 
 ### v3.18.1 — Full workout-day history
 

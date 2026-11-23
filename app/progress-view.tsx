@@ -1,4 +1,6 @@
 'use client';
+import { phaseForWeek } from '@/lib/training-weeks';
+
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import {
   CheckCircle2,
@@ -152,7 +154,7 @@ export function HistoryWeekDisclosure({
                 type="button"
                 variant="outline"
                 size="sm"
-                aria-label={`Edit Phase ${entry.week > 12 ? 2 : 1} Week ${displayWeekNumber(entry.week)} Day ${entry.day} ${entry.exercise}`}
+                aria-label={`Edit Phase ${phaseForWeek(entry.week)} Week ${displayWeekNumber(entry.week)} Day ${entry.day} ${entry.exercise}`}
                 disabled={
                   entry.offlinePending ||
                   !entry.updatedAt ||
@@ -380,7 +382,8 @@ export default function ProgressView({
             TRAINING SUMMARY
           </p>
           <h1 className="font-sans text-3xl font-bold tracking-tight">
-            Phase {activePhase} progress across 12 weeks.
+            Phase {activePhase} progress
+            {activePhase === 1 ? ' · ongoing' : ' across 12 weeks'}.
           </h1>
           <p className="mt-1 font-sans text-muted-foreground">
             Your active programme’s weekly totals and exercise history. The

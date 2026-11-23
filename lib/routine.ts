@@ -1,3 +1,4 @@
+import { phaseForWeek, displayTrainingWeek } from './training-weeks';
 export type TrainingDay = 'A' | 'B' | 'C';
 
 export type RoutineExercise = {
@@ -463,11 +464,11 @@ export const phase2Emphasis: Record<TrainingDay, string> = {
 };
 
 export function routineForWeek(week: number) {
-  return week > 12 ? phase2Routine : routine;
+  return phaseForWeek(week) === 2 ? phase2Routine : routine;
 }
 
 export function displayWeekNumber(week: number) {
-  return week > 12 ? week - 12 : week;
+  return displayTrainingWeek(week);
 }
 
 export function targetLabel(exercise: RoutineExercise) {

@@ -66,6 +66,14 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import {
+  phaseForWeek,
+  storageWeekForPhase,
+  previousTrainingWeek,
+  nextTrainingWeek,
+  phaseWeekOptions,
+  prefersPhaseTwo,
+} from '@/lib/training-weeks';
 import { Input, Textarea } from '@/components/liftline-form-controls';
 import { WorkoutSetCard } from './workout-set-card';
 import {
@@ -546,6 +554,8 @@ function weekRange(startDate: string, offset: number) {
   start.setUTCDate(start.getUTCDate() + offset * 7);
   const end = new Date(start);
   end.setUTCDate(end.getUTCDate() + 6);
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()))
+    return 'Date unavailable';
   const month = new Intl.DateTimeFormat('en-US', {
     month: 'short',
     timeZone: 'UTC',
@@ -555,7 +565,7 @@ function weekRange(startDate: string, offset: number) {
 
 function scheduledWeekForToday(
   schedule: ProgramSchedule,
-  phaseTwoUnlocked: boolean,
+  phaseTwoSelected: boolean,
   now = new Date(),
 ) {
   const dateParts = new Intl.DateTimeFormat('en-US', {
@@ -572,16 +582,12 @@ function scheduledWeekForToday(
   const weekFrom = (start: number) =>
     Math.floor((today - start) / (7 * 24 * 60 * 60 * 1000));
 
-  if (
-    phaseTwoUnlocked &&
-    Number.isFinite(phaseTwoStart) &&
-    today >= phaseTwoStart
-  ) {
+  if (phaseTwoSelected && Number.isFinite(phaseTwoStart)) {
     return Math.min(24, Math.max(13, 13 + weekFrom(phaseTwoStart)));
   }
 
   if (!Number.isFinite(phaseOneStart)) return 1;
-  return Math.min(12, Math.max(1, 1 + weekFrom(phaseOneStart)));
+  return storageWeekForPhase(1, Math.max(1, 1 + weekFrom(phaseOneStart)));
 }
 
 const trainingTips = [
@@ -733,9 +739,9 @@ function weeklySummariesForPhase(
   entries: WorkoutEntry[],
   sessionExercises: SessionExercise[],
   startWeek: number,
+  storageWeeks = Array.from({ length: 12 }, (_, index) => startWeek + index),
 ) {
-  return Array.from({ length: 12 }, (_, index) => {
-    const storageWeek = startWeek + index;
+  return storageWeeks.map((storageWeek) => {
     const weekEntries = entries.filter(
       (entry) => entry.week === storageWeek && entry.completed,
     );
@@ -755,7 +761,7 @@ function weeklySummariesForPhase(
       );
     }).length;
     return {
-      week: index + 1,
+      week: displayWeekNumber(storageWeek),
       storageWeek,
       rows: weekEntries.length,
       sessions,
@@ -801,7 +807,15 @@ function startupSessionForWeek(
   scheduledWeek: number,
 ) {
   const completedEntries = entries.filter((entry) => entry.completed);
-  const startupWeek = findStartupWeek(scheduledWeek, (week) =>
+  const phase = phaseForWeek(scheduledWeek);
+  const latestWeek = completedEntries.reduce(
+    (latest, entry) =>
+      phaseForWeek(entry.week) === phase
+        ? Math.max(latest, entry.week)
+        : latest,
+    scheduledWeek,
+  );
+  const startupWeek = findStartupWeek(latestWeek, (week) =>
     days.every((day) => {
       const required = planForSession(sessionExercises, week, day).filter(
         (item) => !item.skipped,
@@ -907,7 +921,7 @@ function DashboardMetric({
   label: string;
   value: string;
   detail: string;
-  progress: number;
+  progress?: number;
   accent: string;
 }) {
   return (
@@ -915,7 +929,7 @@ function DashboardMetric({
       className="beta-metric-card"
       style={
         {
-          '--metric-progress': `${Math.min(100, Math.max(0, progress)) * 3.6}deg`,
+          '--metric-progress': `${Math.min(100, Math.max(0, progress ?? 0)) * 3.6}deg`,
           '--metric-accent': accent,
         } as CSSProperties
       }
@@ -1027,22 +1041,30 @@ export function WorkoutApp() {
   const currentSelection = useRef('');
   currentSelection.current = `${programmeId}|${activeWeek}|${activeDay}|${activeIndex}`;
 
-  const activePhase = activeWeek > 12 ? 2 : 1;
-  const phaseStartWeek = activePhase === 1 ? 1 : 13;
+  const activePhase = phaseForWeek(activeWeek);
   const activeDisplayWeek = displayWeekNumber(activeWeek);
   const activeRoutine = routineForWeek(activeWeek);
   const activeTrainingTips =
     activePhase === 1 ? trainingTips : phase2TrainingTips;
-  const weekDates = useMemo(
-    () => [
-      ...Array.from({ length: 12 }, (_, index) =>
-        weekRange(schedule.phase1StartDate, index),
+  const phaseOneWeeks = useMemo(
+    () =>
+      phaseWeekOptions(
+        1,
+        [
+          ...entries.map((entry) => entry.week),
+          ...sessionExercises.map((entry) => entry.week),
+        ],
+        activeWeek,
       ),
-      ...Array.from({ length: 12 }, (_, index) =>
-        weekRange(schedule.phase2StartDate, index),
+    [entries, sessionExercises, activeWeek],
+  );
+  const activeWeekDates = useMemo(
+    () =>
+      weekRange(
+        activePhase === 1 ? schedule.phase1StartDate : schedule.phase2StartDate,
+        activeDisplayWeek - 1,
       ),
-    ],
-    [schedule],
+    [schedule, activePhase, activeDisplayWeek],
   );
   const entryIndex = useMemo(() => {
     const byWorkout = new Map<string, WorkoutEntry>();
@@ -1055,7 +1077,7 @@ export function WorkoutApp() {
     const completedByPhaseDay = new Map<string, WorkoutEntry[]>();
 
     entries.forEach((entry) => {
-      const phase = entry.week > 12 ? 2 : 1;
+      const phase = phaseForWeek(entry.week);
       byWorkout.set(workoutKey(entry), entry);
       byPhase.get(phase)?.push(entry);
       if (!entry.completed) return;
@@ -1139,23 +1161,21 @@ export function WorkoutApp() {
     : undefined;
   const pastDayWorkouts = useMemo(() => {
     if (!exercise) return [];
-
-    return Array.from(
-      { length: Math.max(0, activeWeek - 1) },
-      (_, index) => activeWeek - index - 1,
-    )
-      .map((week) => ({
-        week,
-        entries: (
-          entryIndex.completedBySession.get(`${week}|${activeDay}`) ?? []
-        ).filter(
-          (entry) =>
-            entry.exerciseOrder === exercise.order &&
-            exerciseNameMatches(entry, exercise.name),
-        ),
-      }))
-      .filter((workout) => workout.entries.length > 0);
-  }, [activeDay, activeWeek, entryIndex, exercise]);
+    const weeks = new Map<number, WorkoutEntry[]>();
+    const past = (
+      entryIndex.completedByExercise.get(
+        `${activePhase}|${activeDay}|${exercise.order}`,
+      ) ?? []
+    ).filter(
+      (entry) =>
+        entry.week < activeWeek &&
+        entry.exerciseOrder === exercise.order &&
+        exerciseNameMatches(entry, exercise.name),
+    );
+    for (const entry of past)
+      weeks.set(entry.week, [...(weeks.get(entry.week) ?? []), entry]);
+    return [...weeks].map(([week, entries]) => ({ week, entries }));
+  }, [activePhase, activeDay, activeWeek, entryIndex, exercise]);
   const activeSets = exercise ? workingSetsForWeek(exercise, activeWeek) : 1;
   const suggestedRestSeconds = exercise
     ? recommendedRestSeconds(exercise.rest)
@@ -1238,7 +1258,10 @@ export function WorkoutApp() {
         const selection = startupSessionForWeek(
           freshEntries,
           freshSessionExercises,
-          scheduledWeekForToday(data.schedule ?? defaultSchedule, unlocked),
+          scheduledWeekForToday(
+            data.schedule ?? defaultSchedule,
+            unlocked && prefersPhaseTwo(freshEntries, nextProgrammeId),
+          ),
         );
         setActiveWeek(selection.week);
         setActiveDay(selection.day);
@@ -1370,7 +1393,8 @@ export function WorkoutApp() {
         cachedSessionExercises,
         scheduledWeekForToday(
           cachedSchedule ?? defaultSchedule,
-          cachedPhaseTwoUnlocked,
+          cachedPhaseTwoUnlocked &&
+            prefersPhaseTwo(cachedEntries, programmeIdRef.current),
         ),
       );
       setActiveWeek(startupSession.week);
@@ -1655,8 +1679,8 @@ export function WorkoutApp() {
   }
 
   const phaseOneWeeklySummaries = useMemo(
-    () => weeklySummariesForPhase(entries, sessionExercises, 1),
-    [entries, sessionExercises],
+    () => weeklySummariesForPhase(entries, sessionExercises, 1, phaseOneWeeks),
+    [entries, sessionExercises, phaseOneWeeks],
   );
   const phaseTwoWeeklySummaries = useMemo(
     () => weeklySummariesForPhase(entries, sessionExercises, 13),
@@ -1664,16 +1688,18 @@ export function WorkoutApp() {
   );
   const weeklySummaries =
     activePhase === 1 ? phaseOneWeeklySummaries : phaseTwoWeeklySummaries;
-  const phaseOneSessions = phaseOneWeeklySummaries.reduce(
-    (sum, week) => sum + week.sessions,
-    0,
-  );
+  const phaseOneSessions = phaseOneWeeklySummaries
+    .filter((week) => week.week <= 12)
+    .reduce((sum, week) => sum + week.sessions, 0);
   const phaseTwoUnlocked = phaseOneSessions === 36;
 
   useLayoutEffect(() => {
     if (loading || startupWeekApplied.current) return;
     startupWeekApplied.current = true;
-    const scheduledWeek = scheduledWeekForToday(schedule, phaseTwoUnlocked);
+    const scheduledWeek = scheduledWeekForToday(
+      schedule,
+      phaseTwoUnlocked && prefersPhaseTwo(entries, programmeIdRef.current),
+    );
     const startupSession = startupSessionForWeek(
       entries,
       sessionExercises,
@@ -1697,7 +1723,9 @@ export function WorkoutApp() {
     markStartup('session-recovered');
   }, [entries, loading, phaseTwoUnlocked, schedule, sessionExercises]);
 
-  const currentSummary = weeklySummaries[activeDisplayWeek - 1];
+  const currentSummary = weeklySummaries.find(
+    (week) => week.storageWeek === activeWeek,
+  )!;
   const sessionsDone = currentSummary.sessions;
   const weeklyPercent = Math.round((sessionsDone / 3) * 100);
   const totalVolume = weeklySummaries.reduce(
@@ -1741,10 +1769,11 @@ export function WorkoutApp() {
     [sessionSummaryOpen, currentSessionEntries, phaseEntries],
   );
   const previousSessionVolume =
-    activeWeek > phaseStartWeek
+    activeDisplayWeek > 1
       ? (
-          entryIndex.completedBySession.get(`${activeWeek - 1}|${activeDay}`) ??
-          []
+          entryIndex.completedBySession.get(
+            `${previousTrainingWeek(activeWeek)}|${activeDay}`,
+          ) ?? []
         ).reduce((sum, entry) => sum + entryVolume(entry), 0)
       : 0;
   const sessionTimes = currentSessionEntries
@@ -1765,8 +1794,23 @@ export function WorkoutApp() {
       setPhaseUnlockOpen(true);
       return;
     }
+    try {
+      window.localStorage.setItem(
+        `liftline.selected-phase.v1:${programmeId}`,
+        String(phase),
+      );
+    } catch {
+      /* Selection still works without device storage. */
+    }
     if (phase === activePhase) return;
-    const nextWeek = phase === 1 ? 12 : 13;
+    const nextWeek =
+      phase === 1
+        ? startupSessionForWeek(
+            entries,
+            sessionExercises,
+            scheduledWeekForToday(schedule, false),
+          ).week
+        : 13;
     setActiveWeek(nextWeek);
     setActiveDay(
       firstIncompleteDayForWeek(entries, sessionExercises, nextWeek),
@@ -1776,7 +1820,7 @@ export function WorkoutApp() {
     setView('today');
     setNotice(
       phase === 1
-        ? 'Phase 1 opened. Your original 12-week history is unchanged.'
+        ? 'Phase 1 is open-ended. Keep building at your own pace.'
         : 'Phase 2 unlocked. Your specialized full-body block is ready.',
     );
   }
@@ -1799,17 +1843,16 @@ export function WorkoutApp() {
 
     if (nextDay) {
       setActiveDay(nextDay);
-    } else if (activeWeek === 12 && !phaseTwoUnlocked) {
-      setNotice(
-        'Phase 2 will unlock after every Phase 1 training day is complete.',
-      );
-      return;
-    } else if (activeWeek < 24) {
-      setActiveWeek((week) => week + 1);
-      setActiveDay('A');
     } else {
-      setNotice('You completed every Liftline training session.');
-      return;
+      const nextWeek = nextTrainingWeek(activeWeek);
+      if (nextWeek === null) {
+        setNotice(
+          'Phase 2 is complete. You can return to ongoing Phase 1 from the menu.',
+        );
+        return;
+      }
+      setActiveWeek(nextWeek);
+      setActiveDay('A');
     }
 
     setActiveIndex(0);
@@ -2592,15 +2635,19 @@ export function WorkoutApp() {
                     </span>
                     <span className="block font-sans text-sm font-normal text-muted-foreground">
                       {activePhase === 1
-                        ? `${phaseOneSessions} of 36 Phase 1 sessions complete`
+                        ? `${totalSessions} Phase 1 sessions logged · ongoing`
                         : 'Specialized full-body progression'}
                     </span>
-                    <span className="block h-1.5 overflow-hidden rounded-full bg-muted">
-                      <span
-                        className="block h-full rounded-full bg-primary"
-                        style={{ width: `${(phaseOneSessions / 36) * 100}%` }}
-                      />
-                    </span>
+                    {activePhase === 2 && (
+                      <span className="block h-1.5 overflow-hidden rounded-full bg-muted">
+                        <span
+                          className="block h-full rounded-full bg-primary"
+                          style={{
+                            width: `${Math.min(100, (phaseOneSessions / 36) * 100)}%`,
+                          }}
+                        />
+                      </span>
+                    )}
                   </div>
                   <button
                     type="button"
@@ -2837,12 +2884,12 @@ export function WorkoutApp() {
                             }
                             className="h-11 appearance-none rounded-2xl border bg-card py-2 pl-4 pr-12 text-base font-semibold shadow-sm outline-none focus:ring-3 focus:ring-ring/30"
                           >
-                            {Array.from({ length: 12 }, (_, index) => (
-                              <option
-                                key={phaseStartWeek + index}
-                                value={phaseStartWeek + index}
-                              >
-                                Week {index + 1}
+                            {(activePhase === 1
+                              ? phaseOneWeeks
+                              : phaseWeekOptions(2, [])
+                            ).map((week) => (
+                              <option key={week} value={week}>
+                                Week {displayWeekNumber(week)}
                               </option>
                             ))}
                           </select>
@@ -2852,7 +2899,7 @@ export function WorkoutApp() {
                           />
                         </span>
                         <span className="text-sm font-medium text-muted-foreground">
-                          · {weekDates[activeWeek - 1]}
+                          · {activeWeekDates}
                         </span>
                       </div>
                     </div>
@@ -2916,9 +2963,17 @@ export function WorkoutApp() {
                     <DashboardMetric
                       icon={Medal}
                       label="Phase"
-                      value={`${totalSessions}/36`}
+                      value={
+                        activePhase === 1
+                          ? String(totalSessions)
+                          : `${totalSessions}/36`
+                      }
                       detail="sessions"
-                      progress={(totalSessions / 36) * 100}
+                      progress={
+                        activePhase === 1
+                          ? undefined
+                          : (totalSessions / 36) * 100
+                      }
                       accent="#9a4ff4"
                     />
                   </div>
@@ -3388,7 +3443,7 @@ export function WorkoutApp() {
                                       >
                                         <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                                           <h3 className="font-sans text-sm font-semibold">
-                                            Phase {workout.week > 12 ? 2 : 1}
+                                            Phase {phaseForWeek(workout.week)}
                                             {' · Week '}
                                             {displayWeekNumber(workout.week)}
                                           </h3>
@@ -3757,7 +3812,7 @@ export function WorkoutApp() {
                       Phase {activePhase} · Week {activeDisplayWeek}
                     </CardTitle>
                     <CardDescription className="font-sans">
-                      {weekDates[activeWeek - 1]}
+                      {activeWeekDates}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-3">
@@ -3951,10 +4006,11 @@ export function WorkoutApp() {
                   <span className="grid size-9 place-items-center rounded-xl bg-accent text-primary">
                     <LockKeyhole className="size-5" />
                   </span>
-                  Phase 2 unlocks after Phase 1
+                  Optional Phase 2
                 </DialogTitle>
                 <DialogDescription className="font-sans leading-relaxed">
-                  Finish all three sessions in each of the 12 Phase 1 weeks.
+                  Phase 1 keeps going for as many weeks as you like. Phase 2 is
+                  optional and unlocks after the first 12 weeks are complete.
                   Your existing workout history will remain available when the
                   next programme opens.
                 </DialogDescription>
@@ -3977,7 +4033,9 @@ export function WorkoutApp() {
                   <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
                     <div
                       className="h-full rounded-full bg-primary transition-[width]"
-                      style={{ width: `${(phaseOneSessions / 36) * 100}%` }}
+                      style={{
+                        width: `${Math.min(100, (phaseOneSessions / 36) * 100)}%`,
+                      }}
                     />
                   </div>
                 </div>

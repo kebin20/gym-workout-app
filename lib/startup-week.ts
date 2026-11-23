@@ -1,12 +1,23 @@
+import {
+  displayTrainingWeek,
+  nextTrainingWeek,
+  phaseForWeek,
+  storageWeekForPhase,
+} from './training-weeks';
+
 export function findStartupWeek(
   scheduledWeek: number,
   isWeekComplete: (week: number) => boolean,
 ) {
-  const phaseStartWeek = scheduledWeek > 12 ? 13 : 1;
-
-  for (let week = phaseStartWeek; week <= scheduledWeek; week += 1) {
+  const phase = phaseForWeek(scheduledWeek);
+  for (
+    let display = 1;
+    display <= displayTrainingWeek(scheduledWeek);
+    display++
+  ) {
+    const week = storageWeekForPhase(phase, display);
     if (!isWeekComplete(week)) return week;
   }
 
-  return scheduledWeek;
+  return nextTrainingWeek(scheduledWeek) ?? scheduledWeek;
 }

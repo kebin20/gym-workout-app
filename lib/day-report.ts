@@ -1,4 +1,9 @@
 import {
+  phaseForWeek,
+  validTrainingWeek,
+  previousTrainingWeek,
+} from './training-weeks';
+import {
   displayWeekNumber,
   correctedExerciseName,
   type TrainingDay,
@@ -19,7 +24,7 @@ export function reportSets(entry: WorkoutEntry): ReportSet[] {
     return weight === null && reps === null ? [] : [{ set, weight, reps, rir }];
   });
 }
-export const reportPhase = (week: number) => (week > 12 ? 2 : 1);
+export const reportPhase = phaseForWeek;
 export const reportWeek = (week: number) =>
   `P${reportPhase(week)} W${displayWeekNumber(week)}`;
 export const reportWeekLabel = (week: number) =>
@@ -59,16 +64,13 @@ export function buildDayReport(
   entries: WorkoutEntry[],
   scope: DayReportScope = { kind: 'all' },
 ) {
-  if (
-    scope.kind === 'recent' &&
-    (!Number.isInteger(scope.currentWeek) ||
-      scope.currentWeek < 1 ||
-      scope.currentWeek > 24)
-  )
+  if (scope.kind === 'recent' && !validTrainingWeek(scope.currentWeek))
     throw new Error('Choose a valid programme week for this report.');
   const selectedWeeks =
     scope.kind === 'recent'
-      ? [scope.currentWeek - 1, scope.currentWeek].filter((week) => week >= 1)
+      ? [previousTrainingWeek(scope.currentWeek), scope.currentWeek].filter(
+          (week): week is number => week !== null,
+        )
       : null;
   // Include partial saved logs and device-local queued saves, but not undo tombstones.
   const byKey = new Map<string, WorkoutEntry>();
@@ -95,7 +97,12 @@ export function buildDayReport(
         entry.notes?.trim() ||
         reportMetrics(entry).workingSets > 0,
     )
-    .sort((a, b) => a.week - b.week || a.exerciseOrder - b.exerciseOrder);
+    .sort(
+      (a, b) =>
+        reportPhase(a.week) - reportPhase(b.week) ||
+        displayWeekNumber(a.week) - displayWeekNumber(b.week) ||
+        a.exerciseOrder - b.exerciseOrder,
+    );
   const byWeek = new Map<number, WorkoutEntry[]>();
   const byExercise = new Map<string, WorkoutEntry[]>();
   for (const entry of records) {
