@@ -1,4 +1,6 @@
 'use client';
+import { phaseForWeek, displayTrainingWeek } from '@/lib/training-weeks';
+
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/liftline-form-controls';
@@ -208,13 +210,11 @@ export default function ProgrammeManager({
                       className="mb-2 rounded-lg border p-3"
                     >
                       <summary className="cursor-pointer">
-                        Phase {entry.week > 12 ? 2 : 1} · Week{' '}
-                        {entry.week > 12 ? entry.week - 12 : entry.week} ·{' '}
-                        {entry.exercise}
+                        Phase {phaseForWeek(entry.week)} · Week{' '}
+                        {displayTrainingWeek(entry.week)} · {entry.exercise}
                       </summary>
                       <p className="mt-2 text-sm">
-                        {entry.target} ·{' '}
-                        {formatWorkoutDate(entry.completedAt)}
+                        {entry.target} · {formatWorkoutDate(entry.completedAt)}
                       </p>
                       {reportSets(entry).map((set) => (
                         <p key={set.set} className="text-sm">
@@ -268,7 +268,7 @@ export default function ProgrammeManager({
               )}
             </div>
             <section className="mt-4 space-y-3 rounded-xl border p-4">
-              <h3 className="font-semibold">Start another 24-week programme</h3>
+              <h3 className="font-semibold">Start a new programme</h3>
               <p className="text-sm text-muted-foreground">
                 This archives your active main programme and starts Phase 1,
                 Week 1 with the default routine. It never runs automatically.

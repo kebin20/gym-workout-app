@@ -27,6 +27,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { nextTrainingWeek } from '@/lib/training-weeks';
 import { defaultSessionPlan } from '@/lib/session-plan';
 import type { TrainingDay } from '@/lib/routine';
 import type { SessionExercise, WorkoutEntry } from '@/lib/workout-types';
@@ -436,17 +437,12 @@ export function SessionSummaryDialog({
                 ? 'Continue to Day B'
                 : activeDay === 'B'
                   ? 'Continue to Day C'
-                  : activeWeek === 12 && phaseTwoUnlocked
-                    ? 'Start Phase 2'
-                    : activeWeek < 24 && activeWeek !== 12
-                      ? 'Continue to next week'
-                      : activeWeek === 24
-                        ? 'Finish programme'
-                        : 'Done'
+                  : nextTrainingWeek(activeWeek) !== null
+                    ? 'Continue to next week'
+                    : 'Finish Phase 2'
               : 'Done'}
             {sessionCelebrationPending &&
-              activeWeek < 24 &&
-              (activeWeek !== 12 || phaseTwoUnlocked) && (
+              (activeDay !== 'C' || nextTrainingWeek(activeWeek) !== null) && (
                 <ChevronRight data-icon="inline-end" />
               )}
           </Button>

@@ -1,3 +1,4 @@
+import { validTrainingWeek } from '@/lib/training-weeks';
 import { env } from 'cloudflare:workers';
 import {
   activeProgrammeId,
@@ -86,12 +87,7 @@ export async function POST(request: Request) {
     const day = (
       typeof body.day === 'string' ? body.day : ''
     ).toUpperCase() as TrainingDay;
-    if (
-      !Number.isInteger(week) ||
-      week < 1 ||
-      week > 24 ||
-      !['A', 'B', 'C'].includes(day)
-    ) {
+    if (!validTrainingWeek(week) || !['A', 'B', 'C'].includes(day)) {
       return Response.json(
         { error: 'Invalid workout session.' },
         { status: 400 },

@@ -98,6 +98,7 @@ function fixture(snapshot) {
     weeklySummariesForPhase: () => [],
     startupSessionForWeek: () => ({ week: 1, day: 'A' }),
     scheduledWeekForToday: () => 1,
+    prefersPhaseTwo: () => false,
     resumeDraftIndex: () => 0,
     planForSession: () => [],
     defaultSchedule: {},
@@ -190,7 +191,11 @@ test('only a completed authoritative snapshot write keeps its supplied cursor an
 test('refresh rejects a cache from another programme and requests a full authoritative snapshot', async () => {
   const stale = [entry(1, 50)];
   const fresh = [entry(2, 70)];
-  const f = fixture({ programmeId: 'old-programme', syncedAt: '22', entries: stale });
+  const f = fixture({
+    programmeId: 'old-programme',
+    syncedAt: '22',
+    entries: stale,
+  });
   await f.refresh(stale, '22', 'old-programme', {
     programmeId: 'initial',
     partial: false,
@@ -206,7 +211,11 @@ test('refresh rejects a cache from another programme and requests a full authori
 
 test('matching programme cache permits a delta and preserves its unchanged records', async () => {
   const existing = [entry(1, 70), entry(2, 30)];
-  const f = fixture({ programmeId: 'initial', syncedAt: '22', entries: existing });
+  const f = fixture({
+    programmeId: 'initial',
+    syncedAt: '22',
+    entries: existing,
+  });
   await f.refresh(existing, '22', 'initial', {
     programmeId: 'initial',
     partial: true,
@@ -307,7 +316,11 @@ test('a read finishing after typing starts defers its programme and plan, retain
   f.draftDirty = false;
   blocked = false;
   coordinator.resumePending();
-  assert.equal(timers.size, 1, 'finishing the draft resumes the pending intent');
+  assert.equal(
+    timers.size,
+    1,
+    'finishing the draft resumes the pending intent',
+  );
   const run = timers.get(1);
   timers.delete(1);
   run();

@@ -1,3 +1,4 @@
+import { validTrainingWeek } from '@/lib/training-weeks';
 import { env } from 'cloudflare:workers';
 
 type ReadinessPayload = {
@@ -62,9 +63,7 @@ export async function POST(request: Request) {
     const soreness = score(body.soreness);
     const jointComfort = score(body.jointComfort);
     if (
-      !Number.isInteger(week) ||
-      week < 1 ||
-      week > 24 ||
+      !validTrainingWeek(week) ||
       !['A', 'B', 'C'].includes(day) ||
       sleep == null ||
       energy == null ||

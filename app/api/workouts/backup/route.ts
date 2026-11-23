@@ -1,3 +1,4 @@
+import { validTrainingWeek } from '@/lib/training-weeks';
 import { env } from 'cloudflare:workers';
 import {
   activeProgrammeId,
@@ -123,9 +124,7 @@ function normalizeReadiness(value: unknown): ReadinessBackup | null {
   ].map(Number);
   if (
     !checkedAt ||
-    !Number.isInteger(week) ||
-    week < 1 ||
-    week > 24 ||
+    !validTrainingWeek(week) ||
     !validDay(check.day) ||
     scores.some((score) => !Number.isInteger(score) || score < 1 || score > 5)
   )
@@ -152,9 +151,7 @@ function normalizeWorkout(value: unknown): WorkoutEntry | null {
   const week = Number(entry.week);
   const exerciseOrder = Number(entry.exerciseOrder);
   if (
-    !Number.isInteger(week) ||
-    week < 1 ||
-    week > 24 ||
+    !validTrainingWeek(week) ||
     !validDay(entry.day) ||
     !Number.isInteger(exerciseOrder) ||
     exerciseOrder < 1 ||
@@ -223,9 +220,7 @@ function normalizeSessionExercise(value: unknown): SessionExercise | null {
   const displayOrder = Number(exercise.displayOrder);
   const targetSets = Number(exercise.targetSets);
   if (
-    !Number.isInteger(week) ||
-    week < 1 ||
-    week > 24 ||
+    !validTrainingWeek(week) ||
     !validDay(exercise.day) ||
     !Number.isInteger(exerciseOrder) ||
     exerciseOrder < 1 ||

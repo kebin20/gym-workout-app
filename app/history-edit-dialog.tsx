@@ -1,4 +1,5 @@
 'use client';
+import { phaseForWeek } from '@/lib/training-weeks';
 
 import { useRef, useState } from 'react';
 import { Loader2, Pencil } from 'lucide-react';
@@ -130,7 +131,7 @@ export default function HistoryEditDialog({
               exercise
             </DialogTitle>
             <DialogDescription className="font-sans">
-              Phase {entry.week > 12 ? 2 : 1} · Week{' '}
+              Phase {phaseForWeek(entry.week)} · Week{' '}
               {displayWeekNumber(entry.week)} · Day {entry.day}
               <br />
               {entry.exercise}. The original date and completion status stay

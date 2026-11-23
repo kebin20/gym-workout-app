@@ -1,3 +1,4 @@
+import { validTrainingWeek } from '@/lib/training-weeks';
 import { env, waitUntil } from 'cloudflare:workers';
 import {
   activeProgrammeId,
@@ -303,9 +304,7 @@ export async function POST(request: Request) {
     const exerciseOrder = Number(body.exerciseOrder);
     const day = body.day;
     if (
-      !Number.isInteger(week) ||
-      week < 1 ||
-      week > 24 ||
+      !validTrainingWeek(week) ||
       !['A', 'B', 'C'].includes(String(day)) ||
       !Number.isInteger(exerciseOrder) ||
       exerciseOrder < 1 ||

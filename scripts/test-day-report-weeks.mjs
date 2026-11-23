@@ -98,7 +98,13 @@ test('week one, cross-phase week 13, and missing-week reports retain explicit sc
     const empty = buildDayReport('A', [], { kind: 'recent', currentWeek: 6 });
     assert.equal(empty.recordedSessions, 0);
     assert.equal(empty.sessions.length, 2);
-    for (const currentWeek of [0, 25, 6.5, NaN])
+    for (const currentWeek of [
+      0,
+      6.5,
+      NaN,
+      Infinity,
+      Number.MAX_SAFE_INTEGER + 1,
+    ])
       assert.throws(
         () => buildDayReport('A', [], { kind: 'recent', currentWeek }),
         /valid programme week/,
@@ -141,8 +147,8 @@ test('report-range selector stays accessible, captures the selected app week and
               }
             : name === '@/components/ui/button'
               ? { Button: () => null }
-              : name === '@/lib/day-report'
-                ? f.load('lib/day-report.ts')
+              : name.startsWith('@/lib/')
+                ? f.load(`${name.slice(2)}.ts`)
                 : require(name),
       },
     );

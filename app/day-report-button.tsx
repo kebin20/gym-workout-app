@@ -7,6 +7,8 @@ import {
   reportWeekLabel,
   type DayReportScope,
 } from '@/lib/day-report';
+import { displayWeekNumber } from '@/lib/routine';
+import { previousTrainingWeek } from '@/lib/training-weeks';
 import type { TrainingDay } from '@/lib/routine';
 import type { WorkoutEntry } from '@/lib/workout-types';
 
@@ -63,7 +65,7 @@ export default function DayReportButton({
       link.href = url;
       link.download =
         selectedScope.kind === 'recent'
-          ? `liftline-day-${day.toLowerCase()}-weeks-${Math.max(1, selectedScope.currentWeek - 1)}-${selectedScope.currentWeek}.pdf`
+          ? `liftline-day-${day.toLowerCase()}-weeks-${displayWeekNumber(previousTrainingWeek(selectedScope.currentWeek) ?? selectedScope.currentWeek)}-${displayWeekNumber(selectedScope.currentWeek)}.pdf`
           : `liftline-day-${day.toLowerCase()}-history.pdf`;
       document.body.appendChild(link);
       link.click();

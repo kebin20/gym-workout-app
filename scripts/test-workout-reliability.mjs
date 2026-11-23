@@ -28,7 +28,9 @@ import {
   latestDraftKey,
 } from '../lib/exercise-drafts.ts';
 import { sessionProgress } from '../lib/session-progress.ts';
-import { findStartupWeek } from '../lib/startup-week.ts';
+const startupWeekFixture = routeFixture();
+const { findStartupWeek } = startupWeekFixture.load('lib/startup-week.ts');
+startupWeekFixture.close();
 import {
   removeLastDraftSet,
   restoreRemovedDraftSet,

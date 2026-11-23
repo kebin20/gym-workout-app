@@ -183,9 +183,10 @@ test('lazy recap keeps every set and continuation label without sorting the call
       [{ activeDay: 'B' }, 'Continue to Day C'],
       [
         { activeDay: 'C', activeWeek: 12, phaseTwoUnlocked: true },
-        'Start Phase 2',
+        'Continue to next week',
       ],
-      [{ activeDay: 'C', activeWeek: 24 }, 'Finish programme'],
+      [{ activeDay: 'C', activeWeek: 25 }, 'Continue to next week'],
+      [{ activeDay: 'C', activeWeek: 24 }, 'Finish Phase 2'],
       [{ sessionCelebrationPending: false }, 'Done'],
     ]) {
       const tree = SessionSummaryDialog({ ...props, ...extra });
@@ -201,7 +202,7 @@ test('lazy recap keeps every set and continuation label without sorting the call
         .props.onClick();
       tree.props.onOpenChange(false);
     }
-    assert.equal(closed, 10);
+    assert.equal(closed, 12);
   } finally {
     fixture.close();
   }

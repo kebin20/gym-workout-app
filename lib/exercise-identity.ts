@@ -1,3 +1,4 @@
+import { phaseForWeek } from './training-weeks';
 import { correctedExerciseName } from './routine';
 import type { WorkoutEntry } from './workout-types';
 
@@ -11,7 +12,7 @@ export function exerciseIdentity(entry: WorkoutEntry) {
     .trim()
     .toLowerCase()
     .replace(/\s+/g, ' ');
-  return `${entry.week > 12 ? 2 : 1}|${entry.day}|${entry.exerciseOrder}|${name}`;
+  return `${phaseForWeek(entry.week)}|${entry.day}|${entry.exerciseOrder}|${name}`;
 }
 
 export function exerciseNameMatches(entry: WorkoutEntry, name: string) {
