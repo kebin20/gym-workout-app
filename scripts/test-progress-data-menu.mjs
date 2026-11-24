@@ -484,7 +484,7 @@ test('lazy popup uses supported Base UI anchor, keyboard/focus management and tr
 test('all Data actions, optional visibility and original disabled states survive lazy loading; action focus cannot steal a new dialog', () => {
   const actions = [
     ['Import from Google Sheet', 'previewGoogleSheetImport'],
-    ['Send to Google Sheet', 'syncGoogleSheet'],
+    ['Send Weeks 1–12 to Google Sheet', 'syncGoogleSheet'],
     ['Download backup', 'downloadBackup'],
     ['Restore backup', 'onRestoreBackup'],
     ['Export device recovery', 'onDeviceRecovery'],
@@ -548,7 +548,7 @@ test('all Data actions, optional visibility and original disabled states survive
       );
     for (const flag of ['syncingSheet', 'loading'])
       assert.equal(
-        byLabel({ [flag]: true }, 'Send to Google Sheet').props.disabled,
+        byLabel({ [flag]: true }, 'Send Weeks 1–12 to Google Sheet').props.disabled,
         true,
       );
     for (const label of ['Download backup', 'Restore backup'])

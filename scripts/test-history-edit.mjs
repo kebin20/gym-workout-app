@@ -855,3 +855,39 @@ test('Sheet transport preserves the completion calendar day and refuses undated 
   }
   assert.equal(requests.length, 1);
 });
+
+test('manual Sheet export sends dated rows and identifies skipped exercises without marking them synced', async () => {
+  const sent = [];
+  const f = routeFixture({
+    syncWorkoutEntries: async (entries) => {
+      sent.push(...entries);
+      return { ok: true, configured: true, synced: entries.length };
+    },
+  });
+  try {
+    seed(f, { week: 1, status: 'pending' });
+    seed(f, { week: 2, date: null, status: 'pending' });
+    seed(f, { week: 25, status: 'not_applicable' });
+    const response = await f
+      .load('app/api/workouts/sync-sheet/route.ts')
+      .POST();
+    const result = await response.json();
+    assert.equal(response.status, 200);
+    assert.deepEqual(
+      sent.map((row) => row.week),
+      [1],
+    );
+    assert.deepEqual(result.skipped, [
+      'Week 2 Day A · Saved machine substitution',
+    ]);
+    assert.deepEqual(
+      f.sqlite
+        .prepare('SELECT sync_status FROM workout_entries ORDER BY week')
+        .all()
+        .map((r) => r.sync_status),
+      ['synced', 'pending', 'not_applicable'],
+    );
+  } finally {
+    f.close();
+  }
+});

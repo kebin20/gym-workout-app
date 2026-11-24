@@ -319,6 +319,15 @@ export default function ProgressView({
 }: Props) {
   const desktopHistory = useHistoryDesktopLayout();
   const [visitedHistoryDays, setHistoryApi] = useHistoryDayMounts();
+  const [allWeeks, setAllWeeks] = useState(false);
+  const latestWeek = phaseEntries.reduce(
+    (latest, entry) => Math.max(latest, entry.week),
+    activeWeek ?? 1,
+  );
+  const recentWeeks = weeklySummaries
+    .filter((week) => week.storageWeek <= latestWeek)
+    .slice(-12);
+  const visibleWeeks = allWeeks ? weeklySummaries : recentWeeks;
   const [startupOpen, setStartupOpen] = useState(false);
   const [editing, setEditing] = useState<WorkoutEntry | null>(null);
   const editHistory = onSaveHistory
@@ -474,6 +483,18 @@ export default function ProgressView({
         <Card>
           <CardHeader>
             <CardTitle className="font-sans">Weekly training volume</CardTitle>
+            <div className="inline-flex items-center gap-2 text-sm">
+              <label htmlFor="progress-week-range">Week range</label>
+              <select
+                className="min-h-11 rounded-lg border bg-background px-2 text-base"
+                id="progress-week-range"
+                value={allWeeks ? 'all' : 'recent'}
+                onChange={(e) => setAllWeeks(e.target.value === 'all')}
+              >
+                <option value="recent">Recent 12 weeks</option>
+                <option value="all">All weeks</option>
+              </select>
+            </div>
             <CardDescription className="font-sans">
               Weight × reps across all logged sets
             </CardDescription>
@@ -486,7 +507,7 @@ export default function ProgressView({
                 </div>
               }
             >
-              <ProgressChart data={weeklySummaries} />
+              <ProgressChart data={visibleWeeks} />
             </Suspense>
           </CardContent>
         </Card>
@@ -498,7 +519,7 @@ export default function ProgressView({
             </CardDescription>
           </CardHeader>
           <CardContent className="max-h-[345px] space-y-3 overflow-y-auto pr-1">
-            {weeklySummaries.map((week) => (
+            {[...visibleWeeks].reverse().map((week) => (
               <button
                 type="button"
                 key={week.week}

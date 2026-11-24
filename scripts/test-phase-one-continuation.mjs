@@ -14,6 +14,7 @@ function client(f) {
     ts.ScriptKind.TSX,
   );
   const names = [
+    'resumeDraftIndex',
     'scheduledWeekForToday',
     'weeklySummariesForPhase',
     'firstIncompleteDayForWeek',
@@ -277,18 +278,16 @@ test('continuation saves, corrections, session edits, readiness and backups reta
     assert.equal(corrected.completedAt, entry.completedAt);
     assert.equal(
       (
-        await f
-          .load('app/api/readiness/route.ts')
-          .POST(
-            request({
-              week: 25,
-              day: 'A',
-              sleep: 4,
-              energy: 4,
-              soreness: 2,
-              jointComfort: 4,
-            }),
-          )
+        await f.load('app/api/readiness/route.ts').POST(
+          request({
+            week: 25,
+            day: 'A',
+            sleep: 4,
+            energy: 4,
+            soreness: 2,
+            jointComfort: 4,
+          }),
+        )
       ).status,
       200,
     );
@@ -344,6 +343,30 @@ test('continuation trends and recent PDF scope join Phase 1 Week 12 to Week 13 w
     assert.equal(report.exercises[0].phase, 1);
     assert.equal(exerciseIdentity(rows[0]), exerciseIdentity(rows[3]));
     assert.notEqual(exerciseIdentity(rows[1]), exerciseIdentity(rows[3]));
+  } finally {
+    f.close();
+  }
+});
+
+test('resume prefers a matching draft then the first unfinished non-skipped exercise', () => {
+  const f = routeFixture();
+  try {
+    const c = client(f);
+    const plan = [
+      { order: 1, name: 'Squat' },
+      { order: 2, skipped: true, name: 'Skipped' },
+      { order: 3, name: 'Row' },
+      { order: 4, name: 'Press' },
+    ];
+    const rows = [
+      { week: 25, day: 'A', exerciseOrder: 1, completed: true },
+      { week: 13, day: 'A', exerciseOrder: 3, completed: true },
+    ];
+    assert.equal(c.resumeDraftIndex(plan, 25, 'A', rows), 2);
+    c.ctx.window = { localStorage: {} };
+    c.ctx.latestDraftKey = () =>
+      c.ctx.workoutDraftKey(25, 'A', plan[3], 'initial');
+    assert.equal(c.resumeDraftIndex(plan, 25, 'A', rows), 3);
   } finally {
     f.close();
   }

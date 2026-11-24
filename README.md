@@ -10,7 +10,7 @@ Made with ChatGPT Codex
 
 The production app is hosted at [liftline-cloudflare-production.kaikei-app.workers.dev](https://liftline-cloudflare-production.kaikei-app.workers.dev/).
 
-Current production version: **v3.19.0**
+Current production version: **v3.19.1**
 
 The experimental [bundled iOS foundation](docs/native-ios.md) is included in the repository, but is not ready for personal logging: native devices display a setup guard until the storage/connection choice and real-device tests are complete. The private web app keeps its existing storage and functionality, with faster cached startup. See the [release rollback notes](docs/rollback.md) for the pre-release backup.
 

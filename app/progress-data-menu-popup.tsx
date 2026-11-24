@@ -114,7 +114,7 @@ export default function ProgressDataMenuPopup(props: ProgressDataPopupProps) {
                   disabled={props.syncingSheet || props.loading}
                   onClick={run(props.syncGoogleSheet)}
                 >
-                  <FileSpreadsheet /> Send to Google Sheet
+                  <FileSpreadsheet /> Send Weeks 1–12 to Google Sheet
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
               </DropdownMenuGroup>
