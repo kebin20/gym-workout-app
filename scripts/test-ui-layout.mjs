@@ -101,7 +101,7 @@ test('deferred history retains week editing, earlier disclosures and adaptive-he
 test('Today past-session history is limited to the selected exercise', () => {
   const app = source('app/workout-app.tsx');
   assert.match(app, /All past sessions/);
-  assert.match(app, /Show all past sessions for \$\{exercise.name\}/);
+  assert.match(app, /Show all past sessions for \$\{name\}/);
   assert.match(
     app,
     /entry\.exerciseOrder === exercise\.order\s*&&\s*exerciseNameMatches\(entry, exercise\.name\)/,

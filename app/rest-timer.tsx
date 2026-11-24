@@ -7,9 +7,11 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useRef,
   useState,
   useSyncExternalStore,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { Bell, Clock3, Pause, Play, TimerReset } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type {
@@ -291,6 +293,9 @@ const RestTimer = forwardRef<
   },
   ref,
 ) {
+  const timerCard = useRef<HTMLDivElement>(null);
+  const countdown = useRef<HTMLTimeElement>(null);
+  const [headerSlot, setHeaderSlot] = useState<HTMLElement | null>(null);
   const state = useSyncExternalStore(subscribe, snapshot, serverSnapshot);
   const [now, setNow] = useState(0);
   const alertMessage = useSyncExternalStore(subscribe, alertSnapshot, () => '');
@@ -308,6 +313,46 @@ const RestTimer = forwardRef<
     ? remainingSeconds(active, now || Date.now())
     : suggestedSeconds;
   const running = active?.endsAt !== null && active?.endsAt !== undefined;
+
+  useEffect(() => {
+    const slot = document.getElementById('rest-header-slot');
+    const header = slot?.closest('header');
+    const target = countdown.current;
+    if (
+      !running ||
+      !slot ||
+      !header ||
+      !target ||
+      typeof IntersectionObserver === 'undefined'
+    )
+      return;
+    const nav = document.querySelector('.beta-bottom-nav');
+    let observer: IntersectionObserver;
+    const observe = () => {
+      observer?.disconnect();
+      observer = new IntersectionObserver(
+        ([entry]) => {
+          setHeaderSlot(entry.isIntersecting ? null : slot);
+        },
+        {
+          rootMargin: `-${Math.ceil(header.getBoundingClientRect().height)}px 0px -${Math.ceil(nav?.getBoundingClientRect().height ?? 0)}px 0px`,
+        },
+      );
+      observer.observe(target);
+    };
+    observe();
+    const resize =
+      typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(observe)
+        : null;
+    resize?.observe(header);
+    if (nav) resize?.observe(nav);
+    return () => {
+      observer.disconnect();
+      resize?.disconnect();
+      setHeaderSlot(null);
+    };
+  }, [running]);
 
   useEffect(() => {
     notificationIcon = notificationIconHref;
@@ -377,7 +422,32 @@ const RestTimer = forwardRef<
     } else start();
   };
   return (
-    <div className="mt-3 rounded-xl border border-primary/15 bg-background/90 p-3 shadow-sm shadow-slate-900/5">
+    <div
+      ref={timerCard}
+      tabIndex={-1}
+      className="mt-3 rounded-xl border border-primary/15 bg-background/90 p-3 shadow-sm shadow-slate-900/5"
+    >
+      {running &&
+        headerSlot &&
+        createPortal(
+          <button
+            type="button"
+            aria-label={`Return to rest timer, ${formatTimer(seconds)} remaining`}
+            className="mt-1 inline-flex min-h-11 items-center gap-1.5 rounded-xl border bg-card px-3 text-sm font-semibold tabular-nums text-primary shadow-sm"
+            onClick={() => {
+              timerCard.current?.focus({ preventScroll: true });
+              timerCard.current?.scrollIntoView({
+                block: 'center',
+                behavior: 'instant',
+              });
+            }}
+          >
+            <Clock3 aria-hidden="true" className="size-4" />
+            {formatTimer(seconds)}
+          </button>,
+          headerSlot,
+        )}
+
       <div className="grid grid-cols-1 items-center gap-3 sm:flex sm:flex-wrap sm:justify-between">
         <div className="flex min-w-0 items-center gap-3">
           <span
@@ -398,7 +468,10 @@ const RestTimer = forwardRef<
                   ? 'Rest · ' + active.exerciseName
                   : 'Rest timer · ' + restLabel}
             </p>
-            <time className="font-sans text-xl font-bold tabular-nums">
+            <time
+              ref={countdown}
+              className="font-sans text-xl font-bold tabular-nums"
+            >
               {formatTimer(seconds)}
             </time>
             <span className="sr-only" role="status">

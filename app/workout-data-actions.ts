@@ -5,6 +5,7 @@ type SheetSyncResult = {
   ok: boolean;
   configured: boolean;
   synced: number;
+  skipped?: string[];
   message?: string;
   syncedAt?: string | null;
 };
@@ -98,11 +99,16 @@ export function createDataActions(context: DataActionContext) {
         method: 'POST',
       });
       const result = (await response.json()) as SheetSyncResult;
+      const skipped = result.skipped?.length
+        ? ` Missing original date (${result.skipped.length} skipped): ${result.skipped.join(', ')}.`
+        : '';
       if (!response.ok || !result.ok)
-        throw new Error(result.message ?? 'Unable to sync the Google Sheet.');
+        throw new Error(
+          (result.message ?? 'Unable to sync the Google Sheet.') + skipped,
+        );
       await refreshWorkoutData();
       setNotice(
-        `${result.synced} workout ${result.synced === 1 ? 'entry' : 'entries'} sent to Google Sheet.`,
+        `${result.synced} workout ${result.synced === 1 ? 'entry' : 'entries'} sent to Google Sheet.${skipped}`,
       );
     } catch (syncError) {
       setError(

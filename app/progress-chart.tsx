@@ -25,7 +25,7 @@ export default function ProgressChart({
     Math.max(0, ...data.map((item) => item.volume)),
   );
   const slotWidth = chartWidth / Math.max(1, data.length);
-  const barWidth = Math.min(42, Math.max(12, slotWidth * 0.58));
+  const barWidth = Math.min(42, slotWidth * 0.58);
   const gridValues = [0, 0.25, 0.5, 0.75, 1];
 
   return (
@@ -89,15 +89,17 @@ export default function ProgressChart({
                 rx="6"
                 fill="var(--chart-1)"
               />
-              <text
-                x={x + barWidth / 2}
-                y={height - 12}
-                textAnchor="middle"
-                fill="var(--muted-foreground)"
-                fontSize="12"
-              >
-                W{item.week}
-              </text>
+              {index % Math.ceil(data.length / 12) === 0 && (
+                <text
+                  x={x + barWidth / 2}
+                  y={height - 12}
+                  textAnchor="middle"
+                  fill="var(--muted-foreground)"
+                  fontSize="12"
+                >
+                  W{item.week}
+                </text>
+              )}
             </g>
           );
         })}

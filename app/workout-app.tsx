@@ -357,6 +357,7 @@ function resumeDraftIndex(
   plan: PlannedExercise[],
   week: number,
   day: TrainingDay,
+  entries: WorkoutEntry[],
   programmeId = 'initial',
 ) {
   try {
@@ -364,17 +365,30 @@ function resumeDraftIndex(
       `workout:${programmeId === 'initial' ? '' : programmeId + ':'}${week}:${day}:`,
       window.localStorage,
     );
-    return Math.max(
-      0,
-      plan.findIndex(
-        (item) =>
-          !item.skipped &&
-          key === workoutDraftKey(week, day, item, programmeId),
-      ),
+    const draft = plan.findIndex(
+      (item) =>
+        !item.skipped && key === workoutDraftKey(week, day, item, programmeId),
     );
+    if (draft >= 0) return draft;
   } catch {
-    return 0;
+    // Saved workouts also support resuming when device storage is unavailable.
   }
+  const completed = new Set(
+    entries
+      .filter(
+        (entry) => entry.week === week && entry.day === day && entry.completed,
+      )
+      .map((entry) => entry.exerciseOrder),
+  );
+  const next = plan.findIndex(
+    (item) => !item.skipped && !completed.has(item.order),
+  );
+  return next >= 0
+    ? next
+    : Math.max(
+        0,
+        plan.findIndex((item) => !item.skipped),
+      );
 }
 
 function readPendingWorkouts(): PendingWorkout[] {
@@ -948,6 +962,56 @@ function DashboardMetric({
   );
 }
 
+function PastSessionDisclosure({
+  name,
+  count,
+  children,
+}: {
+  name: string;
+  count: number;
+  children: (limit: number) => React.ReactNode;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [limit, setLimit] = useState(12);
+  return (
+    <details
+      onToggle={(event) => setExpanded(event.currentTarget.open)}
+      className="group mt-3 min-w-0 max-w-full rounded-lg border border-primary/10 bg-background/70"
+    >
+      <summary
+        aria-label={`Show all past sessions for ${name}`}
+        className="grid min-h-11 min-w-0 cursor-pointer list-none grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-2 rounded-lg px-3 py-2.5 font-sans text-sm font-semibold text-primary [&::-webkit-details-marker]:hidden"
+      >
+        <History className="size-4 shrink-0" aria-hidden="true" />
+        <span className="min-w-0 whitespace-normal [overflow-wrap:anywhere]">
+          All past sessions
+        </span>
+        <span className="shrink-0 rounded-full bg-accent px-2 py-0.5 text-xs tabular-nums text-foreground">
+          {count}
+        </span>
+        <ChevronDown
+          className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
+          aria-hidden="true"
+        />
+      </summary>
+      {expanded && (
+        <>
+          {children(limit)}
+          {limit < count && (
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setLimit(limit + 12)}
+            >
+              Show older sessions
+            </Button>
+          )}
+        </>
+      )}
+    </details>
+  );
+}
+
 export function WorkoutApp() {
   const initialWeek = scheduledWeekForToday(defaultSchedule, false);
   const [view, setView] = useState<View>('today');
@@ -1274,6 +1338,7 @@ export function WorkoutApp() {
             ),
             selection.week,
             selection.day,
+            freshEntries,
             nextProgrammeId,
           ),
         );
@@ -1380,21 +1445,24 @@ export function WorkoutApp() {
     markStartup('cache-read');
     if (cachedSchedule) setSchedule(cachedSchedule);
     if (cachedEntries) {
-      setEntries(
-        programmeOverlay(cachedEntries, pending, programmeIdRef.current),
-      );
-      const cachedPhaseTwoUnlocked = weeklySummariesForPhase(
+      const recoveredEntries = programmeOverlay(
         cachedEntries,
+        pending,
+        programmeIdRef.current,
+      );
+      setEntries(recoveredEntries);
+      const cachedPhaseTwoUnlocked = weeklySummariesForPhase(
+        recoveredEntries,
         cachedSessionExercises,
         1,
       ).every((week) => week.sessions === 3);
       const startupSession = startupSessionForWeek(
-        cachedEntries,
+        recoveredEntries,
         cachedSessionExercises,
         scheduledWeekForToday(
           cachedSchedule ?? defaultSchedule,
           cachedPhaseTwoUnlocked &&
-            prefersPhaseTwo(cachedEntries, programmeIdRef.current),
+            prefersPhaseTwo(recoveredEntries, programmeIdRef.current),
         ),
       );
       setActiveWeek(startupSession.week);
@@ -1408,6 +1476,7 @@ export function WorkoutApp() {
           ),
           startupSession.week,
           startupSession.day,
+          recoveredEntries,
           programmeIdRef.current,
         ),
       );
@@ -1717,6 +1786,7 @@ export function WorkoutApp() {
         startupPlan,
         startupSession.week,
         startupSession.day,
+        entries,
         programmeId,
       ),
     );
@@ -2555,7 +2625,7 @@ export function WorkoutApp() {
                         : 'Unsaved draft'
                       : refreshIssue
                         ? 'Showing device data. Refresh unavailable'
-                        : 'Changes saved'
+                        : 'Saved in Liftline'
                 }`}
               >
                 <span
@@ -2570,10 +2640,14 @@ export function WorkoutApp() {
                       : 'Unsaved draft'
                     : refreshIssue
                       ? 'Refresh unavailable'
-                      : 'Changes saved'}
+                      : 'Saved in Liftline'}
               </span>
             </span>
           </button>
+          <div
+            id="rest-header-slot"
+            className="absolute top-full right-3 z-10 md:hidden"
+          />
           <div className="hidden items-center gap-1 md:flex">
             <NavButton
               view="today"
@@ -3410,106 +3484,102 @@ export function WorkoutApp() {
                               </p>
                             )}
                             {pastDayWorkouts.length > 0 && (
-                              <details className="group mt-3 min-w-0 max-w-full rounded-lg border border-primary/10 bg-background/70">
-                                <summary
-                                  aria-label={`Show all past sessions for ${exercise.name}`}
-                                  className="grid min-h-11 min-w-0 cursor-pointer list-none grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-2 rounded-lg px-3 py-2.5 font-sans text-sm font-semibold text-primary [&::-webkit-details-marker]:hidden"
-                                >
-                                  <History
-                                    className="size-4 shrink-0"
-                                    aria-hidden="true"
-                                  />
-                                  <span className="min-w-0 whitespace-normal [overflow-wrap:anywhere]">
-                                    All past sessions
-                                  </span>
-                                  <span className="shrink-0 rounded-full bg-accent px-2 py-0.5 text-xs tabular-nums text-foreground">
-                                    {pastDayWorkouts.length}
-                                  </span>
-                                  <ChevronDown
-                                    className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
-                                    aria-hidden="true"
-                                  />
-                                </summary>
-                                <div className="space-y-2 border-t border-primary/10 p-2.5">
-                                  {pastDayWorkouts.map((workout) => {
-                                    const sessionDate = workout.entries.find(
-                                      (entry) =>
-                                        entry.completedAt || entry.updatedAt,
-                                    );
-                                    return (
-                                      <section
-                                        key={workout.week}
-                                        className="rounded-lg bg-muted/60 p-3"
-                                      >
-                                        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                                          <h3 className="font-sans text-sm font-semibold">
-                                            Phase {phaseForWeek(workout.week)}
-                                            {' · Week '}
-                                            {displayWeekNumber(workout.week)}
-                                          </h3>
-                                          <p className="font-sans text-xs text-muted-foreground">
-                                            {formatWorkoutDate(
-                                              sessionDate?.completedAt ??
-                                                sessionDate?.updatedAt,
-                                            )}
-                                          </p>
-                                        </div>
-                                        <ul className="mt-2 space-y-2">
-                                          {workout.entries.map((entry) => {
-                                            const sets = loggedSets(entry);
-                                            return (
-                                              <li
-                                                key={entry.exerciseOrder}
-                                                className="min-w-0 border-t border-border/70 pt-2 first:border-0 first:pt-0"
-                                              >
-                                                <p className="break-words font-sans text-sm font-medium">
-                                                  {entry.exercise}
-                                                </p>
-                                                <div className="mt-1.5 flex flex-wrap gap-1.5">
-                                                  {sets.map((set) => {
-                                                    const rir =
-                                                      entry[
-                                                        `set${set.set as 1 | 2 | 3 | 4 | 5}Rir`
-                                                      ];
-                                                    return (
-                                                      <span
-                                                        key={set.set}
-                                                        className="rounded-md bg-background px-2 py-1 font-sans text-xs font-medium tabular-nums text-foreground"
-                                                      >
-                                                        Set {set.set}:{' '}
-                                                        {set.weight == null
-                                                          ? `${set.reps} ${/sec/i.test(entry.target) ? 'sec' : 'reps'}`
-                                                          : `${set.weight} kg × ${set.reps}`}
-                                                        {rir != null &&
-                                                          ` · RIR ${rir}`}
-                                                      </span>
-                                                    );
-                                                  })}
-                                                  {sets.length === 0 && (
-                                                    <span className="font-sans text-xs text-muted-foreground">
-                                                      No sets recorded
-                                                    </span>
-                                                  )}
-                                                  {entry.rir != null && (
-                                                    <span className="rounded-md bg-success-soft px-2 py-1 font-sans text-xs font-medium text-success">
-                                                      Exercise RIR {entry.rir}
-                                                    </span>
-                                                  )}
-                                                </div>
-                                                {(entry.notes ?? '').trim() && (
-                                                  <p className="mt-1.5 break-words font-sans text-xs leading-relaxed text-muted-foreground">
-                                                    {entry.notes.trim()}
-                                                  </p>
+                              <PastSessionDisclosure
+                                name={exercise.name}
+                                count={pastDayWorkouts.length}
+                              >
+                                {(limit) => (
+                                  <div className="space-y-2 border-t border-primary/10 p-2.5">
+                                    {pastDayWorkouts
+                                      .slice(0, limit)
+                                      .map((workout) => {
+                                        const sessionDate =
+                                          workout.entries.find(
+                                            (entry) =>
+                                              entry.completedAt ||
+                                              entry.updatedAt,
+                                          );
+                                        return (
+                                          <section
+                                            key={workout.week}
+                                            className="rounded-lg bg-muted/60 p-3"
+                                          >
+                                            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                                              <h3 className="font-sans text-sm font-semibold">
+                                                Phase{' '}
+                                                {phaseForWeek(workout.week)}
+                                                {' · Week '}
+                                                {displayWeekNumber(
+                                                  workout.week,
                                                 )}
-                                              </li>
-                                            );
-                                          })}
-                                        </ul>
-                                      </section>
-                                    );
-                                  })}
-                                </div>
-                              </details>
+                                              </h3>
+                                              <p className="font-sans text-xs text-muted-foreground">
+                                                {formatWorkoutDate(
+                                                  sessionDate?.completedAt ??
+                                                    sessionDate?.updatedAt,
+                                                )}
+                                              </p>
+                                            </div>
+                                            <ul className="mt-2 space-y-2">
+                                              {workout.entries.map((entry) => {
+                                                const sets = loggedSets(entry);
+                                                return (
+                                                  <li
+                                                    key={entry.exerciseOrder}
+                                                    className="min-w-0 border-t border-border/70 pt-2 first:border-0 first:pt-0"
+                                                  >
+                                                    <p className="break-words font-sans text-sm font-medium">
+                                                      {entry.exercise}
+                                                    </p>
+                                                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                                                      {sets.map((set) => {
+                                                        const rir =
+                                                          entry[
+                                                            `set${set.set as 1 | 2 | 3 | 4 | 5}Rir`
+                                                          ];
+                                                        return (
+                                                          <span
+                                                            key={set.set}
+                                                            className="rounded-md bg-background px-2 py-1 font-sans text-xs font-medium tabular-nums text-foreground"
+                                                          >
+                                                            Set {set.set}:{' '}
+                                                            {set.weight == null
+                                                              ? `${set.reps} ${/sec/i.test(entry.target) ? 'sec' : 'reps'}`
+                                                              : `${set.weight} kg × ${set.reps}`}
+                                                            {rir != null &&
+                                                              ` · RIR ${rir}`}
+                                                          </span>
+                                                        );
+                                                      })}
+                                                      {sets.length === 0 && (
+                                                        <span className="font-sans text-xs text-muted-foreground">
+                                                          No sets recorded
+                                                        </span>
+                                                      )}
+                                                      {entry.rir != null && (
+                                                        <span className="rounded-md bg-success-soft px-2 py-1 font-sans text-xs font-medium text-success">
+                                                          Exercise RIR{' '}
+                                                          {entry.rir}
+                                                        </span>
+                                                      )}
+                                                    </div>
+                                                    {(
+                                                      entry.notes ?? ''
+                                                    ).trim() && (
+                                                      <p className="mt-1.5 break-words font-sans text-xs leading-relaxed text-muted-foreground">
+                                                        {entry.notes.trim()}
+                                                      </p>
+                                                    )}
+                                                  </li>
+                                                );
+                                              })}
+                                            </ul>
+                                          </section>
+                                        );
+                                      })}
+                                  </div>
+                                )}
+                              </PastSessionDisclosure>
                             )}
                           </details>
                         )}

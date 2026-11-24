@@ -5,6 +5,7 @@ import {
   syncWorkoutEntries,
   type WorkoutSheetEntry,
 } from '@/lib/google-sheet-sync';
+import { workoutCalendarDate } from '@/lib/workout-date';
 import { workoutSelectColumns } from '@/lib/workout-types';
 
 export async function POST() {
@@ -23,12 +24,20 @@ export async function POST() {
     )
       .bind('initial')
       .all<WorkoutSheetEntry>();
-    const sync = await syncWorkoutEntries(results.results);
+    const dated = results.results.filter((entry) =>
+      workoutCalendarDate(entry.completedAt),
+    );
+    const skipped = results.results
+      .filter((entry) => !workoutCalendarDate(entry.completedAt))
+      .map(
+        (entry) => `Week ${entry.week} Day ${entry.day} · ${entry.exercise}`,
+      );
+    const sync = await syncWorkoutEntries(dated);
 
     const now = new Date().toISOString();
-    if (results.results.length)
+    if (dated.length)
       await env.DB.batch(
-        results.results.map((entry) =>
+        dated.map((entry) =>
           env
             .DB!.prepare(`UPDATE workout_entries SET sync_status = ?, sheet_synced_at = ?, sync_error = ?
       WHERE week = ? AND day = ? AND exercise_order = ? AND updated_at = ? AND ${programmeGuardSql}`)
@@ -51,7 +60,7 @@ export async function POST() {
       );
 
     return Response.json(
-      { ...sync, syncedAt: sync.ok ? now : null },
+      { ...sync, skipped, syncedAt: sync.ok ? now : null },
       { status: sync.ok ? 200 : sync.configured ? 502 : 503 },
     );
   } catch (error) {
